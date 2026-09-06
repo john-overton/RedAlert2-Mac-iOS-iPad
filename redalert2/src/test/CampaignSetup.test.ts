@@ -133,3 +133,15 @@ test('campaign outcomes are explicit and do not depend on surviving allies', () 
         expect(ended).toBe(1);
     }
 });
+
+test('campaign civilian ownership follows country inheritance without claiming allied houses', () => {
+    const setup = new CampaignSetup({ini:new IniFile({
+        Civilian1:{ParentCountry:'Neutral'},Town:{ParentCountry:'Civilian1'},
+        Ally:{ParentCountry:'Americans'},Cycle:{ParentCountry:'Cycle'},
+    })} as any);
+    const civilian = (name:string) => setup.isCivilianHouse({country:{name}});
+    expect(civilian('Civilian1')).toBe(true);
+    expect(civilian('Town')).toBe(true);
+    expect(civilian('Ally')).toBe(false);
+    expect(civilian('Cycle')).toBe(false);
+});

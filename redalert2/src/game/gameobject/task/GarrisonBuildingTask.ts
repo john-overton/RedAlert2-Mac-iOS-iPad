@@ -22,7 +22,8 @@ export class GarrisonBuildingTask extends EnterBuildingTask {
         let t = this.target.garrisonTrait;
         // Occupying a neutral (civilian) building claims it; entering an
         // own/allied garrisonable like the Bio Reactor must not.
-        if (!t.units.length && this.target.owner.isNeutral) {
+        if (!t.units.length && (this.target.owner.isNeutral || this.game.campaign?.isCivilianHouse(this.target.owner))) {
+            t.previousCivilianOwner = this.target.owner;
             e.owner.buildingsCaptured++;
             this.game.changeObjectOwner(this.target, e.owner);
             this.game.events.dispatch(new BuildingGarrisonEvent(this.target));

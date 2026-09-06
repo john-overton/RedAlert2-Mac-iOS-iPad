@@ -26,6 +26,13 @@ Wait for the camera to pan toward Tanya and for “Battlefield Control Online,�
 then select Tanya and order her to destroy the four Dreadnoughts. With right-click
 orders enabled, left-click selects her and a two-finger click moves or attacks.
 
+Context cursors also work when macOS cannot lock the pointer: C4 for Tanya,
+repair for engineers targeting damaged buildings or bridge huts, and garrison
+or unload for eligible buildings. To unload a garrison with right-click orders
+enabled, left-click the occupied building, then right-click it again. Campaign
+civilian buildings become controllable while occupied and return to their
+original civilian house when emptied.
+
 **Options → Campaign game speed** offers six settings: Slowest, Slow, Normal,
 Fast, Faster, and Fastest. Normal runs at 23 simulation ticks per second,
 15% faster than the previous default of 20. The setting is saved for future
@@ -121,6 +128,7 @@ bun test redalert2/src/test/CampaignScenario.test.ts \
 node scripts/campaign-init-smoke.mjs --runtime
 node scripts/campaign-ui-smoke.mjs
 node scripts/campaign-save-replay-smoke.mjs
+node scripts/campaign-interaction-smoke.mjs
 ```
 
 The smoke scripts use Playwright Chromium. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE`
