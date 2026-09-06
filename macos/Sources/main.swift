@@ -1,7 +1,7 @@
 import AppKit
 import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler {
     private var window: NSWindow!
     private var webView: WKWebView!
     private var mouseMonitor: Any?
@@ -26,8 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         config.setURLSchemeHandler(BundleSchemeHandler(), forURLScheme: BundleSchemeHandler.scheme)
         config.mediaTypesRequiringUserActionForPlayback = []
         config.preferences.isElementFullscreenEnabled = true
+        config.userContentController.add(self, name: "exitApp")
         config.userContentController.addUserScript(WKUserScript(
-            source: "window.__RA2_SHELL__ = { platform: 'macos', version: '0.1.0' };",
+            source: "window.__RA2_SHELL__ = { platform: 'macos', version: '0.1.0', exitApp: () => window.webkit.messageHandlers.exitApp.postMessage(null) };",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
@@ -54,6 +55,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "exitApp", message.frameInfo.isMainFrame,
+              message.frameInfo.request.url?.scheme == BundleSchemeHandler.scheme,
+              message.frameInfo.request.url?.host == "app" else { return }
+        NSApp.terminate(nil)
+    }
 
     // Preserve native secondary clicks. Command + primary click provides a
     // fallback without taking Control away from the game's force-attack orders.

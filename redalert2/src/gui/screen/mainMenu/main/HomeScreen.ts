@@ -185,6 +185,15 @@ export class HomeScreen implements Screen {
                 }
             });
         }
+        const shell = (window as any).__RA2_SHELL__;
+        if (shell?.platform === 'macos' && typeof shell.exitApp === 'function') {
+            buttons.push({
+                label: 'Exit',
+                tooltip: 'Close Red Alert 2',
+                isBottom: true,
+                onClick: () => shell.exitApp(),
+            });
+        }
         if (this.controller) {
             this.controller.setSidebarButtons(buttons);
             this.controller.showSidebarButtons();
