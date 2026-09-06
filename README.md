@@ -11,6 +11,9 @@ package, serving the app and assets from the same `ra2app://` layout. See the
 [Linux build guide](docs/LINUX.md) for setup, Hyprland window rules, controls,
 and limitations.
 
+For campaign development, start with the [agent implementation guide](docs/CAMPAIGN_AGENT_GUIDE.md)
+and [mission-one status](docs/CAMPAIGN_MISSION_ONE.md).
+
 <img width="800" height="450" alt="0808" src="https://github.com/user-attachments/assets/c8efcdb7-72c4-47b8-86a7-cecd25eb4ace" />
 
 

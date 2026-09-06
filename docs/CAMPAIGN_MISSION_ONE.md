@@ -3,6 +3,8 @@
 Branch: `feat/allied-mission-one`, based on `feat/apple-silicon-macos`.
 Target: original RA2 Allied mission `all01t.map` (Lone Guardian).
 
+Agents adding missions should start with the [campaign implementation guide](CAMPAIGN_AGENT_GUIDE.md).
+
 Mission one now launches from the classic RA2 main menu. The build includes
 scenario houses and alliances, scripted teams, reinforcements, objectives,
 base ownership changes, production, bridge repair, tutorial effects, movies,
