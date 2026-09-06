@@ -8,6 +8,7 @@ import { ModelQuality } from "@/engine/renderable/entity/unit/ModelQuality";
 import { ShadowQuality } from "@/engine/renderable/entity/unit/ShadowQuality";
 import { Image } from "@/gui/component/Image";
 import { ResolutionSelect } from "@/gui/screen/options/component/Resolution";
+import { campaignSpeedLabels } from '@/game/campaign/CampaignSpeed';
 interface Strings {
     get(key: string): string;
 }
@@ -94,6 +95,12 @@ export const GeneralOpts: React.FC<GeneralOptsProps> = ({ strings, options, full
     return (<div className="opts general-opts">
     <fieldset>
       <legend>{strings.get("TS:GameplayOpts")}</legend>
+      <div className="slider-item">
+        <span className="label">Campaign game speed</span>
+        <Slider aria-label="Campaign game speed" min={1} max={6} step={1} value={String(options.campaignSpeed.value)}
+          getLabel={value => campaignSpeedLabels[Number(value)-1]}
+          onChange={e => { options.campaignSpeed.value = Number(e.target.value); }}/>
+      </div>
       <div className="slider-item">
         <span className="label">{strings.get("GUI:ScrollRate")}</span>
         <Slider min={1} max={7} value={String(Math.floor(options.scrollRate.value / SCROLL_BASE_FACTOR))} getLabel={(value) => strings.get(speedLabels.get(Number(value))!)} onChange={(e) => (options.scrollRate.value =

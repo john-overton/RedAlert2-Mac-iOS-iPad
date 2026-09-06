@@ -41,6 +41,32 @@ try {
  if(state.locked||!state.inputEnabled)throw new Error('Campaign opening did not return control');
  await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2,undefined,{timeout:30000});
  await page.screenshot({path:'build/campaign-ui.png'});
+ for (const width of [1024,1280]) {
+  await page.setViewportSize({width,height:900});
+  await page.evaluate(()=>{
+   const d=window.__ra2debug;
+   d.renderer.update(performance.now(),0);
+   const canvas=d.renderer.getCanvas(),rect=canvas.getBoundingClientRect();
+   const viewport=d.worldScene.viewport;
+   const edge=rect.left+(viewport.x+viewport.width)*rect.width/canvas.clientWidth;
+   const video=document.querySelector('video').getBoundingClientRect();
+   if(video.right>edge-5||video.left<rect.left)throw new Error('Campaign video overlaps sidebar or leaves the viewport');
+  });
+ }
+ if(Math.abs(await page.evaluate(()=>window.__ra2debug.game.speed.value)-23/15)>1e-6)throw new Error('Wrong default campaign speed');
+ for(const level of [5,3]) {
+  await page.evaluate(()=>window.__ra2debug.gameScreen.menu.open());
+  await page.getByText('Options',{exact:true}).click();
+  const slider=page.getByRole('slider',{name:'Campaign game speed'});
+  await slider.focus();
+  await slider.press('Home');
+  for(let i=1;i<level;i++)await slider.press('ArrowRight');
+  if(await page.evaluate(()=>window.__ra2debug.game.desiredSpeed.value)!==Number.EPSILON)throw new Error('Speed slider unpaused the mission');
+  await page.getByText('Back',{exact:true}).click();
+  await page.getByText('Resume Mission',{exact:true}).click();
+  const expected=(level===5?45:23)/15;
+  if(Math.abs(await page.evaluate(()=>window.__ra2debug.game.speed.value)-expected)>1e-6)throw new Error('Campaign speed did not apply on resume');
+ }
  // Exercise mouse input and the queued selection/order path, not direct unit tasks.
  await page.evaluate(()=>window.__ra2debug.gameScreen.gameAnimationLoop.start());
  for (const rightClickMove of [true,false]) {

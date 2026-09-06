@@ -3,6 +3,7 @@ import { Base64 } from "@/util/Base64";
 import { BoxedVar } from "@/util/BoxedVar";
 import { GraphicsOptions } from "@/gui/screen/options/GraphicsOptions";
 import { PerformanceOptions } from "@/performance/PerformanceOptions";
+import { DEFAULT_CAMPAIGN_SPEED } from '@/game/campaign/CampaignSpeed';
 export const SCROLL_BASE_FACTOR = 3;
 export class GeneralOptions {
     scrollRate: BoxedVar<number>;
@@ -14,6 +15,7 @@ export class GeneralOptions {
     mouseAcceleration: BoxedVar<boolean>;
     graphics: GraphicsOptions;
     performance: PerformanceOptions;
+    campaignSpeed = new BoxedVar(DEFAULT_CAMPAIGN_SPEED);
     constructor() {
         this.scrollRate = new BoxedVar(12);
         this.flyerHelper = new BoxedVar(FlyerHelperMode.Selected);
@@ -26,7 +28,7 @@ export class GeneralOptions {
         this.performance = new PerformanceOptions();
     }
     unserialize(data: string): this {
-        const [t, i, r, s, a, n, o, l, p] = data.split(",");
+        const [t, i, r, s, a, n, o, l, p, campaignSpeed] = data.split(",");
         this.scrollRate.value = Number(t);
         if (i !== undefined) {
             this.flyerHelper.value = Number(i) as FlyerHelperMode;
@@ -50,6 +52,8 @@ export class GeneralOptions {
             this.mouseAcceleration.value = Boolean(Number(l));
         }
         this.performance.unserialize(p);
+        const level = Number(campaignSpeed);
+        this.campaignSpeed.value = Number.isInteger(level) && level >= 1 && level <= 6 ? level : DEFAULT_CAMPAIGN_SPEED;
         return this;
     }
     serialize(): string {
@@ -63,6 +67,7 @@ export class GeneralOptions {
             Number(this.targetLines.value),
             Number(this.mouseAcceleration.value),
             this.performance.serialize(),
+            this.campaignSpeed.value,
         ].join(",");
     }
 }
