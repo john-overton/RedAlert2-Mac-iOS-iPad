@@ -19,7 +19,7 @@ export function prepareCampaignRules(base: IniFile, merged: IniFile, scenario: C
         if (!section) throw new Error(`Missing campaign country ${name}`);
         resolving.add(name);
         const parent = section.getString('ParentCountry');
-        const inherited = parent ? resolve(parent).clone() : section.clone();
+        const inherited = parent ? resolve(parent).clone() : (base.getSection(name)?.clone() ?? section.clone());
         inherited.name = name;
         inherited.mergeWith(section);
         ancestors.set(name, parent ? [parent, ...(ancestors.get(parent) ?? [])] : []);
@@ -60,9 +60,10 @@ export class CampaignSetup {
     readonly firedTriggers = new Set<string>();
     readonly selectedUnitIds = new Set<number>();
     inputLocked = false;
+    musicTheme?: string;
     outcome?: 'victory' | 'defeat';
     constructor(readonly scenario: CampaignScenario, readonly difficulty: 'easy' | 'medium' | 'hard' = 'medium') {
-
+        this.musicTheme = scenario.basic.Theme;
     }
     present(event: any): void { this.presentation.push(event); }
     isCivilianHouse(player: any): boolean {
@@ -75,7 +76,7 @@ export class CampaignSetup {
         }
         return false;
     }
-    execute(game: any, action: any): void {
+    execute(game: any, action: any, trigger?: any): void {
         if (this.outcome) return;
         const p = action.params;
         switch (action.type) {
@@ -88,8 +89,17 @@ export class CampaignSetup {
                 game.end();
                 break;
             }
+            case 6: this.teams.hunt(game, Number(p[1])); break;
+            case 20: this.musicTheme = String(p[1]); break;
+            case 38: {
+                const source = game.getAllPlayers().find((player: any) => player.country?.name === trigger.houseName);
+                const target = game.getAllPlayers().find((player: any) => player.country?.id === Number(p[1]));
+                if (!source || !target) throw new Error('Unknown campaign alliance house');
+                game.alliances.setCampaignEnemy(source, target);
+                break;
+            }
             case 3: this.productionHouses.add(Number(p[1])); break;
-            case 4: this.teams.create(game, String(p[1])); break;
+            case 4: this.teams.requestCreate(game, String(p[1])); break;
             case 5: this.teams.dissolve(String(p[1])); break;
             case 7: this.teams.create(game, String(p[1]), true); break;
             case 80: this.teams.create(game, String(p[1]), true, Number(p[6])); break;
@@ -128,6 +138,10 @@ export class CampaignSetup {
             relations.set(player, names.filter(name => name !== house.id).map(name => byName.get(name)));
         }
         game.alliances.setCampaignAllies(relations);
+        const human = byName.get(this.scenario.playerHouse.id);
+        human.campaignControlHouses = new Set(this.scenario.houses
+            .filter(house => this.scenario.ini.getSection(house.id)!.getBool('PlayerControl'))
+            .map(house => byName.get(house.id)));
     }
 
     initialCameraPosition(): { x: number; y: number } {

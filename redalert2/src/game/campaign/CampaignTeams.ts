@@ -1,6 +1,11 @@
 import type { CampaignScenario } from '../../data/campaign/CampaignScenario';
+import { PlaceBuildingAction } from '../action/PlaceBuildingAction';
+import { QueueStatus } from '../player/production/ProductionQueue';
 import { ObjectType } from '../../engine/type/ObjectType';
 import { MoveTask } from '../gameobject/task/move/MoveTask';
+import { AttackMoveTask } from '../gameobject/task/move/AttackMoveTask';
+import { CaptureBuildingTask } from '../gameobject/task/CaptureBuildingTask';
+import { EnterTransportTask } from '../gameobject/task/EnterTransportTask';
 import { AttackTask } from '../gameobject/task/AttackTask';
 import { EvacuateTransportTask } from '../gameobject/task/EvacuateTransportTask';
 import { ScatterTask } from '../gameobject/task/ScatterTask';
@@ -33,6 +38,7 @@ interface Team {
 /** Scenario teams use deterministic simulation tasks, independently of skirmish bots. */
 export class CampaignTeams {
     readonly active: Team[] = [];
+    readonly pending: string[] = [];
     private assigned = new Map<any, Team>();
     constructor(readonly scenario: CampaignScenario) {}
 
@@ -53,8 +59,16 @@ export class CampaignTeams {
             const [count, name] = value.split(',');
             for (let i = 0; i < Number(count); i++) {
                 if (!reinforce) {
-                    const unit = owner.getOwnedObjects().find((u: any) => u.name === name && u.isSpawned &&
+                    const origin = p.Waypoint ? game.map.getTileAtWaypoint(decodeWaypoint(p.Waypoint)) : undefined;
+                    const candidates = owner.getOwnedObjects().filter((u: any) => u.name === name && u.isSpawned &&
                         !u.isDestroyed && !members.includes(u) && (!this.assigned.has(u) || this.assigned.get(u)!.recruitable));
+                    const recruitmentRank = (unit: any) => {
+                        const assigned = this.assigned.get(unit);
+                        return !assigned ? 0 : assigned.line >= assigned.lines.length ? 1 : 2;
+                    };
+                    candidates.sort((a: any, b: any) => recruitmentRank(a)-recruitmentRank(b) ||
+                        (origin ? Math.hypot(a.tile.rx-origin.rx,a.tile.ry-origin.ry)-Math.hypot(b.tile.rx-origin.rx,b.tile.ry-origin.ry) : 0) || a.id-b.id);
+                    const unit = candidates[0];
                     if (!unit) return undefined; // Recruitment must never conjure missing units.
                     members.push(unit);
                 } else {
@@ -111,7 +125,24 @@ export class CampaignTeams {
         return team;
     }
 
+    requestCreate(game: any, id: string): void {
+        if (!this.create(game, id)) this.pending.push(id);
+    }
+    hunt(game: any, house: number): void {
+        const owner = game.getAllPlayers().find((player: any) => player.country?.id === house);
+        if (!owner) throw new Error(`Unknown hunt house ${house}`);
+        const members = owner.getOwnedObjects().filter((unit: any) => unit.isUnit() && unit.isSpawned);
+        for (const unit of members) {
+            const previous = this.assigned.get(unit);
+            if (previous) previous.members = previous.members.filter(member => member !== unit);
+            unit.unitOrderTrait.clearOrders(); unit.unitOrderTrait.cancelAllTasks();
+        }
+        const team: Team = {id:`hunt-${house}`,members,lines:[[0,1],[6,1]],line:0,started:false};
+        members.forEach((unit: any) => this.assigned.set(unit, team));
+        this.active.push(team);
+    }
     dissolve(id: string): void {
+        for (let i=this.pending.length-1;i>=0;i--) if (this.pending[i]===id) this.pending.splice(i,1);
         for (const team of [...this.active]) if (team.id === id) this.release(team);
     }
     private release(team: Team): void {
@@ -129,9 +160,37 @@ export class CampaignTeams {
     }
     private attack(game: any, team: Team, target: any): void {
         for (const unit of team.members.filter(u => u.isSpawned && u.unitOrderTrait?.isIdle())) {
+            if (unit.rules.engineer && target.isBuilding() && target.rules.capturable) {
+                unit.unitOrderTrait.addTask(new CaptureBuildingTask(game, target));
+                continue;
+            }
             const dest = game.createTarget(target, target.tile);
             const weapon = unit.attackTrait?.selectWeaponVersus(unit, dest, game, true);
             if (weapon) unit.unitOrderTrait.addTask(new AttackTask(game, dest, weapon, {force:true}));
+        }
+    }
+    private updateBaseProduction(game: any): void {
+        if (game.currentTick % 60) return;
+        for (const house of this.scenario.houses) {
+            const owner = game.getPlayerByName(house.id);
+            if (owner.campaignControlHouses || this.scenario.ini.getSection(house.id)!.getBool('PlayerControl') ||
+                !game.campaign.productionHouses.has(owner.country.id)) continue;
+            const nodes = Object.entries(house.properties).filter(([key]) => /^\d{3}$/.test(key))
+                .sort(([a], [b]) => Number(a)-Number(b));
+            for (const [, node] of nodes) {
+                const [name, x, y] = node.split(',');
+                if ([...owner.buildings].some((building: any) => building.name === name && building.tile.rx === Number(x) && building.tile.ry === Number(y))) continue;
+                const rules = game.rules.getObject(name, ObjectType.Building);
+                if (!owner.production.isAvailableForProduction(rules)) break;
+                const queue = owner.production.getQueueForObject(rules);
+                if (queue.status === QueueStatus.Idle) queue.push(rules, 1, rules.cost);
+                if (queue.status === QueueStatus.Ready && queue.getFirst()?.rules === rules) {
+                    const action = new PlaceBuildingAction(game, true);
+                    Object.assign(action, {player:owner, buildingRules:rules, tile:{x:Number(x),y:Number(y)}});
+                    action.process();
+                }
+                break;
+            }
         }
     }
     private updateAi(game: any): void {
@@ -146,12 +205,13 @@ export class CampaignTeams {
             const definition = this.scenario.teams.find(t => t.id === f[1]);
             if (!definition || this.active.filter(t => t.id === definition.id).length >= Number(definition.properties.Max)) continue;
             // Mission one's local AI triggers count structures owned by the producing house.
-            if (Number(f[4]) !== 1) throw new Error(`Unsupported campaign AI condition ${f[4]}`);
+            if (![0,1,4].includes(Number(f[4]))) throw new Error(`Unsupported campaign AI condition ${f[4]}`);
             const bytes = (f[6].match(/../g) ?? []).map(v => parseInt(v,16));
             const value = new DataView(new Uint8Array(bytes).buffer).getUint32(0,true);
             const op = new DataView(new Uint8Array(bytes).buffer).getUint32(4,true);
-            const count = owner.getOwnedObjects().filter((u: any) => u.name === f[5]).length;
-            if (![count < value,count <= value,count === value,count >= value,count > value,count !== value][op]) continue;
+            const subject = Number(f[4]) === 0 ? game.getPlayerByName(this.scenario.playerHouse.id) : owner;
+            const count = subject.getOwnedObjects().filter((u: any) => u.name === f[5]).length;
+            if (Number(f[4]) !== 4 && ![count < value,count <= value,count === value,count >= value,count > value,count !== value][op]) continue;
             if (this.create(game,definition.id)) continue;
             const force = this.scenario.taskForces.find(t => t.id === definition.properties.TaskForce)!;
             for (const [key, rawRequirement] of Object.entries(force.properties)) {
@@ -170,6 +230,10 @@ export class CampaignTeams {
         }
     }
     update(game: any): void {
+        for (let i=0;i<this.pending.length;) {
+            if (this.create(game, this.pending[i])) this.pending.splice(i,1); else i++;
+        }
+        this.updateBaseProduction(game);
         this.updateAi(game);
         for (const team of [...this.active]) {
             for (const unit of team.members) if (unit.isDestroyed) this.assigned.delete(unit);
@@ -181,9 +245,11 @@ export class CampaignTeams {
             if (!units.length) continue;
             const idle = units.every(u => u.unitOrderTrait?.isIdle());
             switch (op) {
-                case 0: case 1: case 46: {
+                case 0: case 1: case 46: case 47: {
+                    if (team.target && game.areFriendly(units[0], team.target)) { this.advance(team); break; }
                     if (team.target?.isDestroyed || !team.target?.isSpawned) {
-                        if (team.target) { this.advance(team); break; }
+                        if (team.target && op !== 0) { this.advance(team); break; }
+                        team.target = undefined;
                         const owner = units[0].owner;
                         let targets = game.getAllPlayers().filter((p: any) => p !== owner && !game.alliances.areAllied(owner, p))
                             .flatMap((p: any) => p.getOwnedObjects()).filter((u: any) => u.isSpawned && !u.isDestroyed && u.rules.legalTarget);
@@ -192,25 +258,31 @@ export class CampaignTeams {
                             center = game.map.getTileAtWaypoint(arg);
                             if (!center) throw new Error(`Missing attack waypoint ${arg}`);
                             targets = targets.filter((u: any) => Math.hypot(u.tile.rx-center.rx,u.tile.ry-center.ry) <= 4);
-                        } else if (op === 46) {
+                        } else if ((op === 46 || op === 47)) {
                             const rules = game.rules.getTechnoByInternalId(arg & 65535, ObjectType.Building);
                             targets = targets.filter((u: any) => u.name === rules.name);
                         } else if (arg !== 1) {
-                            targets = targets.filter((u: any) => arg === 2 ? u.isBuilding() : arg === 4 ? u.isInfantry() : arg === 5 ? u.isVehicle() : true);
+                            targets = targets.filter((u: any) => arg === 2 ? u.isBuilding() : arg === 3 ? !!u.harvesterTrait : arg === 4 ? u.isInfantry() : arg === 5 ? u.isVehicle() : true);
                         }
                         targets.sort((a: any,b: any) => Math.hypot(a.tile.rx-center.rx,a.tile.ry-center.ry)-Math.hypot(b.tile.rx-center.rx,b.tile.ry-center.ry) || a.id-b.id);
-                        team.target = targets.find((t: any) => units.some(u => u.attackTrait?.selectWeaponVersus(u, game.createTarget(t,t.tile),game,true)));
+                        if ((op === 46 || op === 47) && (arg >>> 16) === 3) targets.reverse();
+                        team.target = targets.find((t: any) => op === 47 || units.some(u => (u.rules.engineer && t.isBuilding() && t.rules.capturable) || u.attackTrait?.selectWeaponVersus(u, game.createTarget(t,t.tile),game,true)));
                         if (!team.target) { if (op !== 1) this.advance(team); break; }
                     }
-                    this.attack(game, team, team.target);
+                    if (op === 47) {
+                        if (!team.started) {
+                            for (const unit of units) unit.unitOrderTrait.addTask(new MoveTask(game, team.target.tile, false, {closeEnoughTiles:4}));
+                            team.started = true;
+                        } else if (idle) this.advance(team);
+                    } else this.attack(game, team, team.target);
                     break;
                 }
-                case 3: {
+                case 3: case 16: {
                     const tile = game.map.getTileAtWaypoint(arg);
                     if (!tile) throw new Error(`Missing move waypoint ${arg}`);
                     if (!team.started) {
                         if (!idle) break;
-                        for (const unit of units) unit.unitOrderTrait.addTask(new MoveTask(game, tile, !!tile.onBridgeLandType, {closeEnoughTiles:2, allowOutOfBoundsTarget:true}));
+                        for (const unit of units) unit.unitOrderTrait.addTask(new (op === 16 ? AttackMoveTask : MoveTask)(game, tile, !!tile.onBridgeLandType, {closeEnoughTiles:2, allowOutOfBoundsTarget:true}));
                         team.started = true;
                     } else if (idle) this.advance(team);
                     break;
@@ -227,16 +299,33 @@ export class CampaignTeams {
                         for (const unit of team.transports) unit.unitOrderTrait.addTask(new EvacuateTransportTask(game, true));
                         team.started = true;
                     } else if (team.transports!.every(u => u.isDestroyed || !u.transportTrait.units.length)) {
-                        const removed = team.members.filter(u => (arg & 2) ? !!u.transportTrait : (arg & 1) ? !u.transportTrait : false);
+                        const removed = team.members.filter(u => (!!(arg & 2) && !!u.transportTrait) || (!!(arg & 1) && !u.transportTrait));
                         for (const unit of removed) this.assigned.delete(unit);
                         team.members = team.members.filter(u => !removed.includes(u));
                         this.advance(team);
                     }
                     break;
                 case 11:
-                    if (arg === 6) { team.lines[team.line] = [0,1]; break; }
+                    if (arg === 6 || arg === 14) { team.lines[team.line] = [0, arg === 14 ? 2 : 1]; break; }
                     units.forEach(u => { u.unitOrderTrait.clearOrders(); u.unitOrderTrait.cancelAllTasks(); u.guardMode = arg !== 0; });
                     team.line = team.lines.length; break;
+                case 14: {
+                    const passengers = units.filter(unit => !unit.transportTrait);
+                    for (const unit of passengers.filter(unit => unit.unitOrderTrait.isIdle())) {
+                        const transport = units.find(t => t.transportTrait?.unitFitsInside(unit));
+                        if (transport) unit.unitOrderTrait.addTask(new EnterTransportTask(game, transport));
+                    }
+                    if (!passengers.length || passengers.every(unit => !units.some(t => t.transportTrait?.unitFitsInside(unit)))) this.advance(team);
+                    break;
+                }
+                case 43:
+                    if (units.filter(unit => unit.transportTrait).every(unit =>
+                        !team.members.some(member => !member.transportTrait && member.isSpawned && unit.transportTrait.unitFitsInside(member)))) this.advance(team);
+                    break;
+                case 45:
+                    // Retail supply-truck cargo imagery; no resource transfer occurs.
+                    units.forEach(unit => { unit.campaignTruckLoaded = true; });
+                    this.advance(team); break;
                 case 19:
                     units.filter(u => u.isInfantry()).forEach(u => u.isPanicked = true);
                     if (idle) units.forEach(u => u.unitOrderTrait.addTask(new ScatterTask(game)));

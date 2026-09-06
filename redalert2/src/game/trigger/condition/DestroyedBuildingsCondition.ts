@@ -4,10 +4,10 @@ export class DestroyedBuildingsCondition extends TriggerCondition {
     private count: number;
     private threshold: number;
     private houseId: number;
-    constructor(params: any[], trigger: any) {
+    constructor(params: any, trigger: any) {
         super(params, trigger);
         this.count = 0;
-        this.threshold = Number(params[1]);
+        this.threshold = Number(params.params[1]);
     }
     check(context: any, events: any[]): boolean {
         if (!this.player) {
@@ -19,7 +19,7 @@ export class DestroyedBuildingsCondition extends TriggerCondition {
         for (const event of events) {
             if (event.type === EventType.ObjectDestroy) {
                 const target = event.target;
-                if (target.isBuilding() && target.owner.country?.id === this.houseId) {
+                if (target.isBuilding() && target.owner === this.player) {
                     this.count++;
                 }
             }

@@ -97,8 +97,43 @@ try {
  await page.waitForTimeout(5500);
  console.log('After victory',await page.locator('body').innerText());
  await page.getByText('Mission Accomplished',{exact:true}).waitFor();
- await page.getByText('Continue',{exact:true}).click();
- await page.getByText('Campaign: Mission One',{exact:true}).waitFor();
- writeFileSync('build/campaign-ui-result.json',JSON.stringify({errors,state,mouseOrders:['right','left'],outcome:'victory',returnedToMenu:true},null,2));
+ await page.getByText('Next Mission',{exact:true}).click();
+ await page.getByText('Begin Mission',{exact:true}).click();
+ await page.waitForFunction(()=>[...document.querySelectorAll('video')].some(video=>video.src.includes('/allied-02/brief.mp4')&&video.readyState>=2));
+ const bridgeVideo=await page.locator('video[src*="allied-02/brief.mp4"]').evaluate(video=>({src:video.src,controls:video.controls}));
+ if(bridgeVideo.controls)throw new Error('Briefing exposed browser controls');
+ await page.getByText('Skip Intro',{exact:true}).click();
+ await page.waitForFunction(()=>window.__ra2debug?.game?.gameOpts.mapName==='all02s.map',undefined,{timeout:120000});
+ const missionTwo=await page.evaluate(()=>{
+   const d=window.__ra2debug,g=d.game;
+   d.gameScreen.gameAnimationLoop.stop();
+   return {map:g.gameOpts.mapName,player:g.localPlayer.name,credits:g.localPlayer.credits,tick:g.currentTick,
+      tanya:g.getPlayerByName('Germans').getOwnedObjects().find(u=>u.name==='TANY')?.id};
+ });
+ if(missionTwo.player!=='Americans'||missionTwo.credits!==10000||!missionTwo.tanya)throw new Error('Mission two did not start with fresh retail state');
+ await page.screenshot({path:'build/campaign-mission-two-opening.png'});
+ await page.evaluate(()=>window.__ra2debug.gameScreen.gameAnimationLoop.start());
+ for (const rightClickMove of [true,false]) {
+   const before=await page.evaluate(({rightClickMove,id})=>{
+     const d=window.__ra2debug;d.worldInteraction.rightClickMove.value=rightClickMove;
+     d.worldInteraction.unitSelectionHandler.deselectAll();
+     const unit=d.game.getObjectById(id);
+     return {id,rx:unit.tile.rx,ry:unit.tile.ry,...d.helpers.getOwnedUnitClickPointById(id)};
+   },{rightClickMove,id:missionTwo.tanya});
+   await page.mouse.click(before.x,before.y-5);
+   await page.waitForFunction(id=>window.__ra2debug.helpers.getSelectedUnitIds().includes(id),before.id);
+   await page.mouse.click(before.x-80,before.y-40,{button:rightClickMove?'right':'left'});
+   await page.waitForFunction(before=>{
+     const unit=window.__ra2debug.game.getObjectById(before.id);
+     return unit.tile.rx!==before.rx||unit.tile.ry!==before.ry;
+   },before,{timeout:10000});
+ }
+ await page.evaluate(async()=>{
+   const d=window.__ra2debug;d.gameScreen.gameAnimationLoop.stop();
+   const {ScreenType}=await import('/src/gui/screen/ScreenType.ts');
+   await d.gameScreen.controller.goToScreenBlocking(ScreenType.MainMenuRoot);
+ });
+ await page.getByText('Campaign: Mission Two',{exact:true}).waitFor();
+ writeFileSync('build/campaign-ui-result.json',JSON.stringify({errors,state,mouseOrders:['right','left'],outcome:'victory',bridgeVideo,missionTwo,missionTwoMouseOrders:['right','left'],returnedToMenu:true},null,2));
  if(errors.length)throw new Error('Campaign UI reported JavaScript errors');
 } finally {await browser.close();}

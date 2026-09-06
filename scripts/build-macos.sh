@@ -22,7 +22,7 @@ done
 if [[ $CAMPAIGN == 1 ]]; then
   [[ "$VARIANT" == ra2 ]] || { echo "--campaign currently requires --ra2" >&2; exit 1; }
   if [[ -n "$RETAIL" ]]; then bun "$ROOT/scripts/prepare-campaign.ts" "$RETAIL"; fi
-  [[ -s "$ROOT/campaign-export/ra2/allied-01/all01t.map" ]] || { echo "Import mission one with scripts/prepare-campaign.ts or supply --retail-dir" >&2; exit 1; }
+  [[ -s "$ROOT/campaign-export/ra2/allied-01/all01t.map" && -s "$ROOT/campaign-export/ra2/allied-02/all02s.map" ]] || { echo "Import campaign missions with scripts/prepare-campaign.ts or supply --retail-dir" >&2; exit 1; }
 fi
 for required in redalert2/public/general.csf redalert2/public/generalmd.csf gameres-export/ra2.mix; do
   if [[ ! -s "$ROOT/$required" ]]; then
@@ -43,8 +43,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$ROOT/build/macos/Modu
 # Synchronize generated resources so rebuilds cannot retain obsolete assets.
 rsync -a --delete --exclude local-pack "$ROOT/redalert2/dist/" "$APP/Contents/Resources/WebDist/"
 if [[ $CAMPAIGN == 1 ]]; then
-  mkdir -p "$APP/Contents/Resources/WebDist/campaign/ra2/allied-01"
-  rsync -a --delete --exclude audit.json --exclude '*result.json' --exclude '*.sha256' "$ROOT/campaign-export/ra2/allied-01/" "$APP/Contents/Resources/WebDist/campaign/ra2/allied-01/"
+  mkdir -p "$APP/Contents/Resources/WebDist/campaign/ra2"
+  rsync -a --delete --exclude audit.json --exclude '*result.json' --exclude '*.sha256' "$ROOT/campaign-export/ra2/" "$APP/Contents/Resources/WebDist/campaign/ra2/"
 fi
 rsync -a --delete "$ROOT/gameres-export/" "$APP/Contents/Resources/GameRes/"
 if [[ -n "$RETAIL" ]]; then

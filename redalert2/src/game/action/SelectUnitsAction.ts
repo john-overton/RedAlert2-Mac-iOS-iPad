@@ -1,3 +1,4 @@
+import { controllableObjects } from '../campaign/CampaignControl';
 import { Action } from './Action';
 import { ActionType } from './ActionType';
 import { DataStream } from '@/data/DataStream';
@@ -38,8 +39,9 @@ export class SelectUnitsAction extends Action {
     process(): void {
         const player = this.player;
         const units: GameObject[] = [];
+        const available = new Map(controllableObjects(player).map(unit => [unit.id, unit]));
         for (const id of this.unitIds) {
-            const unit = player.getOwnedObjectById(id);
+            const unit = available.get(id);
             if (unit) {
                 units.push(unit);
             }

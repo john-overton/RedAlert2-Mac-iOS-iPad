@@ -1,3 +1,4 @@
+import { canControl } from '../../campaign/CampaignControl';
 import { GameObject } from '../GameObject';
 export class UnitSelectionLite {
     private player: any;
@@ -7,7 +8,7 @@ export class UnitSelectionLite {
         this.selectedUnits = new Set();
     }
     update(units: GameObject[]): void {
-        const enemyUnit = [...units].reverse().find(unit => unit.owner !== this.player);
+        const enemyUnit = [...units].reverse().find(unit => !canControl(this.player, unit));
         if (enemyUnit) {
             units = [enemyUnit];
         }

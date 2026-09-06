@@ -1,3 +1,4 @@
+import { canControl } from '@/game/campaign/CampaignControl';
 import * as THREE from "three";
 import { Coords } from "@/game/Coords";
 import { cloneConfig, configsAreEqual, configHasTarget } from "@/game/gameobject/task/system/TargetLinesConfig";
@@ -74,7 +75,7 @@ export class TargetLines {
             this.unitPaths.clear();
             this.disposeUnitLines();
             this.unitSelection.getSelectedUnits().forEach((unit: any) => {
-                if (!unit.isUnit() || (this.currentPlayer && unit.owner !== this.currentPlayer)) {
+                if (!unit.isUnit() || (this.currentPlayer && !canControl(this.currentPlayer, unit))) {
                     return;
                 }
                 this.unitPaths.set(unit, cloneConfig(unit.unitOrderTrait.targetLinesConfig));
@@ -88,7 +89,7 @@ export class TargetLines {
         }
         let pathsChanged = false;
         this.unitSelection.getSelectedUnits().forEach((unit: any) => {
-            if (!unit.isUnit() || (this.currentPlayer && unit.owner !== this.currentPlayer)) {
+            if (!unit.isUnit() || (this.currentPlayer && !canControl(this.currentPlayer, unit))) {
                 return;
             }
             const targetLinesConfig = unit.unitOrderTrait.targetLinesConfig;

@@ -18,7 +18,8 @@ scripts/build-macos.sh --ra2 --campaign --retail-dir "/path/to/ra2/install"
 open "build/macos/ra2/Red Alert 2.app"
 ```
 
-Choose **Campaign: Mission One**, read the briefing, and begin. The briefing
+Choose **Campaign: Mission One**, read the briefing, and begin. On victory,
+choose **Next Mission** to play the bridging briefing and start Eagle Dawn. The briefing
 movie has a **Skip Intro** button. The opening in-game sequence temporarily
 locks unit input; control returns after the mission's scripted introduction.
 The Options button remains available.
@@ -62,7 +63,8 @@ switch does not bundle campaign files. The importer also runs separately:
 bun scripts/prepare-campaign.ts "/path/to/ra2/install"
 ```
 
-The importer accepts `RA2_RETAIL_DIR`. It extracts the original map from
+The importer accepts `RA2_RETAIL_DIR` and prepares both supported Allied missions.
+It extracts the original mission-one map from
 `MAPS01.MIX` into ignored `campaign-export/ra2/allied-01/`, with a SHA-256
 manifest and instruction audit. It reads the movie index from retail `art.ini`
 and converts the intro and three referenced clips from `MOVIES01.MIX` and
@@ -94,6 +96,7 @@ The local retail regression checks:
   verifies Tanya's death leads to defeat even while allies survive.
 - The actual menu launches the rendered mission, plays the intro and in-game
   video, returns mouse input, displays victory, and reaches the score screen
+  and offers Next Mission, plays the Eagle Dawn briefing, starts mission two,
   and returns to the main menu without browser JavaScript errors.
 - Real mouse clicks select Tanya and move her with either left-click or
   right-click orders. The GIs in the initial view remain allied-controlled.
@@ -161,7 +164,8 @@ Compatibility choices are explicit:
   retail pan speeds. Local AI triggers use the normal production queues with a
   simplified scheduling policy; retail weighting and all team flags are not
   reproduced exactly.
-- Only medium difficulty is exposed. Mission-two progression is not implemented.
+- Only medium difficulty is exposed. Victory now offers progression into
+  [mission two](CAMPAIGN_MISSION_TWO.md); later missions are not implemented.
 - The audit's `playable: false` field means that static enum coverage does not
   certify playability; use the runtime results and limitations above.
 

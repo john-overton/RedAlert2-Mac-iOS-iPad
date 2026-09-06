@@ -1,3 +1,4 @@
+import { controllableObjects } from '@/game/campaign/CampaignControl';
 import { OrderType } from '@/game/order/OrderType';
 import { SoundKey } from '@/engine/sound/SoundKey';
 import { ChannelType } from '@/engine/sound/ChannelType';
@@ -31,10 +32,7 @@ export class PlanningMode {
             this.targetLines.get3DObject().visible = false;
         }
         this.renderer.onFrame.subscribe(this.onFrame);
-        const waypointPaths = new Set([
-            ...this.player.getOwnedObjectsByType(ObjectType.Infantry),
-            ...this.player.getOwnedObjectsByType(ObjectType.Vehicle),
-        ]
+        const waypointPaths = new Set(controllableObjects(this.player).filter(unit => unit.isInfantry() || unit.isVehicle())
             .map((unit: any) => unit.unitOrderTrait.waypointPath)
             .filter(isNotNullOrUndefined));
         this.paths = [...waypointPaths].map((path: any) => {

@@ -104,7 +104,7 @@ export class GameFactory {
             game.campaign = new CampaignSetup(campaignScenario);
             game.campaign.teams = new CampaignTeams(campaignScenario);
             game.campaign.createPlayers(game, playerFactory, name => Country.factory(name, rules as any));
-            game.addPlayer(playerFactory.createNeutral(rules, '@@NEUTRAL@@'));
+            game.addPlayer(playerFactory.createNeutral(baseMultiplayerRules, '@@NEUTRAL@@'));
             return game;
         }
         const randomGen: GameOptRandomGen = GameOptRandomGen.factory(randomSeed1, randomSeed2);
