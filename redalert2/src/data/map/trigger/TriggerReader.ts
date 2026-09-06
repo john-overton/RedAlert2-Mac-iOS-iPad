@@ -168,6 +168,7 @@ export class TriggerReader {
         return { actions: actionMap, unknownActionTypes: unknownTypes };
     }
     private readAZActionParam(param: string): number {
+        if (/^-?\d+$/.test(param)) return Number(param);
         const zCode = 'Z'.charCodeAt(0);
         const aCode = 'A'.charCodeAt(0);
         const base = zCode - aCode + 1;

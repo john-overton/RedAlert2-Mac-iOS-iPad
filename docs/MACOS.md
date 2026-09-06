@@ -113,17 +113,18 @@ currently installed in the Mac shell.
 
 ### Campaigns
 
-Work on the first Allied RA2 mission has begun on a separate branch. See the
-[mission-one implementation checkpoint](CAMPAIGN_MISSION_ONE.md) for the importer,
-audit, and remaining runtime work.
+An experimental build of Allied mission one is available on
+`feat/allied-mission-one`:
 
-Campaigns are not currently playable, and there is no campaign build switch.
-Bundling mission archives alone would not implement the mission logic. A local
-audit of retail `MAPS01.MIX` found that `all01t.map` uses 15 action types missing
-from `TriggerActionType`: 1, 2, 3, 4, 5, 7, 46, 47, 48, 74, 80, 100, 104, 114, 115.
-`TriggerReader` skips unsupported types.
+```sh
+scripts/build-macos.sh --ra2 --campaign --retail-dir "/path/to/ra2/install"
+```
 
-A campaign implementation needs a launch flow, scenario setup and progression,
-missing trigger and scripted-team behavior, briefing/movie integration, and
-mission-by-mission validation. Skirmish support remains that of this engine
-reconstruction; it does not imply exact retail-engine compatibility.
+Choose **Campaign: Mission One** from the classic RA2 menu. The switch bundles
+only the imported mission and its referenced movies, and requires `ffmpeg`
+when converting movies for the first time. It is not available in YR mode.
+
+See [mission-one setup, verification, and limitations](CAMPAIGN_MISSION_ONE.md).
+The objective/victory/defeat regression passes, but a complete manual combat
+play-through and final-assault balance are still pending. Campaign saves and
+mission-two progression are not implemented.

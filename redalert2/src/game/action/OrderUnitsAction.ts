@@ -112,6 +112,7 @@ export class OrderUnitsAction extends Action {
         return result;
     }
     process(): void {
+        if (this.game.campaign?.inputLocked && this.player === this.game.localPlayer) return;
         if (this.isInvalid) {
             return;
         }

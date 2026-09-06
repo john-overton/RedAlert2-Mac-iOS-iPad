@@ -1,3 +1,7 @@
+import { playCampaignIntro } from '../../game/playCampaignIntro';
+import { Engine } from '@/engine/Engine';
+import { EngineType } from '@/engine/EngineType';
+import { MainMenuRoute } from '../MainMenuRoute';
 import { Screen } from '../../Controller';
 import { MainMenuScreenType } from '../../ScreenType';
 import { MainMenuController } from '../MainMenuController';
@@ -24,7 +28,7 @@ export class HomeScreen implements Screen {
     private controller?: MainMenuController;
     public title: string;
     public musicType: MusicType;
-    constructor(strings: Strings, messageBoxApi: MessageBoxApi, appVersion: string, storageEnabled: boolean = false, quickMatchEnabled: boolean = false, fullScreen?: FullScreen) {
+    constructor(strings: Strings, messageBoxApi: MessageBoxApi, appVersion: string, storageEnabled: boolean = false, quickMatchEnabled: boolean = false, fullScreen?: FullScreen, private rootController?: any) {
         this.strings = strings;
         this.messageBoxApi = messageBoxApi;
         this.appVersion = appVersion;
@@ -37,14 +41,38 @@ export class HomeScreen implements Screen {
     setController(controller: MainMenuController): void {
         this.controller = controller;
     }
-    onEnter(): void {
+    async onEnter(): Promise<void> {
         console.log('[HomeScreen] Entering home screen');
         // The native (iOS) build ships a focused menu: Skirmish, Load Game,
         // LAN and Options. The other entries stay available in web builds
         // (and their underlying systems remain in the bundle — saves are
         // built on the replay machinery).
         const nativeShell = isNativeShell();
+        const campaignManifest = Engine.getActiveEngine() === EngineType.RedAlert2
+            ? await fetch(new URL('campaign/ra2/allied-01/manifest.json', document.baseURI))
+                .then(response => response.ok ? response.json() : undefined).catch(() => undefined)
+            : undefined;
         const buttons: SidebarButton[] = [
+            ...(campaignManifest ? [{
+                label: 'Campaign: Mission One',
+                tooltip: 'Allied campaign — Lone Guardian (experimental)',
+                onClick: async () => {
+                    try {
+                        const manifest = campaignManifest;
+                        await this.messageBoxApi.alert(this.strings.get('Brief:ALL01') || 'Protect the Statue of Liberty, reach Fort Bradley, and destroy the Soviet supply base.', 'Begin Mission');
+                        if (manifest.media?.some((clip: any) => clip.alias === 'intro')) await playCampaignIntro();
+                        const gameOpts = {gameMode:Engine.getMpModes().getAll()[0].id, gameSpeed:3,
+                            credits:100, unitCount:0, shortGame:false, superWeapons:true, buildOffAlly:false,
+                            mcvRepacks:false, cratesAppear:false, destroyableBridges:true, multiEngineer:false,
+                            noDogEngiKills:false, mapName:'all01t.map', mapTitle:'Lone Guardian', mapDigest:'',
+                            mapSizeBytes:manifest.files.find((f: any) => f.path === 'all01t.map').size,
+                            maxSlots:8, mapOfficial:true,
+                            humanPlayers:[{name:'Player House',countryId:0,colorId:0,startPos:0,teamId:0}], aiPlayers:[]};
+                        this.rootController.createGame(crypto.randomUUID(),Math.floor(Date.now()/1000)*1000,'','Player House',
+                            gameOpts,true,false,false,false,new MainMenuRoute(MainMenuScreenType.Home,{}));
+                    } catch (error) { await this.messageBoxApi.alert(String(error), 'OK'); }
+                }
+            }] : []),
             {
                 label: 'Skirmish',
                 tooltip: 'Play a single-player skirmish against the AI',

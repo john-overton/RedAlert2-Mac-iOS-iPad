@@ -1,3 +1,4 @@
+import { CampaignPresentation } from './CampaignPresentation';
 import React from 'react';
 import { CompositeDisposable } from '@/util/disposable/CompositeDisposable';
 import { SoundKey } from '@/engine/sound/SoundKey';
@@ -87,6 +88,8 @@ export class CombatantUi {
         const worldInteraction = this.worldInteractionFactory.create();
         this.worldInteraction = worldInteraction;
         worldInteraction.init();
+        if (this.game.campaign) this.disposables.add(new CampaignPresentation(this.game, this.renderer,
+            this.worldScene, worldInteraction, this.sidebarModel, this.renderableManager, this.gameMenu));
         this.disposables.add(worldInteraction);
         const planningMode = new PlanningMode(this.player, this.messageList, this.sound, this.strings, this.worldScene, unitSelection, worldInteraction.unitSelectionHandler, this.renderer, worldInteraction.targetLines, this.game.rules.general.maxWaypointPathLength);
         this.planningMode = planningMode;

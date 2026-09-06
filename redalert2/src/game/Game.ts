@@ -802,7 +802,8 @@ export class Game {
             callback();
         }
         this.afterTickCallbacks.length = 0;
-        this.triggers.update(this);
+        if (this.status !== GameStatus.Ended) this.campaign?.teams.update(this);
+        if (this.status !== GameStatus.Ended) this.triggers.update(this);
         this.countdownTimer.update(this);
         this.currentTick++;
         this.currentTime += 1000 / GameSpeed.BASE_TICKS_PER_SECOND;

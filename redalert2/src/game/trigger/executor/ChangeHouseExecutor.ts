@@ -3,9 +3,9 @@ import { TriggerExecutor } from '@/game/trigger/TriggerExecutor';
 export class ChangeHouseExecutor extends TriggerExecutor {
     private static readonly locationHouseIdBegin: number = 4475;
     private readonly houseId: number;
-    constructor(params: string[], context: any) {
-        super(params, context);
-        this.houseId = Number(params[1]);
+    constructor(action: any, context: any) {
+        super(action, context);
+        this.houseId = Number(action.params[1]);
     }
     execute(game: any, objects: any[]): void {
         let targetPlayer;

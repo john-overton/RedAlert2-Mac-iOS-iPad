@@ -1,3 +1,4 @@
+import { PlayerObservationCondition } from './condition/PlayerObservationCondition';
 import { TriggerEventType } from "@/data/map/trigger/TriggerEventType";
 import { ObjectType } from "@/engine/type/ObjectType";
 import { AmbientLightCondition } from "@/game/trigger/condition/AmbientLightCondition";
@@ -41,6 +42,7 @@ import { SpyEnteringAsInfantryCondition } from "@/game/trigger/condition/SpyEnte
 import { TimerExpiredCondition } from "@/game/trigger/condition/TimerExpiredCondition";
 export class TriggerConditionFactory {
     create(e: any, t: any) {
+        if (e.type === 4 || e.type === 33) return new PlayerObservationCondition(e,t);
         switch (e.type) {
             case TriggerEventType.NoEvent:
                 return new NoEventCondition(e, t);

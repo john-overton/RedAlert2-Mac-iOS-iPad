@@ -23,6 +23,24 @@ const serveGameResDev = (): Plugin => ({
         });
     },
 });
+const serveCampaignDev = (): Plugin => ({
+    name: 'serve-local-campaign-dev',
+    configureServer(server) {
+        const root = path.resolve(__dirname, '../campaign-export');
+        server.middlewares.use('/campaign', (req, res, next) => {
+            let relative: string;
+            try { relative = decodeURIComponent((req.url ?? '/').split('?')[0]).replace(/^\/+/, ''); }
+            catch { res.statusCode = 400; res.end(); return; }
+            const file = path.resolve(root, relative);
+            if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+                res.statusCode = 404; res.end(); return;
+            }
+            res.setHeader('Content-Type', file.endsWith('.json') ? 'application/json' : file.endsWith('.mp4') ? 'video/mp4' : 'application/octet-stream');
+            res.setHeader('Content-Length', fs.statSync(file).size);
+            fs.createReadStream(file).pipe(res);
+        });
+    },
+});
 const manualHttpsConfig = fs.existsSync('./certs/server.key') && fs.existsSync('./certs/server.crt')
     ? { key: fs.readFileSync('./certs/server.key'), cert: fs.readFileSync('./certs/server.crt') }
     : undefined;
@@ -30,7 +48,7 @@ const manualHttpsConfig = fs.existsSync('./certs/server.key') && fs.existsSync('
 // with the COOP/COEP headers below. Used for embedded-browser dev and the iOS shell.
 const useHttp = !!process.env.RA2_HTTP;
 export default defineConfig({
-    plugins: [react(), serveGameResDev(), ...(manualHttpsConfig || useHttp ? [] : [basicSsl()])],
+    plugins: [react(), serveGameResDev(), serveCampaignDev(), ...(manualHttpsConfig || useHttp ? [] : [basicSsl()])],
     server: {
         host: '0.0.0.0',
         port: devPort,

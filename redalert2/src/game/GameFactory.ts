@@ -37,6 +37,7 @@ import { BotManager } from './BotManager';
 import { isHumanPlayerInfo } from './gameopts/GameOpts';
 import { CampaignScenario } from '../data/campaign/CampaignScenario';
 import { CampaignSetup, prepareCampaignRules } from './campaign/CampaignSetup';
+import { CampaignTeams } from './campaign/CampaignTeams';
 interface GameMode {
     type: string;
 }
@@ -101,6 +102,7 @@ export class GameFactory {
         const playerFactory: PlayerFactory = new PlayerFactory(rules, gameOpts, productionTrait.getAvailableObjects());
         if (campaignScenario) {
             game.campaign = new CampaignSetup(campaignScenario);
+            game.campaign.teams = new CampaignTeams(campaignScenario);
             game.campaign.createPlayers(game, playerFactory, name => Country.factory(name, rules as any));
             game.addPlayer(playerFactory.createNeutral(rules, '@@NEUTRAL@@'));
             return game;

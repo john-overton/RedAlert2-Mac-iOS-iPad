@@ -16,11 +16,11 @@ interface ScoreTableProps {
 export const ScoreTable: React.FC<ScoreTableProps> = ({ game, singlePlayer, tournament, localPlayer, gameReport, strings, }) => {
     const players = game
         .getNonNeutralPlayers()
-        .filter((player: any) => !player.isObserver || player.defeated)
+        .filter((player: any) => game.campaign ? player === localPlayer : (!player.isObserver || player.defeated))
         .sort((a: any, b: any) => b.score - a.score);
     const showReport = tournament && gameReport;
     const localPlayerReport = gameReport?.players.find((player: any) => player.name.toLowerCase() === localPlayer.name.toLowerCase());
-    let resultType = localPlayerReport?.resultType;
+    let resultType = game.campaign ? (game.campaign.outcome === 'victory' ? WolGameReportResult.Win : WolGameReportResult.Loss) : localPlayerReport?.resultType;
     if (resultType === undefined) {
         if (game.stalemateDetectTrait?.isStale() &&
             game.stalemateDetectTrait.getCountdownTicks() === 0) {
@@ -37,7 +37,7 @@ export const ScoreTable: React.FC<ScoreTableProps> = ({ game, singlePlayer, tour
             resultType = WolGameReportResult.Win;
         }
     }
-    return React.createElement("div", { className: "score-wrapper" }, (resultType || !singlePlayer) &&
+    return React.createElement("div", { className: "score-wrapper" }, (game.campaign || resultType || !singlePlayer) &&
         React.createElement("div", { className: "score-title" }, React.createElement("div", { className: "game-result" }, resultType === WolGameReportResult.Win
             ? strings.get("gui:gameresultvictory")
             : resultType === WolGameReportResult.Draw
@@ -63,9 +63,9 @@ export const ScoreTable: React.FC<ScoreTableProps> = ({ game, singlePlayer, tour
                 defeated: player.defeated,
             }),
             style: { color: rowColor },
-        }, React.createElement("td", { className: "player-col" }, player.isAi
+        }, React.createElement("td", { className: "player-col" }, game.campaign ? 'Commander' : player.isAi
             ? strings.get(aiUiNames.get(player.aiDifficulty) || "GUI:AIDummy")
-            : player.name), React.createElement("td", { className: "country-col" }, React.createElement(CountryIcon, { country: player.country })), React.createElement("td", { className: "color-col" }, React.createElement("div", {
+            : player.name), React.createElement("td", { className: "country-col" }, game.campaign ? 'Allied' : React.createElement(CountryIcon, { country: player.country })), React.createElement("td", { className: "color-col" }, React.createElement("div", {
             className: "color-indicator",
             style: {
                 backgroundColor: (typeof player.color === "string" ? player.color : player.color?.asHexString?.()),

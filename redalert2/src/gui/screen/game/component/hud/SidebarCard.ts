@@ -197,7 +197,11 @@ export class SidebarCard extends UiComponent<SidebarCardProps> {
         const { sidebarModel, slots } = this.props;
         const obj3D = this.getUiObject().get3DObject();
         obj3D.visible = this.visible;
-        if (this.justCreated ||
+        const campaignFlashing = sidebarModel.activeTab.items.some((item: any) => item.campaignFlashUntil !== undefined);
+        if (campaignFlashing) for (const item of sidebarModel.activeTab.items) {
+            if (item.campaignFlashUntil <= sidebarModel.game.currentTick) delete item.campaignFlashUntil;
+        }
+        if (campaignFlashing || this.justCreated ||
             sidebarModel.activeTab.needsUpdate ||
             this.lastActiveTab !== sidebarModel.activeTab) {
             this.justCreated = false;
@@ -252,7 +256,9 @@ export class SidebarCard extends UiComponent<SidebarCardProps> {
         }
         slotObject.setFrame(frameId);
         slotObject.get3DObject().visible = true;
-        slotObject.setLightMult(item.disabled ? 0.5 : 1);
+        const flash = item.campaignFlashUntil > this.props.sidebarModel.game.currentTick &&
+            Math.floor(this.props.sidebarModel.game.currentTick / 5) % 2 === 0;
+        slotObject.setLightMult(flash ? 2 : item.disabled ? 0.5 : 1);
     }
     updateProgressOverlay(item: any, progressOverlay: any): void {
         let frame = 0;

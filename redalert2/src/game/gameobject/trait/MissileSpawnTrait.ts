@@ -1,4 +1,3 @@
-import { CollisionType } from '@/game/gameobject/unit/CollisionType';
 import { NotifyDestroy } from './interface/NotifyDestroy';
 import { GameObject } from '@/game/gameobject/GameObject';
 import { World } from '@/game/World';
@@ -19,11 +18,14 @@ export class MissileSpawnTrait {
         return this;
     }
     [NotifyDestroy.onDestroy](gameObject: GameObject, world: World): void {
-        if (this.warhead && this.damage && this.launcher) {
-            this.warhead.detonate(world, this.damage, gameObject.tile, gameObject.tileElevation, gameObject.position.worldPosition, gameObject.zone, CollisionType.None, world.createTarget(undefined, gameObject.tile), { player: gameObject.owner, obj: this.launcher, weapon: undefined } as any, false, undefined, undefined);
-        }
+        // Impact damage is applied by AirSpawnTrait after the flight task.
+        // Interception destroys the missile; it must not detonate the impact
+        // warhead here, especially while another missile is still on the deck.
+        this.dispose();
     }
     dispose(): void {
         this.launcher = undefined;
+        this.warhead = undefined;
+        this.damage = undefined;
     }
 }

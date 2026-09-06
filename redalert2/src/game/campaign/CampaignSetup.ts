@@ -1,5 +1,7 @@
 import { IniFile, IniSection } from '../../data/IniFile';
 import { CampaignScenario } from '../../data/campaign/CampaignScenario';
+import type { CampaignTeams } from './CampaignTeams';
+import { campaignScriptTypes } from './CampaignCapabilities';
 
 /** Prepare custom countries without replacing the original numeric country IDs. */
 export function prepareCampaignRules(base: IniFile, merged: IniFile, scenario: CampaignScenario): IniFile {
@@ -51,7 +53,46 @@ export function prepareCampaignRules(base: IniFile, merged: IniFile, scenario: C
 }
 
 export class CampaignSetup {
-    constructor(readonly scenario: CampaignScenario) {}
+    teams!: CampaignTeams;
+    readonly presentation: any[] = [];
+    readonly productionHouses = new Set<number>();
+    readonly aiTriggerHouses = new Set<number>();
+    readonly firedTriggers = new Set<string>();
+    inputLocked = false;
+    outcome?: 'victory' | 'defeat';
+    constructor(readonly scenario: CampaignScenario, readonly difficulty: 'easy' | 'medium' | 'hard' = 'medium') {
+
+    }
+    present(event: any): void { this.presentation.push(event); }
+    execute(game: any, action: any): void {
+        if (this.outcome) return;
+        const p = action.params;
+        switch (action.type) {
+            case 1: case 2: {
+                const human = game.getPlayerByName(this.scenario.playerHouse.id);
+                const applies = human.country.id === Number(p[1]);
+                this.outcome = (action.type === 1) === applies ? 'victory' : 'defeat';
+                human.defeated = this.outcome === 'defeat';
+                this.inputLocked = false;
+                game.end();
+                break;
+            }
+            case 3: this.productionHouses.add(Number(p[1])); break;
+            case 4: this.teams.create(game, String(p[1])); break;
+            case 5: this.teams.dissolve(String(p[1])); break;
+            case 7: this.teams.create(game, String(p[1]), true); break;
+            case 80: this.teams.create(game, String(p[1]), true, Number(p[6])); break;
+            case 46: this.inputLocked = true; break;
+            case 47: this.inputLocked = false; break;
+            case 48: this.present({kind:'camera', waypoint:Number(p[6]), speed:Number(p[1])}); break;
+            case 74: this.aiTriggerHouses.add(Number(p[1])); break;
+            case 100: this.present({kind:'movie', movie:String(p[1])}); break;
+            case 104: this.teams.flash(game, String(p[1]), Number(p[6])); break;
+            case 114: this.present({kind:'tab', tab:Number(p[1])}); break;
+            case 115: this.present({kind:'cameo', name:String(p[1]), frames:Number(p[6])}); break;
+            default: throw new Error(`Unsupported campaign action ${action.type}`);
+        }
+    }
 
     createPlayers(game: any, factory: any, createCountry: (name: string) => any): void {
         const referenceErrors = this.scenario.referenceErrors();
@@ -89,9 +130,9 @@ export class CampaignSetup {
 
     assertReadyToStart(): void {
         const audit = this.scenario.audit();
-        // Initialization can be inspected independently. Do not run the mission
-        // with its unsupported conditions/actions silently removed by MapFile.
-        throw new Error(`Campaign runtime is still under development: ${audit.unsupportedActions.length} unsupported action types, ` +
-            `${audit.unsupportedEvents.length} unsupported event types; scripted teams and mission outcomes remain required.`);
+        const unsupportedScripts = this.scenario.audit().scriptTypes.filter((s: any) => !campaignScriptTypes.has(s));
+        if (audit.unsupportedActions.length || audit.unsupportedEvents.length || unsupportedScripts.length) {
+            throw new Error('Campaign contains unsupported instructions');
+        }
     }
 }

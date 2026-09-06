@@ -15,6 +15,13 @@ export class ApplyDamageExecutor extends TriggerExecutor {
             const warheadRule = context.rules.getWarhead(Warhead.HE_WARHEAD_NAME);
             const warhead = new Warhead(warheadRule);
             const bridge = context.map.tileOccupation.getBridgeOnTile(tile);
+            // Retail campaign cell-damage actions cut the bridge at this
+            // waypoint. Our skirmish model uses persistent bridge hit points,
+            // so apply that scripted cut explicitly before ordinary HE damage.
+            if (context.campaign && bridge) {
+                context.destroyObject(bridge);
+                return;
+            }
             const elevation = bridge?.tileElevation ?? 0;
             const zone = context.map.getTileZone(tile);
             warhead.detonate(context, this.damage, tile, elevation, Coords.tile3dToWorld(tile.rx + 0.5, tile.ry + 0.5, tile.z + elevation), zone, bridge ? CollisionType.OnBridge : CollisionType.None, context.createTarget(bridge, tile), undefined, false, undefined, undefined);

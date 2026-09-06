@@ -1,155 +1,124 @@
-# Allied mission one: implementation checkpoint
+# Allied mission one — experimental Mac build
 
 Branch: `feat/allied-mission-one`, based on `feat/apple-silicon-macos`.
-Target: the original RA2 Allied mission `all01t.map` from `MAPS01.MIX`.
-This work targets the classic RA2 engine mode, not Yuri's Revenge mission one.
+Target: original RA2 Allied mission `all01t.map` (Lone Guardian).
 
-## Current functionality
+Mission one now launches from the classic RA2 main menu. The build includes
+scenario houses and alliances, scripted teams, reinforcements, objectives,
+base ownership changes, production, bridge repair, tutorial effects, movies,
+and explicit victory/defeat handling. This is an experimental implementation
+in the reconstructed engine, not execution of the original Windows game.
 
-The first checkpoint adds a retail mission importer and a campaign scenario
-data model. The second adds explicit campaign initialization in `GameFactory`,
-with custom house creation, country inheritance, directed alliances, preplaced
-owned objects, house credits/tech levels, HomeCell camera placement, and free radar.
-It does **not** add a playable campaign or a campaign menu button. Skirmish
-creation continues through its existing path unless a campaign scenario is passed.
+## Build and launch
 
 ```sh
-bun scripts/prepare-campaign.ts "/path/to/your/ra2/install"
-cd redalert2
-bun test src/test
+scripts/build-macos.sh --ra2 --campaign --retail-dir "/path/to/ra2/install"
+open "build/macos/ra2/Red Alert 2.app"
 ```
 
-The importer also accepts `RA2_RETAIL_DIR` when no path argument is provided.
-It writes to ignored `campaign-export/ra2/allied-01/`:
+Choose **Campaign: Mission One**, read the briefing, and begin. The briefing
+movie has a **Skip Intro** button. The opening in-game sequence temporarily
+locks unit input; control returns after the mission's scripted introduction.
+The Options button remains available.
 
-- `all01t.map`: original extracted mission bytes.
-- `manifest.json`: mission/engine identity, size, and SHA-256 integrity metadata.
-- `audit.json`: unsupported instruction usage by trigger, scenario metadata,
-  definition counts, script opcode inventory, and reference errors.
+`--campaign` is opt-in and currently requires `--ra2`. A build without the
+switch does not bundle campaign files. The importer also runs separately:
 
-`CampaignScenario` reads the INI before the skirmish-oriented map loader can
-discard unsupported instructions. It retains action parameters, extended event
-parameters, custom houses/countries, team/task-force/script definitions, trigger
-links, disabled state, and difficulty flags. Malformed instruction records fail
-explicitly. The source INI is retained for subsequent terrain and object loading.
+```sh
+bun scripts/prepare-campaign.ts "/path/to/ra2/install"
+```
 
-Synthetic tests cover unknown instruction preservation, references, player/home
-validation, difficulty flags, malformed records, and definition ordering. No
-retail mission data is included in test fixtures or committed to the repository.
+The importer accepts `RA2_RETAIL_DIR`. It extracts the original map from
+`MAPS01.MIX` into ignored `campaign-export/ra2/allied-01/`, with a SHA-256
+manifest and instruction audit. It reads the movie index from retail `art.ini`
+and converts the intro and three referenced clips from `MOVIES01.MIX` and
+`MOVIES02.MIX` to H.264/AAC using `ffmpeg`. Unavailable movie archives are
+reported; the map can still run without those optional videos. Cached
+conversions are reused when source hashes match.
 
-The initialization path appends mission countries after the original country
-list (the retail player remains country ID 13), expands inherited production
-eligibility, and resolves initial object owners by house name. Campaign allies
-remain directional; ordinary skirmish alliances remain symmetric. The campaign
-path suppresses skirmish starting forces, lobby credit overrides, skirmish bots,
-and automatic elimination. Starting the simulation currently raises an explicit
-development error before triggers can run with missing instructions.
+No retail maps, movies, icons, executables, or game archives are committed.
+Generated app bundles contain local retail data and must not be distributed.
 
-### Reproduce the real-mission initialization check
+## Verified behavior
 
-After normal asset setup and the mission import above, start the development
-server in one terminal:
+The local retail regression checks:
+
+- All 249 preplaced objects, eight scenario houses, inherited country rules,
+  original country IDs, directed alliances, credits, tech levels, and free radar.
+- Opening team recruitment, input lock/unlock, and preserved Dreadnought targets.
+- Tanya destroys the four Dreadnoughts using attack orders; objective one fires.
+- Movement to Fort Bradley activates cell triggers and transfers the base.
+- Normal production builds a barracks and engineer; the engineer repairs the
+  bridge and enables Soviet AI production. The checked run produced 36 new
+  Soviet infantry after activation.
+- Controlled destruction of the remaining significant Soviet buildings fires
+  the final objective and its delayed victory trigger. A separate fresh game
+  verifies Tanya's death leads to defeat even while allies survive.
+- The actual menu launches the rendered mission, plays the intro and in-game
+  video, returns mouse input, displays victory, and reaches the score screen
+  and returns to the main menu without browser JavaScript errors.
+
+**The final assault is not verified as a complete combat play-through.** The
+victory regression deliberately supplies final destruction events through the
+engine; it does not force the victory trigger or call `game.end()`. An attempted
+automated infantry assault did not clear the Soviet base. Manual testing of
+movement through the repaired bridge, combat balance, and the final assault
+remains necessary before calling this a finished retail-equivalent campaign.
+
+Run the simulation and UI checks with a local Vite server:
 
 ```sh
 cd redalert2
 RA2_HTTP=1 bun run dev --host 127.0.0.1
 ```
 
-In another terminal, from the repository root:
+In another terminal at the repository root:
 
 ```sh
-node scripts/campaign-init-smoke.mjs
+bun test redalert2/src/test/CampaignScenario.test.ts \
+  redalert2/src/test/CampaignSetup.test.ts redalert2/src/test/CampaignTriggers.test.ts
+node scripts/campaign-init-smoke.mjs --runtime
+node scripts/campaign-ui-smoke.mjs
 ```
 
-The check uses the installed Playwright Chromium browser. If it is missing,
-install the browser matching the project's Playwright version, or point
-`PLAYWRIGHT_CHROMIUM_EXECUTABLE` to an existing compatible Chromium executable.
-`RA2_DEV_URL` overrides the default `http://127.0.0.1:4000`. The check selects
-classic RA2 through a browser-local configuration override, so it does not edit
-the development server's configuration.
+The smoke scripts use Playwright Chromium. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE`
+if the installed browser is outside Playwright's default cache path. Reports
+and screenshots are written under ignored `build/` and `campaign-export/`.
 
-It loads the real engine and mission, calls `Game.init`, and checks all initial
-owned object counts, house credits, directed alliances, Tanya's presence, free
-radar, and the incomplete-runtime start gate. The local retail run loaded all
-249 preplaced technos across eight houses. Its JSON result is saved in ignored
-`campaign-export/ra2/allied-01/init-result.json`. This validates simulation
-initialization, not rendering, mission execution, or an end-to-end playthrough.
+## Implementation and limits
 
-## Retail mission audit
+`CampaignScenario` preserves every original action/event parameter and validates
+references before game creation. `CampaignSetup` creates the scenario houses,
+tracks outcomes and presentation requests, and rejects unsupported instruction
+sets. `CampaignTeams` executes mission scripts independently of skirmish bots.
 
-The local retail copy contains:
+The runtime covers mission-one actions 1, 2, 3, 4, 5, 7, 46, 47, 48, 74, 80,
+100, 104, 114 and 115; events 4 and 33; and script opcodes 0, 1, 3, 5, 6, 8,
+11, 19, 20, 37, 39, 46, 49 and 50, alongside existing engine triggers.
+Additional fixes preserve hexadecimal cell tags, numeric flash durations,
+correct action/event constructor parameters, local variable identity, and
+house-specific production/destruction tests.
 
-| Definition | Count |
-|---|---:|
-| Houses / custom countries | 8 / 8 |
-| Triggers | 130 |
-| Team types | 49 |
-| Script types | 38 |
-| Task forces | 29 |
+Compatibility choices are explicit:
 
-The declared player is `Player House`, whose country is `Player`; its parent
-country is `Americans`. The initial camera waypoint is 98. House identity must
-remain distinct from country identity and from skirmish lobby slots. Reference
-checks for house allies, country sections, team dependencies/owners, and linked
-triggers found no missing references in this copy.
+- Scripted campaign damage at a bridge waypoint cuts that bridge. Ordinary
+  skirmish bridge hit points cannot reproduce the opening's retail bridge cuts.
+- Reinforcement infantry marked for a paradrop enter using the parachute task;
+  the full retail transport-flight choreography is not reproduced.
+- Scripted camera moves currently jump to their waypoint rather than reproducing
+  retail pan speeds. Local AI triggers use the normal production queues with a
+  simplified scheduling policy; retail weighting and all team flags are not
+  reproduced exactly.
+- Only medium difficulty is exposed. No mission-two progression, campaign saves,
+  or campaign replays are supported. Campaign saving is disabled in the menu.
+- The audit's `playable: false` field means that static enum coverage does not
+  certify playability; use the runtime results and limitations above.
 
-The following action types occur in the mission but are absent from the current
-engine enum/factory. Descriptions were checked against the locally supplied
-FinalAlert2 `FAData.ini` action definitions.
+## Manual test checklist
 
-| Action IDs | Required behavior |
-|---|---|
-| 1, 2 | Explicit mission victory / defeat |
-| 3, 74 | House production / AI-trigger activation |
-| 4, 5 | Recruit a scripted team / dissolve a team without deleting its units |
-| 7, 80 | Spawn reinforcement teams, including at an explicit waypoint |
-| 46, 47, 48 | Lock/unlock player input and move the camera to a waypoint |
-| 100 | Play an in-game movie |
-| 104, 114, 115 | Flash team members, select a sidebar tab, flash a production cameo |
-
-Missing event types are 4 (discovered by player) and 33 (selected by player).
-Team scripts use opcodes 0, 1, 3, 5, 6, 8, 11, 19, 20, 37, 39, 46, 49, and 50.
-An enum entry alone is not evidence of correct runtime behavior; the audit
-deliberately does not infer playability from instruction coverage.
-
-## Next implementation steps
-
-1. **Scenario initialization (implemented and browser-checked):** create mission houses and alliances, resolve
-   original numeric country references, apply country inheritance and house
-   economics, spawn preplaced owned units/buildings, and use HomeCell for the
-   camera. Suppress skirmish starting forces and automatic elimination rules.
-2. **Scripted teams:** implement recruitment versus reinforcement, ownership,
-   task-force composition, movement/attack/unload commands, script advancement,
-   and the mission's transport and aircraft behavior.
-3. **Triggers and outcomes:** implement the missing events/actions, honor
-   difficulty and disabled flags, and validate objective dependencies and both
-   victory and defeat. Audit existing supported executors too, especially
-   house-reference handling; enum coverage is insufficient.
-4. **Presentation and launch:** add campaign selection, difficulty, briefing,
-   intro/in-game movie handling, scripted input/camera behavior, and a mission
-   result screen with retry/return-to-menu. Add a build option only when the
-   launch/runtime path can support the packaged mission.
-5. **Persistence and validation:** carry campaign identity in saves/replays;
-   verify restart/load and objective progression in the native Mac shell.
-
-The initialization paths in `GameFactory.create` and
-`Game.createInitialMapTechnos` now accept mission houses and their owned map
-objects. Scripted teams, initial unit orders, and campaign trigger execution
-remain the next runtime work.
-
-## End-to-end acceptance
-
-- Start Allied mission one from a classic RA2 Mac build using locally imported
-  assets; display its briefing and spawn the intended forces/alliances.
-- Execute the opening script and all objective transitions without discarded
-  conditions/actions or replacement skirmish AI behavior.
-- Complete the mission through normal player orders and reach its victory
-  result; separately exercise its scripted defeat path.
-- Retry, return to the menu, and save/reload without losing campaign identity
-  or corrupting trigger/team progress.
-- Verify required cinematics, scripted camera/input transitions, and desktop
-  controls, and rerun existing skirmish tests.
-
-Import/audit, data-model tests, house initialization, and the real-mission
-initialization check are complete at this checkpoint. Scripted runtime, launch,
-and end-to-end playability work above remains outstanding.
+Start a fresh mission in the packaged Apple Silicon app. Confirm intro skipping,
+movie audio, opening camera placement, input unlock, trackpad secondary-click
+orders, and left-click selection. Complete the Dreadnought objective and reach
+Fort Bradley. Build the barracks and engineer, repair the bridge, move a mixed
+force across it, then destroy the Soviet supply base. Verify the mission-complete
+screen and return to the menu. Restart and lose Tanya; verify mission failure.
