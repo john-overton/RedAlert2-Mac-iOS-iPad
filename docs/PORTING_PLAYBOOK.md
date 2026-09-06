@@ -4,6 +4,10 @@ The complete engineering log of bringing the Chronodivide-lineage RA2 engine to
 iOS: the architecture, the decisions, and every bug hunt worth remembering. Read
 the [README](../README.md) first for the shape of the project.
 
+The Apple Silicon macOS wrapper reuses the bundle resource handler and web
+engine described here. See the [macOS build guide](MACOS.md) for its AppKit
+shell, build commands, desktop controls, and current limitations.
+
 ---
 
 ## 1. The premise: no engine to compile

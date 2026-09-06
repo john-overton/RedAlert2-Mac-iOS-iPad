@@ -10,6 +10,8 @@ import { Target, TargetBridgeMode } from '@/game/Target';
 import { AttackMoveOrder } from '@/game/order/AttackMoveOrder';
 import { OrderFeedbackType } from '@/game/order/OrderFeedbackType';
 import { GuardAreaOrder } from '@/game/order/GuardAreaOrder';
+import { ActionFilter } from './ActionFilter';
+export { ActionFilter } from './ActionFilter';
 class SelectAction {
     private force = false;
     private allowTypeSelect = false;
@@ -75,11 +77,6 @@ class SelectAction {
             this.unitSelectionHandler.selectSingleUnit(target);
         }
     }
-}
-export enum ActionFilter {
-    All = 0,
-    SelectOnly = 1,
-    NoSelect = 2
 }
 export class DefaultActionHandler {
     private readonly _onOrder = new EventDispatcher<any, any>();

@@ -75,6 +75,10 @@ cat <<'EOF'
     cd redalert2 && RA2_HTTP=1 bun run dev
     open http://localhost:4000/?shell=1
 
+  Apple Silicon Mac build (macOS 14+, Xcode; see docs/MACOS.md):
+    bash scripts/build-macos.sh --retail-dir "/path/to/your/ra2/install"
+    open "build/macos/yr/Red Alert 2.app"
+
   iOS simulator build (needs Xcode + xcodegen: brew install xcodegen):
     ./scripts/build-ios.sh
 

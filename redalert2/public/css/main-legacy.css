@@ -1953,6 +1953,10 @@ input[type="range"]:focus {
 
 #ra2web-root .opts.general-opts {
     padding: 34px 86px;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
 }
 
 #ra2web-root .opts.general-opts .slider-item {

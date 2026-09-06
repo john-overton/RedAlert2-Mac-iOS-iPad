@@ -1,6 +1,6 @@
 import { rectContainsPoint } from '@/util/geometry';
 import { PointerType } from '@/engine/type/PointerType';
-import { ActionFilter } from './DefaultActionHandler';
+import { ActionFilter } from './ActionFilter';
 import { isMacFirefox } from '@/util/userAgent';
 export class WorldInteraction {
     private initialized = false;
@@ -378,13 +378,13 @@ export class WorldInteraction {
             }
             this.lastDefaultModeClickDetails = isDoubleSameClick ? undefined : currentClick;
         }
-        if (!executeDefaultClick && (!rightClickMove || !event.shiftKey || event.ctrlKey) && (!rightClickMove || !isDoubleSameClick)) {
+        if (!boxSelectionHandled && !executeDefaultClick && (!rightClickMove || !event.shiftKey || event.ctrlKey) && (!rightClickMove || !isDoubleSameClick)) {
             if (!isClick) {
                 return;
             }
             this.unitSelectionHandler.deselectAll();
         }
-        if (!boxSelectionHandled && (rightClickMove ? executeDefaultClick : executeDefaultClick || event.button === 0)) {
+        if (!boxSelectionHandled && (executeDefaultClick || event.button === 0)) {
             this.handleDefaultClickAction(rightClickMove, executeDefaultClick, isDoubleSameClick, isTouchLongPress, event, hover);
             if (this.lastDefaultModeClickDetails) {
                 this.lastDefaultModeClickDetails.selectionHash = this.unitSelectionHandler.getHash();
