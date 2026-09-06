@@ -21,6 +21,11 @@ movie has a **Skip Intro** button. The opening in-game sequence temporarily
 locks unit input; control returns after the mission's scripted introduction.
 The Options button remains available.
 
+The GIs shown first belong to an allied house and cannot be commanded yet.
+Wait for the camera to pan toward Tanya and for “Battlefield Control Online,”
+then select Tanya and order her to destroy the four Dreadnoughts. With right-click
+orders enabled, left-click selects her and a two-finger click moves or attacks.
+
 `--campaign` is opt-in and currently requires `--ra2`. A build without the
 switch does not bundle campaign files. The importer also runs separately:
 
@@ -57,6 +62,13 @@ The local retail regression checks:
 - The actual menu launches the rendered mission, plays the intro and in-game
   video, returns mouse input, displays victory, and reaches the score screen
   and returns to the main menu without browser JavaScript errors.
+- Real mouse clicks select Tanya and move her with either left-click or
+  right-click orders. The GIs in the initial view remain allied-controlled.
+- Campaign voxel models are prepared during loading even without background
+  workers. The UI regression checks that Dreadnought missile geometry is cached
+  before the opening battle. A local 20-second browser profile reduced the worst
+  measured renderer update from about 90 ms to 8 ms; this is a CPU measurement,
+  not a native Mac frame-rate guarantee.
 
 **The final assault is not verified as a complete combat play-through.** The
 victory regression deliberately supplies final destruction events through the

@@ -134,7 +134,7 @@ export class GameLoader {
         loadingScreenApi.onLoadProgress(70);
         await sleep(1);
         console.time('Load voxels');
-        await this.prepareVxlGeometries(game.rules, game.art, game.map, Engine.getVoxels(), cancellationToken, (percent) => loadingScreenApi.onLoadProgress(70 + (percent / 100) * 20));
+        await this.prepareVxlGeometries(game.rules, game.art, game.map, Engine.getVoxels(), cancellationToken, (percent) => loadingScreenApi.onLoadProgress(70 + (percent / 100) * 20), game.campaign?.scenario);
         console.timeEnd('Load voxels');
         await sleep(1);
         cancellationToken?.throwIfCancelled();
@@ -384,15 +384,18 @@ export class GameLoader {
             }
         }
     }
-    private async prepareVxlGeometries(rules: any, art: any, gameMap: any, voxels: any, cancellationToken?: any, onProgress?: (percent: number) => void): Promise<void> {
-        if (!this.workerHostApi || !this.workerHostApi.concurrency) {
+    private async prepareVxlGeometries(rules: any, art: any, gameMap: any, voxels: any, cancellationToken?: any, onProgress?: (percent: number) => void, campaign?: CampaignScenario): Promise<void> {
+        const hasWorkers = !!this.workerHostApi?.concurrency;
+        if (!hasWorkers && !campaign) {
             return;
         }
-        const objectsToLoad = new Set([
+        // Without workers, prepare only this campaign's models during loading.
+        // Otherwise the first missile launch builds voxel meshes in a game frame.
+        const objectsToLoad = new Set<any>(hasWorkers ? [
             ...rules.vehicleRules.values(),
             ...rules.aircraftRules.values(),
             ...rules.buildingRules.values(),
-        ].filter(obj => (obj.techLevel !== -1 || obj.spawned) && art.hasObject(obj.name, obj.type)));
+        ].filter(obj => (obj.techLevel !== -1 || obj.spawned) && art.hasObject(obj.name, obj.type)) : []);
         for (const building of rules.buildingRules.values()) {
             if (building.freeUnit) {
                 if (rules.hasObject(building.freeUnit, ObjectType.Vehicle)) {
@@ -407,6 +410,21 @@ export class GameLoader {
         for (const techno of gameMap.getInitialMapObjects().technos) {
             if ((techno.isVehicle() || techno.isAircraft()) && rules.hasObject(techno.name, techno.type)) {
                 objectsToLoad.add(rules.getObject(techno.name, techno.type));
+            }
+        }
+        for (const force of campaign?.taskForces ?? []) {
+            for (const [key, value] of Object.entries(force.properties)) {
+                if (!/^\d+$/.test(key)) continue;
+                const name = value.split(',')[1];
+                for (const type of [ObjectType.Vehicle, ObjectType.Aircraft]) {
+                    if (rules.hasObject(name, type)) objectsToLoad.add(rules.getObject(name, type));
+                }
+            }
+        }
+        // Set iteration includes newly added dependencies and terminates on cycles.
+        for (const obj of objectsToLoad) {
+            if (obj.spawns && rules.hasObject(obj.spawns, ObjectType.Aircraft)) {
+                objectsToLoad.add(rules.getObject(obj.spawns, ObjectType.Aircraft));
             }
         }
         const vxlFiles = new Map<string, any>();
@@ -466,6 +484,18 @@ export class GameLoader {
             }
         }
         if (filesToGenerate.length > 0) {
+            if (!hasWorkers) {
+                for (const [, vxlFile] of filesToGenerate) {
+                    for (const section of vxlFile.sections) {
+                        cancellationToken?.throwIfCancelled();
+                        this.vxlGeometryPool.get(section);
+                        await sleep(1);
+                    }
+                    loaded++;
+                    onProgress?.((loaded / vxlFiles.size) * 100);
+                }
+                return;
+            }
             filesToGenerate.sort((a, b) => b[1].voxelCount - a[1].voxelCount);
             const concurrency = this.workerHostApi.concurrency;
             const modelQuality = this.vxlGeometryPool.getModelQuality();
