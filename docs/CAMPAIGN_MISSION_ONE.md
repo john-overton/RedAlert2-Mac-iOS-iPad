@@ -35,6 +35,17 @@ Skirmish speed remains controlled by its lobby settings.
 In-game movies sit immediately left of the build sidebar and follow window
 resizing. Opening the game menu hides and pauses the movie until you resume.
 
+Choose **Save Game** from the in-game menu, then **Load Game** from the main
+menu to continue. Saves rebuild the mission from recorded commands, including
+scripted teams, objectives, production, and tutorial selections. The saved
+camera and selection return without replaying old movies or queued EVA lines.
+Longer missions take more time to reconstruct. Keep the same game version and
+campaign assets; loading rejects a changed campaign map.
+
+**Replays** is available in the Mac main menu. Matches are recorded automatically;
+saved games can also be watched as replays. Playback reconstructs the campaign
+and its movies without accepting orders from the viewer.
+
 `--campaign` is opt-in and currently requires `--ra2`. A build without the
 switch does not bundle campaign files. The importer also runs separately:
 
@@ -77,6 +88,11 @@ The local retail regression checks:
   and returns to the main menu without browser JavaScript errors.
 - Real mouse clicks select Tanya and move her with either left-click or
   right-click orders. The GIs in the initial view remain allied-controlled.
+- Dreadnought models finish sinking after destruction. Save/load and replay
+  regressions record Tanya's attacks, the Fort Bradley transfer, and a barracks
+  under construction. Reconstructed state matches units, credits, production
+  progress, selections, team scripts, local variables, and fired triggers.
+  The Save Game, Load Game, and Replays menu paths are also exercised.
 - Campaign voxel models are prepared during loading even without background
   workers. The UI regression checks that Dreadnought missile geometry is cached
   before the opening battle. A local 20-second browser profile reduced the worst
@@ -104,6 +120,7 @@ bun test redalert2/src/test/CampaignScenario.test.ts \
   redalert2/src/test/CampaignSetup.test.ts redalert2/src/test/CampaignTriggers.test.ts
 node scripts/campaign-init-smoke.mjs --runtime
 node scripts/campaign-ui-smoke.mjs
+node scripts/campaign-save-replay-smoke.mjs
 ```
 
 The smoke scripts use Playwright Chromium. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE`
@@ -134,8 +151,7 @@ Compatibility choices are explicit:
   retail pan speeds. Local AI triggers use the normal production queues with a
   simplified scheduling policy; retail weighting and all team flags are not
   reproduced exactly.
-- Only medium difficulty is exposed. No mission-two progression, campaign saves,
-  or campaign replays are supported. Campaign saving is disabled in the menu.
+- Only medium difficulty is exposed. Mission-two progression is not implemented.
 - The audit's `playable: false` field means that static enum coverage does not
   certify playability; use the runtime results and limitations above.
 

@@ -91,7 +91,7 @@ export class HomeScreen implements Screen {
             },
             {
                 label: 'Load Game',
-                tooltip: 'Continue a saved skirmish match',
+                tooltip: 'Continue a saved campaign or skirmish',
                 onClick: () => {
                     console.log('[HomeScreen] Load Game clicked');
                     if (this.controller) {
@@ -109,18 +109,18 @@ export class HomeScreen implements Screen {
                             window.location.hash = '/liveinteraction';
                         }
                     },
-                    {
-                        label: 'Replays',
-                        tooltip: 'View and play back game replays',
-                        onClick: () => {
-                            console.log('[HomeScreen] Replays clicked');
-                            if (this.controller) {
-                                this.controller.pushScreen(MainMenuScreenType.ReplaySelection);
-                            }
-                        }
-                    },
                 ]
                 : []),
+            {
+                label: 'Replays',
+                tooltip: 'View and play back game replays',
+                onClick: () => {
+                    console.log('[HomeScreen] Replays clicked');
+                    if (this.controller) {
+                        this.controller.pushScreen(MainMenuScreenType.ReplaySelection);
+                    }
+                }
+            },
             {
                 label: 'LAN Multiplayer',
                 tooltip: 'Exchange SDP manually to establish a LAN P2P data channel',

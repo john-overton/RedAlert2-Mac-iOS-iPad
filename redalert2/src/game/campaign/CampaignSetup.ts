@@ -58,6 +58,7 @@ export class CampaignSetup {
     readonly productionHouses = new Set<number>();
     readonly aiTriggerHouses = new Set<number>();
     readonly firedTriggers = new Set<string>();
+    readonly selectedUnitIds = new Set<number>();
     inputLocked = false;
     outcome?: 'victory' | 'defeat';
     constructor(readonly scenario: CampaignScenario, readonly difficulty: 'easy' | 'medium' | 'hard' = 'medium') {

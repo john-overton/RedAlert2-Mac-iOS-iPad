@@ -193,6 +193,11 @@ export class GameScreen extends RootScreen {
                 this.disposables.add(() => this.debugMapFile = undefined);
             }
             mapFile = new MapFile(mapFileData);
+            if (this.isSinglePlayer && mapFile.getSection('Basic')?.getBool('MultiplayerOnly', true) === false) {
+                const digest = MapDigest.compute(mapFileData);
+                if (params.resumeReplay && gameOpts.mapDigest !== digest) throw new Error('Saved campaign map has changed');
+                gameOpts.mapDigest = digest;
+            }
             const mapSupportError = MapSupport.check(mapFile, this.strings);
             if (mapSupportError) {
                 this.handleError(mapSupportError, mapSupportError);
@@ -519,8 +524,6 @@ export class GameScreen extends RootScreen {
         }
     }
     private saveReplay(replay: any): void {
-        // Campaign state is not yet serialized by the replay format.
-        if (this.game?.campaign) return;
         if (!this.replayManager?.saveReplay) {
             console.warn('[GameScreen.saveReplay] replayManager.saveReplay is unavailable');
             return;
@@ -1120,6 +1123,17 @@ export class GameScreen extends RootScreen {
                 !this.gameTurnMgr.getErrorState() &&
                 this.gameTurnMgr.doGameTurn(performance.now())) { }
             console.log(`[GameScreen] Resumed save at tick ${game.currentTick} in ${Math.round(performance.now() - startTime)}ms`);
+            if (game.campaign) {
+                game.campaign.presentation.length = 0;
+                eva.clearQueue();
+                const view = game.gameOpts.campaignSaveView;
+                if (view?.cameraPan) worldScene.cameraPan.setPan(view.cameraPan);
+                game.unitSelection.deselectAll();
+                for (const id of game.campaign.selectedUnitIds) {
+                    const unit = game.localPlayer.getOwnedObjectById(id);
+                    if (unit?.isSpawned) game.unitSelection.addToSelection(unit);
+                }
+            }
         }
         if (this.usesServerConnection()) {
             this.initNetStats(localPlayer);
@@ -1295,7 +1309,9 @@ export class GameScreen extends RootScreen {
         const save = new Replay();
         save.gameId = replay.gameId;
         save.gameTimestamp = replay.gameTimestamp;
-        save.gameOpts = replay.gameOpts;
+        save.gameOpts = game.campaign ? {...replay.gameOpts, campaignSaveView: {
+            cameraPan: this.playerUi.worldScene.cameraPan.getPan(),
+        }} : replay.gameOpts;
         save.engineVersion = replay.engineVersion;
         save.modHash = replay.modHash;
         save.timestamp = Date.now();
@@ -1360,7 +1376,9 @@ export class GameScreen extends RootScreen {
             }
 
             if (replay) {
-                replay.finish(game?.currentTick ?? 0);
+                // onEnd fires inside the current simulation tick (or its action
+                // processing). Include that tick so playback reaches the outcome.
+                replay.finish((game?.currentTick ?? 0) + 1);
                 this.saveReplay(replay);
             }
 

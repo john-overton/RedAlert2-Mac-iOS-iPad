@@ -39,7 +39,7 @@ export class CampaignPresentation {
         this.resumeVideo = false;
     };
     constructor(private game: any, private renderer: any, private world: any, private interaction: any,
-        private sidebar: any, private renderables: any, private menu: any) {
+        private sidebar: any, private renderables: any, private menu: any, private manageInput = true) {
         renderer.onFrame.subscribe(this.update);
         menu.onOpen.subscribe(this.onOpen);
         menu.onCancel.subscribe(this.onClose);
@@ -54,7 +54,7 @@ export class CampaignPresentation {
                 this.positionVideo();
             }
         }
-        if (!this.menuOpen && this.locked !== campaign.inputLocked) {
+        if (this.manageInput && !this.menuOpen && this.locked !== campaign.inputLocked) {
             this.locked = campaign.inputLocked;
             this.interaction.setEnabled(!this.locked);
         }
@@ -63,7 +63,7 @@ export class CampaignPresentation {
                 const tile = this.game.map.getTileAtWaypoint(event.waypoint);
                 if (tile) this.world.cameraPan.setPan(new MapPanningHelper(this.game.map).computeCameraPanFromTile(tile.rx,tile.ry));
             } else if (event.kind === 'tab') {
-                if (event.tab >= 0 && event.tab <= 3) this.sidebar.selectTab(event.tab);
+                if (event.tab >= 0 && event.tab <= 3) this.sidebar.selectTab?.(event.tab);
             } else if (event.kind === 'flash') {
                 for (const id of event.units) this.flashes.set(id, this.game.currentTick + event.frames);
             } else if (event.kind === 'cameo') {
@@ -72,7 +72,7 @@ export class CampaignPresentation {
                 const types = ['buildingRules','vehicleRules','infantryRules','aircraftRules'];
                 const names = types.flatMap(key => [...this.game.rules[key].values()].map((r: any) => r.name));
                 const name = names[index] ?? event.name;
-                for (const tab of this.sidebar.tabs) for (const item of tab.items) {
+                for (const tab of this.sidebar.tabs ?? []) for (const item of tab.items) {
                     if (item.target?.rules?.name === name) item.campaignFlashUntil = this.game.currentTick + event.frames;
                 }
             } else if (event.kind === 'movie') {
@@ -88,7 +88,7 @@ export class CampaignPresentation {
             }
         }
         for (const [id, until] of this.flashes) {
-            const object = this.game.getObjectById(id);
+            const object = this.game.getWorld().hasObjectId(id) ? this.game.getObjectById(id) : undefined;
             if (!object || object.isDestroyed || this.game.currentTick > until) { this.flashes.delete(id); continue; }
             this.renderables.getRenderableByGameObject(object)?.highlight?.();
         }

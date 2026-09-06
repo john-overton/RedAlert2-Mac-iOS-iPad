@@ -375,7 +375,7 @@ export class Vehicle {
                 }),
                 this.placeholder?.setOpacity(t);
         }
-        if ((t || a || s || n || bkChanged || roChanged) &&
+        if (t || a || s || n || bkChanged || roChanged) {
             (n && this.highlightAnimRunner.tick(i),
                 (p = s ? this.invulnAnimRunner.getValue() : 0),
                 (P = (n ? this.highlightAnimRunner.getValue() : 0) || p),
@@ -384,8 +384,10 @@ export class Vehicle {
                         A.ExtraLightHelper.ironCurtainShp(this.shpExtraLight, this.baseShpExtraLight, p as any))
                     : (A.ExtraLightHelper.multiplyVxl(this.vxlExtraLight, this.baseVxlExtraLight, this.lighting.getAmbientIntensity(), P as any),
                         A.ExtraLightHelper.multiplyShp(this.shpExtraLight, this.baseShpExtraLight, P as any)),
-                this.applyBerserkTint(),
-            this.gameObject.isDestroyed && this.resolveObjectRemove)) {
+                this.applyBerserkTint());
+        }
+        // Sinking is time-based and must advance even after visual dirty flags clear.
+        if (this.gameObject.isDestroyed && this.resolveObjectRemove) {
             if ((this.squidGrabAnim &&
                 (this.posObj?.remove(this.squidGrabAnim.get3DObject()),
                     this.squidGrabAnim.dispose(),

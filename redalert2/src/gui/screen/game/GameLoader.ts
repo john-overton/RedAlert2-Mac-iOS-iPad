@@ -76,6 +76,7 @@ export class GameLoader {
         const { game, theater } = await this.createGame(gameId, timestamp, gameOptions, mapFile, isSinglePlayer, botsLib);
         let hudSide = SideType.GDI;
         let localPlayer: any;
+        playerName ??= game.campaign?.scenario.playerHouse.id;
         if (playerName) {
             localPlayer = game.getPlayerByName(playerName);
             if (!localPlayer.isObserver) {

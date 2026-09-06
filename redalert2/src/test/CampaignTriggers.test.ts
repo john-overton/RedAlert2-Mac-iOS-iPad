@@ -43,7 +43,7 @@ test('build events must match both house and object type',()=>{
 test('discovery and selection conditions require the observed attached object',()=>{
     const tile={};const obj={isSpawned:true,isDestroyed:false,tile,tileElevation:0};
     let shrouded=true,selected=false;
-    const game={campaign:{},localPlayer:{},mapShroudTrait:{getPlayerShroud:()=>({isShrouded:()=>shrouded})},
+    const game={campaign:{selectedUnitIds:{has:()=>selected}},localPlayer:{},mapShroudTrait:{getPlayerShroud:()=>({isShrouded:()=>shrouded})},
         map:{tileOccupation:{calculateTilesForGameObject:()=>[tile]}},unitSelection:{isSelected:()=>selected}};
     for(const type of [4,33]){
         const c=new PlayerObservationCondition({type},{});c.setTargets([obj]);

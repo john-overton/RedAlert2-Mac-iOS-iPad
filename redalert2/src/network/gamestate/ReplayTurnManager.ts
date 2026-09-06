@@ -68,6 +68,15 @@ export class ReplayTurnManager {
 
         const tick = this.game.currentTick;
 
+        // Verify hash checkpoint
+        const expectedHash = this.hashByTick.get(tick);
+        if (expectedHash !== undefined) {
+            const actualHash = this.game.getHash();
+            if (actualHash !== expectedHash) {
+                console.warn(`[ReplayTurnManager] Desync detected at tick ${tick}: expected=${expectedHash}, actual=${actualHash}`);
+            }
+        }
+
         // Inject actions for this tick
         const records = this.actionsByTick.get(tick);
         if (records) {
@@ -110,15 +119,6 @@ export class ReplayTurnManager {
             }
         }
 
-        // Verify hash checkpoint
-        const expectedHash = this.hashByTick.get(tick);
-        if (expectedHash !== undefined) {
-            const actualHash = this.game.getHash();
-            if (actualHash !== expectedHash) {
-                console.warn(`[ReplayTurnManager] Desync detected at tick ${tick}: expected=${expectedHash}, actual=${actualHash}`);
-            }
-        }
-
         // Handle game speed changes
         if (this.gameSpeedChanged) {
             this.game.speed.value = this.game.desiredSpeed.value;
@@ -127,7 +127,7 @@ export class ReplayTurnManager {
         }
 
         // Check if replay has ended
-        if (this.replay.finishedTick && tick >= this.replay.finishedTick) {
+        if (this.replay.finishedTick && this.game.currentTick >= this.replay.finishedTick) {
             this.finished = true;
             this.onFinished.dispatch(this, undefined);
             return false;

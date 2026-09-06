@@ -7,7 +7,7 @@ import { GameObject } from '../gameobject/GameObject';
 export class SelectUnitsAction extends Action {
     private _unitIds: number[] = [];
     private orderActionContext: OrderActionContext;
-    constructor(game: any, orderActionContext: OrderActionContext) {
+    constructor(private game: any, orderActionContext: OrderActionContext) {
         super(ActionType.SelectUnits);
         this.orderActionContext = orderActionContext;
     }
@@ -45,5 +45,9 @@ export class SelectUnitsAction extends Action {
             }
         }
         this.orderActionContext.getOrCreateSelection(player).update(units);
+        if (this.game.campaign && player === this.game.localPlayer) {
+            this.game.campaign.selectedUnitIds.clear();
+            units.forEach(unit => this.game.campaign.selectedUnitIds.add(unit.id));
+        }
     }
 }

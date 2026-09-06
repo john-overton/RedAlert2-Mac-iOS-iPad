@@ -23,7 +23,7 @@ export class ReplayRecorder {
                 });
                 continue;
             }
-            if (!serialized || serialized.length === 0) {
+            if (!serialized) {
                 continue;
             }
             this.replay.actionRecords.push({
