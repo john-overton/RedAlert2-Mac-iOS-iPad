@@ -53,6 +53,11 @@ export class Eva {
     init(): void {
         this.renderer.onFrame.subscribe(this.handleFrame);
     }
+    clearQueue(): void {
+        this.evaWaitingList.length = 0;
+        this.currentEvaPlaying?.stop();
+        this.currentEvaPlaying = undefined;
+    }
     dispose(): void {
         this.renderer.onFrame.unsubscribe(this.handleFrame);
         this.currentEvaPlaying?.stop();

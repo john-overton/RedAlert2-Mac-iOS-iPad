@@ -91,6 +91,7 @@ try {
    for(const b of [...game.getPlayerByName('BadGuy1 House').buildings])if(!b.rules.insignificant)game.destroyObject(b,{player:game.localPlayer});
    for(let i=0;i<200&&!game.campaign.outcome;i++)game.update();
    if(game.campaign.outcome!=='victory')throw new Error('UI game did not reach victory');
+   if(d.gameScreen.replay.finishedTick!==game.currentTick)throw new Error('Replay omitted the mission-ending tick');
  });
  await page.screenshot({path:'build/campaign-victory.png'});
  await page.waitForTimeout(5500);

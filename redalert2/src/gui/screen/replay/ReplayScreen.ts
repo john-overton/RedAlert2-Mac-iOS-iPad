@@ -1,4 +1,5 @@
 import { powerFrameCap } from '@/engine/PowerState';
+import { CampaignPresentation } from '@/gui/screen/game/CampaignPresentation';
 import { Engine } from '@/engine/Engine';
 import { SidebarModel } from '@/gui/screen/game/component/hud/viewmodel/SidebarModel';
 import { DevToolsApi } from '@/tools/DevToolsApi';
@@ -264,7 +265,7 @@ export class ReplayScreen extends RootScreen {
                 return;
             }
             const mapFile = new MapFile(mapFileData);
-            gameData = await this.gameLoader.load(gameId, gameTimestamp, gameOpts, mapFile, undefined, gameOpts.humanPlayers.length === 1, loadingScreenApi);
+            gameData = await this.gameLoader.load(gameId, gameTimestamp * 1000, gameOpts, mapFile, undefined, gameOpts.humanPlayers.length === 1, loadingScreenApi);
         }
         catch (error: any) {
             let message: string;
@@ -449,6 +450,8 @@ export class ReplayScreen extends RootScreen {
             this.minimap!.changeLocalPlayer(player);
         });
         this.playerUi.init(this.hud!);
+        if ((game as any).campaign) this.disposables.add(new CampaignPresentation(game, this.renderer,
+            worldScene, this.playerUi.worldInteraction, this.sidebarModel, renderableManager, menu, false));
         this.disposables.add(this.playerUi, () => (this.playerUi = undefined));
     }
     private initGameMenuEvents(menu: GameMenuType): void {

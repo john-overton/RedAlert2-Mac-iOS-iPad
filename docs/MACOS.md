@@ -126,5 +126,5 @@ when converting movies for the first time. It is not available in YR mode.
 
 See [mission-one setup, verification, and limitations](CAMPAIGN_MISSION_ONE.md).
 The objective/victory/defeat regression passes, but a complete manual combat
-play-through and final-assault balance are still pending. Campaign saves and
-mission-two progression are not implemented.
+play-through and final-assault balance are still pending. Campaign Save Game,
+Load Game, and Replays are available; mission-two progression is not implemented.

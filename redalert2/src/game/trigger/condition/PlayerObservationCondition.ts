@@ -8,7 +8,7 @@ export class PlayerObservationCondition extends TriggerCondition {
         const shroud = game.mapShroudTrait.getPlayerShroud(player);
         return this.targets.filter(object => object.isSpawned && !object.isDestroyed &&
             (this.event.type === 33
-                ? game.unitSelection.isSelected(object)
+                ? game.campaign.selectedUnitIds.has(object.id)
                 : game.map.tileOccupation.calculateTilesForGameObject(object.tile, object)
                     .some((tile: any) => !shroud?.isShrouded(tile, object.tileElevation))));
     }
