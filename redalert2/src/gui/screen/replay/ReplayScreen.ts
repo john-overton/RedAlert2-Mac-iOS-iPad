@@ -451,7 +451,7 @@ export class ReplayScreen extends RootScreen {
         });
         this.playerUi.init(this.hud!);
         if ((game as any).campaign) this.disposables.add(new CampaignPresentation(game, this.renderer,
-            worldScene, this.playerUi.worldInteraction, this.sidebarModel, renderableManager, menu, false));
+            worldScene, this.playerUi.worldInteraction, this.sidebarModel, renderableManager, menu, false, this.music));
         this.disposables.add(this.playerUi, () => (this.playerUi = undefined));
     }
     private initGameMenuEvents(menu: GameMenuType): void {

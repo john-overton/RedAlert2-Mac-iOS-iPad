@@ -18,6 +18,7 @@ interface Player {
 }
 interface ScoreScreenParams {
     game: Game;
+    nextCampaign?: () => Promise<void>;
     localPlayer: Player;
     singlePlayer: boolean;
     tournament: boolean;
@@ -64,10 +65,20 @@ export class ScoreScreen extends MainMenuScreen {
             this.loadGameReport(params.game);
         }
     }
-    private initView({ game, localPlayer, singlePlayer, tournament, returnTo, }: ScoreScreenParams): void {
+    private initView({ game, localPlayer, singlePlayer, tournament, returnTo, nextCampaign, }: ScoreScreenParams): void {
+        let launching = false;
         this.controller.setSidebarButtons([
+            ...(nextCampaign ? [{
+                label: 'Next Mission',
+                tooltip: 'Continue the Allied campaign',
+                onClick: async () => {
+                    if (launching) return;
+                    launching = true;
+                    try { await nextCampaign(); } finally { launching = false; }
+                },
+            }] : []),
             {
-                label: this.strings.get("GUI:Continue"),
+                label: nextCampaign ? 'Main Menu' : this.strings.get("GUI:Continue"),
                 tooltip: this.strings.get("STT:MPScoreButtonContinue"),
                 isBottom: true,
                 onClick: () => {

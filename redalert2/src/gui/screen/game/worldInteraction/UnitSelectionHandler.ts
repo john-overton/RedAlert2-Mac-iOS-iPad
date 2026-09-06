@@ -1,3 +1,4 @@
+import { canControl, controllableObjects } from '@/game/campaign/CampaignControl';
 import * as THREE from 'three';
 import { equals } from '@/util/array';
 import { rectContainsPoint } from '@/util/geometry';
@@ -53,7 +54,7 @@ export class UnitSelectionHandler {
         }
         const selected = this.unitSelection.getSelectedUnits();
         if (selected.length &&
-            ((unit.owner === this.player && !selected.find((selectedUnit: any) => selectedUnit.owner !== unit.owner)) ||
+            ((canControl(this.player, unit) && !selected.find((selectedUnit: any) => !canControl(this.player, selectedUnit))) ||
                 !this.player)) {
             this.unitSelection.addToSelection(unit);
             return;
@@ -174,7 +175,7 @@ export class UnitSelectionHandler {
         const units = this.entityIntersectHelper
             .getEntitiesAtScreenBox(box)
             ?.map((renderable: any) => renderable.gameObject)
-            .filter((gameObject: any) => gameObject.isTechno?.() && gameObject.rules.selectable && gameObject.owner === this.player);
+            .filter((gameObject: any) => gameObject.isTechno?.() && gameObject.rules.selectable && canControl(this.player, gameObject));
         if (!units?.length) {
             return false;
         }
@@ -191,7 +192,7 @@ export class UnitSelectionHandler {
     }
     createGroup(groupNumber: number): void {
         const selectedUnits = this.unitSelection.getSelectedUnits();
-        if (selectedUnits.length === 1 && selectedUnits[0].owner !== this.player) {
+        if (selectedUnits.length === 1 && !canControl(this.player, selectedUnits[0])) {
             return;
         }
         this.unitSelection.createGroup(groupNumber);
@@ -235,7 +236,7 @@ export class UnitSelectionHandler {
             }
         }
         if (this.shouldSelectByTypeOnMap) {
-            candidates = owner.getOwnedObjects();
+            candidates = controllableObjects(owner);
             matching = candidates.filter((unit: any) => selectedNames.has(unit.name));
         }
         const queryType = this.shouldSelectByTypeOnMap ? QueryType.OnMap : QueryType.OnScreen;
@@ -252,7 +253,7 @@ export class UnitSelectionHandler {
         if (!owner) {
             return;
         }
-        const candidates = this.shouldSelectCombatantsOnMap ? owner.getOwnedObjects() : this.getOwnedObjectsOnScreen(owner);
+        const candidates = this.shouldSelectCombatantsOnMap ? controllableObjects(owner) : this.getOwnedObjectsOnScreen(owner);
         const matching = candidates.filter((unit: any) => unit.isUnit?.() &&
             unit.rules.selectable &&
             unit.rules.isSelectableCombatant &&
@@ -290,7 +291,7 @@ export class UnitSelectionHandler {
             const totalLevels = this.veteranCap + 1;
             veteranLevel = (this.selectVeteranState - 1 + totalLevels) % totalLevels;
         }
-        const candidates = this.vetNavSelectionSet.filter((unit) => unit.rules.selectable && !unit.isDestroyed && !unit.isCrashing && !unit.limboData && unit.owner === owner);
+        const candidates = this.vetNavSelectionSet.filter((unit) => unit.rules.selectable && !unit.isDestroyed && !unit.isCrashing && !unit.limboData && canControl(owner, unit));
         const matching = candidates.filter((unit) => unit.veteranLevel === veteranLevel);
         this.selectMultipleUnits(matching, {
             queryType: QueryType.Veteran,
@@ -315,7 +316,7 @@ export class UnitSelectionHandler {
         else {
             healthLevel = (this.selectHealthState - 1 + totalLevels) % totalLevels;
         }
-        const candidates = this.healthNavSelectionSet.filter((unit) => unit.rules.selectable && !unit.isDestroyed && !unit.isCrashing && !unit.limboData && unit.owner === owner);
+        const candidates = this.healthNavSelectionSet.filter((unit) => unit.rules.selectable && !unit.isDestroyed && !unit.isCrashing && !unit.limboData && canControl(owner, unit));
         const matching = candidates.filter((unit) => unit.healthTrait.level === healthLevel);
         this.selectMultipleUnits(matching, {
             queryType: QueryType.Health,
@@ -341,7 +342,7 @@ export class UnitSelectionHandler {
         return (this.entityIntersectHelper
             .getEntitiesAtScreenBox(box)
             ?.map((renderable: any) => renderable.gameObject)
-            .filter((gameObject: any) => gameObject.isTechno?.() && gameObject.owner === owner) ?? []);
+            .filter((gameObject: any) => gameObject.isTechno?.() && canControl(owner, gameObject)) ?? []);
     }
     private disposeBoxSelect(): void {
         if (!this.selectBox) {

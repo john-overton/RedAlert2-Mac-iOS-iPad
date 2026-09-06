@@ -135,7 +135,7 @@ test('campaign outcomes are explicit and do not depend on surviving allies', () 
 });
 
 test('campaign civilian ownership follows country inheritance without claiming allied houses', () => {
-    const setup = new CampaignSetup({ini:new IniFile({
+    const setup = new CampaignSetup({basic:{},ini:new IniFile({
         Civilian1:{ParentCountry:'Neutral'},Town:{ParentCountry:'Civilian1'},
         Ally:{ParentCountry:'Americans'},Cycle:{ParentCountry:'Cycle'},
     })} as any);
@@ -144,4 +144,27 @@ test('campaign civilian ownership follows country inheritance without claiming a
     expect(civilian('Town')).toBe(true);
     expect(civilian('Ally')).toBe(false);
     expect(civilian('Cycle')).toBe(false);
+});
+
+test('a scenario house named after a retail country retains its base country rules', () => {
+    const mission = scenario();
+    mission.ini.getOrCreateSection('Americans').set('Country', 'Americans');
+    mission.countries.push({id:'Americans',properties:{Country:'Americans'}});
+    const base = baseRules();
+    const result = prepareCampaignRules(base, base.clone().mergeWith(mission.ini), mission);
+    expect(result.getSection('Americans')!.getString('Side')).toBe('GDI');
+    expect(result.getSection('Americans')!.getArray('VeteranInfantry')).toEqual(['E1']);
+});
+
+test('make enemy changes only the specified directed campaign alliance', () => {
+    const list = new PlayerList();
+    const a = {name:'A',country:{id:0,name:'A'}} as any;
+    const b = {name:'B',country:{id:1,name:'B'}} as any;
+    list.addPlayer(a); list.addPlayer(b);
+    const alliances = new Alliances(list);
+    alliances.setCampaignAllies(new Map([[a,[b]],[b,[a]]]));
+    new CampaignSetup(scenario()).execute({getAllPlayers:()=>list.getAll(),alliances},
+        {type:38,params:['0','1']},{houseName:'A'});
+    expect(alliances.areAllied(a,b)).toBe(false);
+    expect(alliances.areAllied(b,a)).toBe(true);
 });

@@ -10,18 +10,18 @@ the engine; importing a map alone does not make a mission playable.
 ## Handoff baseline
 
 As of September 6, 2026, development is on `feat/allied-mission-one`, based on
-`feat/apple-silicon-macos`. Mission one's latest runtime fix is `4ccfeb5`
-(context cursors and campaign garrison unloading). Check the actual branch,
+`feat/apple-silicon-macos`. The current implementation includes both Allied missions and their transition.
+Check the actual branch,
 working tree, and remotes before continuing; these names describe the handoff,
 not a requirement to overwrite or switch an existing checkout.
 
-Mission one (`all01t.map`, Lone Guardian) launches and has opening scripts,
-objectives, base transfer, production, bridge repair, victory/defeat, movies,
-speed settings, saves, and replay playback. The user has tested it interactively.
-The final assault has **not** been verified as a complete combat play-through:
-the automated victory check supplies destruction events for the remaining
-buildings. Mission two and campaign progression are not implemented. The next
-task is to audit and implement the next Allied mission, preserving mission one.
+Mission one (`all01t.map`, Lone Guardian) and mission two (`all02s.map`, Eagle
+Dawn) launch with saves and replay playback. Mission-one victory offers **Next
+Mission**, plays mission two's briefing, and starts fresh mission-two state.
+Read [mission-two coverage and limitations](CAMPAIGN_MISSION_TWO.md). Mission
+three and later progression are not implemented. Both missions have controlled
+objective/victory regressions; neither final assault has been verified as a
+complete normal combat play-through. The user has tested mission one interactively.
 
 Local retail data is at `/Users/johnoverton/Downloads/ra2game` in this workspace;
 use an explicit path or `RA2_RETAIL_DIR` elsewhere. Retail archives, maps,
@@ -67,10 +67,10 @@ Paths below are relative to the repository root.
    over coordinate-, name-, or mission-specific shortcuts. Document necessary
    compatibility approximations and scope them to campaigns when appropriate.
    Preserve skirmish and multiplayer behavior.
-4. **Wire mission identity through every entry point.** The importer, Mac
-   packaging, home menu, map loader, intro player, and in-game movie player
-   currently hard-code `allied-01` or `all01t.map`. Generalize these together so
-   one mission cannot load another's map or movies. Carry enough identity through
+4. **Wire mission identity through every entry point.** Use `CampaignMissions.ts` and `launchCampaign.ts` for the supported map order,
+   menu launch, and mission-specific asset paths. Extend the catalog, importer,
+   packaging checks, and progression together so one mission cannot load another's
+   map or movies. The retail maps' `NextScenario` fields contain legacy placeholders. Carry enough identity through
    save/load and replay to resolve the correct assets. Retain map digest checking.
    The Vite `/campaign` middleware already serves the export root.
 5. **Make the mission reachable.** Add the appropriate selection/briefing and
@@ -89,13 +89,19 @@ Paths below are relative to the repository root.
   mission one's opening GIs are not initially controllable. Check owner and input
   lock before changing order logic. Custom civilian houses can inherit `Neutral`
   or `Special` without `owner.isNeutral` being true; use campaign ancestry and
-  restore the original civilian owner after unloading.
+  restore the original civilian owner after unloading. Houses with `PlayerControl`
+  remain separate owners but accept the human's orders through `CampaignControl`.
+  Check simulation validation, mixed selection, target lines, and save restoration
+  when adding control paths; changing Tanya's owner breaks mission two's loss test.
+  Scenario house sections can share a base country name; merge base country rules
+  before applying those sections. Keep the engine's extra neutral player passive.
 - **Instruction parameters are not interchangeable.** Preserve hexadecimal cell
   tags, local-variable identity, numeric durations, and house-specific tests.
   Verify action/event parameter positions against the actual scenario and engine.
 - **Movie indices are zero-based positions in the retail movie list**, not the
   numbered INI keys. Mission-one indices 67–69 map to `A01_p01e`, `A01_p02e`,
-  and `A01_p03e`. Convert referenced clips and briefing to browser-compatible
+  and `A01_p03e`. Briefing videos may be in `Brief`, not `Intro`. Inspect both,
+  along with transition/ending fields and carryover settings. Convert referenced clips and briefing to browser-compatible
   H.264/AAC, with hashes and reusable conversion caching.
 - **Presentation must leave the game usable.** Keep in-game movies left of the
   sidebar, responsive to resize, and paused/hidden under the game menu. Native
@@ -158,14 +164,17 @@ node scripts/campaign-init-smoke.mjs --runtime
 node scripts/campaign-ui-smoke.mjs
 node scripts/campaign-save-replay-smoke.mjs
 node scripts/campaign-interaction-smoke.mjs
+node scripts/campaign-mission-two-smoke.mjs
+node scripts/campaign-mission-two-save-replay-smoke.mjs
 ```
 
 The init test checks scenario state and objective progression. The UI test
 checks menus, movies, speed, mouse orders, endings, and return to menu. The save
 test compares reconstructed state and exercises Save/Load/Replays. The interaction
-test checks contextual order types and actual mouse garrison unloading. These
-scripts currently target mission one: extend or parameterize them for the next
-mission rather than treating a passing mission-one run as coverage of new content.
+test checks contextual order types and actual mouse garrison unloading. The UI
+script includes the mission-one-to-two handoff. Mission two also has
+`campaign-mission-two-smoke.mjs` and `campaign-mission-two-save-replay-smoke.mjs`;
+run them for shared campaign changes. Add equivalent coverage for later missions.
 
 Use `window.__ra2debug` in browser tests to inspect the game, game screen, world
 interaction, and action machinery. Prefer normal queued orders for gameplay

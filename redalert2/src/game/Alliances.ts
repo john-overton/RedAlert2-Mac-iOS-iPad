@@ -27,6 +27,10 @@ export class Alliances {
     setCampaignAllies(relations: Map<Player, Player[]>): void {
         this.campaignAllies = new Map([...relations].map(([player, allies]) => [player, [...allies]]));
     }
+    setCampaignEnemy(player: Player, enemy: Player): void {
+        if (!this.campaignAllies) throw new Error('Expected campaign alliances');
+        this.campaignAllies.set(player, this.getAllies(player).filter(ally => ally !== enemy));
+    }
     findByPlayers(player1: Player, player2: Player): Alliance | undefined {
         const pair = new PlayerPair(player1, player2);
         return this.alliances.find(alliance => alliance.players.equals(pair));

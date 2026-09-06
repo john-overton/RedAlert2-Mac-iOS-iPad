@@ -47,7 +47,7 @@ export class CombatantUi {
     private planningMode?: PlanningMode;
     private specialMode?: SpecialActionMode;
     public worldInteraction?: any;
-    constructor(private game: any, private player: any, private isSinglePlayer: boolean, private actionQueue: any, private actionFactory: any, private sidebarModel: any, private renderer: any, private worldScene: any, private soundHandler: any, private messageList: any, private sound: any, private eva: any, private worldInteractionFactory: any, private gameMenu: any, private pointer: any, private runtimeVars: any, private speedCheat: any, private strings: any, private tauntHandler: any, private renderableManager: any, private superWeaponFxHandler: any, private beaconFxHandler: any, private messageBoxApi: any, private discordUrl?: string) { }
+    constructor(private game: any, private player: any, private isSinglePlayer: boolean, private actionQueue: any, private actionFactory: any, private sidebarModel: any, private renderer: any, private worldScene: any, private soundHandler: any, private messageList: any, private sound: any, private eva: any, private worldInteractionFactory: any, private gameMenu: any, private pointer: any, private runtimeVars: any, private speedCheat: any, private strings: any, private tauntHandler: any, private renderableManager: any, private superWeaponFxHandler: any, private beaconFxHandler: any, private messageBoxApi: any, private discordUrl?: string, private music?: any) { }
     init(hud: any): void {
         const unitSelection = this.game.getUnitSelection();
         const placementMode = PlacementMode.factory(this.game, this.player, this.renderer, this.worldScene, this.eva);
@@ -89,7 +89,7 @@ export class CombatantUi {
         this.worldInteraction = worldInteraction;
         worldInteraction.init();
         if (this.game.campaign) this.disposables.add(new CampaignPresentation(this.game, this.renderer,
-            this.worldScene, worldInteraction, this.sidebarModel, this.renderableManager, this.gameMenu));
+            this.worldScene, worldInteraction, this.sidebarModel, this.renderableManager, this.gameMenu, true, this.music));
         this.disposables.add(worldInteraction);
         const planningMode = new PlanningMode(this.player, this.messageList, this.sound, this.strings, this.worldScene, unitSelection, worldInteraction.unitSelectionHandler, this.renderer, worldInteraction.targetLines, this.game.rules.general.maxWaypointPathLength);
         this.planningMode = planningMode;

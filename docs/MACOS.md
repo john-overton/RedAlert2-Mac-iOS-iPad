@@ -113,7 +113,7 @@ currently installed in the Mac shell.
 
 ### Campaigns
 
-An experimental build of Allied mission one is available on
+An experimental build of Allied missions one and two is available on
 `feat/allied-mission-one`:
 
 ```sh
@@ -121,10 +121,12 @@ scripts/build-macos.sh --ra2 --campaign --retail-dir "/path/to/ra2/install"
 ```
 
 Choose **Campaign: Mission One** from the classic RA2 menu. The switch bundles
-only the imported mission and its referenced movies, and requires `ffmpeg`
+the two imported missions and their referenced movies, and requires `ffmpeg`
 when converting movies for the first time. It is not available in YR mode.
 
 See [mission-one setup, verification, and limitations](CAMPAIGN_MISSION_ONE.md).
 The objective/victory/defeat regression passes, but a complete manual combat
 play-through and final-assault balance are still pending. Campaign Save Game,
-Load Game, and Replays are available; mission-two progression is not implemented.
+Load Game, and Replays are available. Mission-one victory offers **Next Mission**
+with the mission-two briefing video. **Campaign: Mission Two** also launches it
+directly. See [mission-two coverage and limitations](CAMPAIGN_MISSION_TWO.md).

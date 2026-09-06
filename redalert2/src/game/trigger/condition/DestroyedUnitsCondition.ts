@@ -6,7 +6,7 @@ export class DestroyedUnitsCondition extends TriggerCondition {
     private houseId: number;
     constructor(params: any, context: any) {
         super(params, context);
-        this.threshold = Number(params[1]);
+        this.threshold = Number(params.params[1]);
     }
     check(events: any, eventList: any[]): boolean {
         if (!this.player)
@@ -16,7 +16,7 @@ export class DestroyedUnitsCondition extends TriggerCondition {
         for (const event of eventList) {
             if (event.type === EventType.ObjectDestroy) {
                 const target = event.target;
-                if (target.isUnit() && target.owner.country?.id === this.houseId) {
+                if (target.isUnit() && target.owner === this.player) {
                     this.count++;
                 }
             }

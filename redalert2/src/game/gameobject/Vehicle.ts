@@ -51,6 +51,7 @@ export class Vehicle extends Techno {
     public direction: number = 0;
     public spinVelocity: number = 0;
     public crateBonuses: CrateBonuses = new CrateBonuses();
+    public campaignTruckLoaded = false;
     public turretNo: number = 0;
     public onBridge: boolean = false;
     public isSinker: boolean = false;

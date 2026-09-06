@@ -125,6 +125,7 @@ interface GameObjectInterface {
         facing: number;
     };
     turretNo: number;
+    campaignTruckLoaded?: boolean;
     veteranLevel: any;
     harvesterTrait?: any;
     airSpawnTrait?: {
@@ -177,6 +178,7 @@ export class Vehicle {
     bodyVxlBuilder?: any;
     mainVxl?: any;
     noSpawnAltVxl?: any;
+    loadedTruckVxl?: any;
     harvesterAltVxl?: any;
     turret?: any;
     allTurrets?: any[];
@@ -758,6 +760,16 @@ export class Vehicle {
             else
                 console.warn(`VXL missing for vehicle ${this.objectRules.name}. Vxl file ${t} not found. `),
                     n.add(this.createPlaceholder());
+            if (this.gameObject.name === 'TRUCKA') {
+                const loaded = this.voxels.get('truckb.vxl');
+                if (loaded) {
+                    const builder = this.vxlBuilderFactory.create(loaded, this.voxelAnims.get('truckb.hva'), this.paletteRemaps, this.palette);
+                    this.vxlBuilders.push(builder);
+                    this.loadedTruckVxl = builder.build();
+                    this.loadedTruckVxl.visible = false;
+                    n.add(this.loadedTruckVxl);
+                }
+            }
             if (this.objectRules.spawns &&
                 this.objectRules.noSpawnAlt) {
                 let i = e + "wo.vxl";
@@ -898,7 +910,8 @@ export class Vehicle {
             ].includes(this.gameObject.harvesterTrait.status);
         this.noSpawnAltVxl && (this.noSpawnAltVxl.visible = e),
             this.harvesterAltVxl && (this.harvesterAltVxl.visible = t),
-            this.mainVxl && (this.mainVxl.visible = !e && !t);
+            this.mainVxl && (this.mainVxl.visible = !e && !t && !(this.loadedTruckVxl && this.gameObject.campaignTruckLoaded));
+        if (this.loadedTruckVxl) this.loadedTruckVxl.visible = !!this.gameObject.campaignTruckLoaded;
     }
     isSinker() {
         return (this.gameObject.zone === M.ZoneType.Water &&

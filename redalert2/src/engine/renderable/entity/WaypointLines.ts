@@ -1,3 +1,4 @@
+import { canControl } from '@/game/campaign/CampaignControl';
 import { Coords } from "@/game/Coords";
 import type { TargetLinesConfig } from "@/game/gameobject/task/system/TargetLinesConfig";
 import { configHasTarget } from "@/game/gameobject/task/system/TargetLinesConfig";
@@ -124,7 +125,7 @@ export class WaypointLines {
         if (selectionChanged || pathsChanged) {
             let relevantUnits: Unit[] = [];
             let selectedUnits = this.unitSelection.getSelectedUnits();
-            if (selectedUnits.length === 1 && selectedUnits[0].owner !== this.currentPlayer) {
+            if (selectedUnits.length === 1 && !canControl(this.currentPlayer, selectedUnits[0])) {
                 selectedUnits = [];
             }
             relevantUnits = this.paths.length

@@ -1,9 +1,11 @@
+import { campaignMissionForMap, campaignAssetPath } from '@/data/campaign/CampaignMissions';
 import { MapPanningHelper } from '../../../engine/util/MapPanningHelper';
 
 /** Campaign-only UI effects. Never mutates the simulation to advance a mission. */
 export class CampaignPresentation {
     private locked?: boolean;
     private menuOpen = false;
+    private musicTheme?: string;
     private flashes = new Map<number, number>();
     private video?: HTMLVideoElement;
     private videoViewport = '';
@@ -39,7 +41,7 @@ export class CampaignPresentation {
         this.resumeVideo = false;
     };
     constructor(private game: any, private renderer: any, private world: any, private interaction: any,
-        private sidebar: any, private renderables: any, private menu: any, private manageInput = true) {
+        private sidebar: any, private renderables: any, private menu: any, private manageInput = true, private music?: any) {
         renderer.onFrame.subscribe(this.update);
         menu.onOpen.subscribe(this.onOpen);
         menu.onCancel.subscribe(this.onClose);
@@ -47,6 +49,10 @@ export class CampaignPresentation {
     }
     private readonly update = (): void => {
         const campaign = this.game.campaign;
+        if (campaign.musicTheme && campaign.musicTheme !== this.musicTheme) {
+            this.musicTheme = campaign.musicTheme;
+            if (!['no theme','<none>'].includes(this.musicTheme!.toLowerCase())) this.music?.play(this.musicTheme).catch(console.error);
+        }
         if (this.video?.isConnected) {
             const viewport = JSON.stringify(this.world.viewport);
             if (viewport !== this.videoViewport) {
@@ -76,9 +82,12 @@ export class CampaignPresentation {
                     if (item.target?.rules?.name === name) item.campaignFlashUntil = this.game.currentTick + event.frames;
                 }
             } else if (event.kind === 'movie') {
+                const mission = campaignMissionForMap(this.game.gameOpts.mapName);
+                if (!mission) continue;
+                this.video?.pause();
                 this.video?.remove();
                 const video = this.video = document.createElement('video');
-                video.src = new URL(`campaign/ra2/allied-01/movie-${event.movie}.mp4`, document.baseURI).href;
+                video.src = new URL(campaignAssetPath(mission, `movie-${event.movie}.mp4`), document.baseURI).href;
                 video.autoplay = true; video.controls = false; video.playsInline = true;
                 video.style.cssText = 'position:fixed;z-index:2000;background:black;object-fit:contain';
                 video.onended = video.onerror = () => video.remove();

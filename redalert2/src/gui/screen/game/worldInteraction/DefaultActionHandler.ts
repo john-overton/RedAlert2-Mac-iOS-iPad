@@ -1,3 +1,4 @@
+import { canControl } from '@/game/campaign/CampaignControl';
 import { PointerType } from '@/engine/type/PointerType';
 import { Coords } from '@/game/Coords';
 import { isNotNullOrUndefined } from '@/util/typeGuard';
@@ -45,14 +46,14 @@ class SelectAction {
         const canCollapseMultipleSelection = !this.toggleSelect &&
             targetAlreadySelected &&
             selected.length > 1 &&
-            selected.every((unit: any) => unit.owner === target.owner);
+            selected.every((unit: any) => unit.owner === target.owner || (canControl(this.currentPlayer, unit) && canControl(this.currentPlayer, target)));
         if (!this.toggleSelect &&
             selected.some((unit: any) => unit.isUnit?.()) &&
             this.currentPlayer &&
             !this.currentPlayer.isObserver &&
             target.isTechno?.() &&
             !this.game.areFriendly(target, selected[0]) &&
-            selected[0].owner === this.currentPlayer) {
+            canControl(this.currentPlayer, selected[0])) {
             return false;
         }
         return (target.rules.selectable &&
@@ -156,7 +157,7 @@ export class DefaultActionHandler {
     private getDefaultAction(sourceObject: any, selected: any[], hover: any, filter: ActionFilter, force: boolean, allowTypeSelect: boolean, keyboardEvent: any, minimap: boolean): any {
         const hoveredObject = hover.gameObject;
         const selectAction = this.selectAction.setForce(force).setTypeSelect(false);
-        if (!sourceObject || sourceObject.owner !== this.currentPlayer || sourceObject.rules.spawned) {
+        if (!sourceObject || !canControl(this.currentPlayer, sourceObject) || sourceObject.rules.spawned) {
             return !minimap && filter !== ActionFilter.NoSelect && selectAction.isValidTarget(hoveredObject)
                 ? selectAction
                 : undefined;

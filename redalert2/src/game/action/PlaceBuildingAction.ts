@@ -19,7 +19,7 @@ export class PlaceBuildingAction extends Action {
         x: number;
         y: number;
     };
-    constructor(game: Game) {
+    constructor(game: Game, private campaignBaseNode = false) {
         super(ActionType.PlaceBuilding);
         this.game = game;
     }
@@ -70,7 +70,7 @@ export class PlaceBuildingAction extends Action {
             if (queue.status === QueueStatus.Ready && queue.getFirst().rules === buildingRules) {
                 const worker = this.game.getConstructionWorker(player);
                 if (player.production.isAvailableForProduction(buildingRules as any) &&
-                    worker.canPlaceAt(buildingRules.name, tile, { normalizedTile: true })) {
+                    worker.canPlaceAt(buildingRules.name, tile, { normalizedTile: true, ignoreAdjacent: !!this.game.campaign && this.campaignBaseNode })) {
                     const placed = worker.placeAt(buildingRules.name, tile, true);
                     player.addUnitsBuilt(buildingRules as any, 1);
                     queue.shift(buildingRules as any, 1);

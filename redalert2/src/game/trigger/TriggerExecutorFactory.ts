@@ -45,10 +45,10 @@ import { TurnOnOffBuildingExecutor } from "@/game/trigger/executor/TurnOnOffBuil
 import { UnrevealAroundWaypointExecutor } from "@/game/trigger/executor/UnrevealAroundWaypointExecutor";
 export class TriggerExecutorFactory {
     create(e: any, t: any) {
-        if ([1,2,3,4,5,7,46,47,48,74,80,100,104,114,115].includes(e.type)) {
+        if ([1,2,3,4,5,6,7,20,38,46,47,48,74,80,100,104,114,115].includes(e.type)) {
             return {execute(game: any) {
                 if (!game.campaign) throw new Error('Campaign action requires a campaign game');
-                game.campaign.execute(game, e);
+                game.campaign.execute(game, e, t);
             }};
         }
         switch (e.type) {

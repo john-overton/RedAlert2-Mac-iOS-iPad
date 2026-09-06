@@ -1,3 +1,6 @@
+import { controllableObjects } from '@/game/campaign/CampaignControl';
+import { campaignMissions, campaignMissionForMap } from '@/data/campaign/CampaignMissions';
+import { launchCampaign, loadCampaignManifest } from './launchCampaign';
 import { powerFrameCap } from '@/engine/PowerState';
 import { campaignSpeedFactor } from '@/game/campaign/CampaignSpeed';
 import { RootScreen } from '@/gui/screen/RootScreen';
@@ -523,6 +526,18 @@ export class GameScreen extends RootScreen {
             this.playerUi?.dispose();
         }
     }
+    private async nextCampaign(game: any): Promise<(() => Promise<void>) | undefined> {
+        const current = campaignMissionForMap(game.gameOpts.mapName);
+        const next = campaignMissions.find(mission => mission.id === current?.next);
+        if (!next) return;
+        const manifest = await loadCampaignManifest(next);
+        if (!manifest) return;
+        const controller = this.controller;
+        return async () => {
+            try { await launchCampaign(next, manifest, controller, this.strings, this.messageBoxApi); }
+            catch (error) { await this.messageBoxApi.alert(String(error), 'OK'); }
+        };
+    }
     private saveReplay(replay: any): void {
         if (!this.replayManager?.saveReplay) {
             console.warn('[GameScreen.saveReplay] replayManager.saveReplay is unavailable');
@@ -800,7 +815,7 @@ export class GameScreen extends RootScreen {
             });
         };
         const resolveOwnedUnitById = (unitId: number) => {
-            const unit = localPlayer.getOwnedObjectById(unitId);
+            const unit = controllableObjects(localPlayer).find(unit => unit.id === unitId);
             if (!unit) {
                 throw new Error(`No owned unit found with id "${unitId}"`);
             }
@@ -810,8 +825,7 @@ export class GameScreen extends RootScreen {
             return unit;
         };
         const resolveOwnedUnitByName = (unitName: string) => {
-            const unit = localPlayer
-                .getOwnedObjects()
+            const unit = controllableObjects(localPlayer)
                 .find((ownedUnit: any) => ownedUnit.name === unitName && ownedUnit.isSpawned);
             if (!unit) {
                 throw new Error(`No spawned owned unit found with name "${unitName}"`);
@@ -1130,7 +1144,7 @@ export class GameScreen extends RootScreen {
                 if (view?.cameraPan) worldScene.cameraPan.setPan(view.cameraPan);
                 game.unitSelection.deselectAll();
                 for (const id of game.campaign.selectedUnitIds) {
-                    const unit = game.localPlayer.getOwnedObjectById(id);
+                    const unit = controllableObjects(game.localPlayer).find(unit => unit.id === id);
                     if (unit?.isSpawned) game.unitSelection.addToSelection(unit);
                 }
             }
@@ -1182,7 +1196,7 @@ export class GameScreen extends RootScreen {
             const renderableManager = uiInitResult.worldViewInitResult.renderableManager;
             const textColor = hud.getTextColor?.();
             const worldInteractionFactory = new A.WorldInteractionFactory(localPlayer, game, game.unitSelection, renderableManager, this.uiScene, worldScene, this.pointer, this.renderer, this.keyBinds, this.generalOptions, this.runtimeVars.freeCamera, this.runtimeVars.debugPaths, this.config.devMode, document, this.minimap, this.strings, textColor, game.debugText, this.battleControlApi);
-            this.playerUi = new CombatantUi(game, localPlayer, this.isSinglePlayer, actionQueue, actionFactory, this.sidebarModel, this.renderer, worldScene, soundHandler, messageList, this.sound, eva, worldInteractionFactory, menu, this.pointer, this.runtimeVars, this.speedCheat, this.strings, undefined, renderableManager, superWeaponFxHandler, beaconFxHandler, this.messageBoxApi, this.config.discordUrl);
+            this.playerUi = new CombatantUi(game, localPlayer, this.isSinglePlayer, actionQueue, actionFactory, this.sidebarModel, this.renderer, worldScene, soundHandler, messageList, this.sound, eva, worldInteractionFactory, menu, this.pointer, this.runtimeVars, this.speedCheat, this.strings, undefined, renderableManager, superWeaponFxHandler, beaconFxHandler, this.messageBoxApi, this.config.discordUrl, this.music);
         }
         this.playerUi.init?.(hud);
         this.disposables.add(this.playerUi, () => this.playerUi = undefined);
@@ -1408,6 +1422,7 @@ export class GameScreen extends RootScreen {
                     localPlayer,
                     singlePlayer: this.isSinglePlayer,
                     tournament: this.isTournament,
+                    nextCampaign: game.campaign?.outcome === 'victory' ? await this.nextCampaign(game) : undefined,
                     returnTo: this.returnTo ?? new MainMenuRoute(MainMenuScreenType.Home, undefined)
                 })
                 : new MainMenuRoute(MainMenuScreenType.Home, undefined);

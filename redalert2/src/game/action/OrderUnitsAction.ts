@@ -1,3 +1,4 @@
+import { canControl } from '../campaign/CampaignControl';
 import { DataStream } from "@/data/DataStream";
 import { Action } from "@/game/action/Action";
 import { OrderType } from "@/game/order/OrderType";
@@ -257,7 +258,7 @@ export class OrderUnitsAction extends Action {
         baseOrder.target = this.target;
         const validOrders: any[] = [];
         for (const unit of selectedUnits) {
-            if (unit.owner !== player ||
+            if (!canControl(player, unit) ||
                 unit.rules.spawned ||
                 unit.isDestroyed ||
                 unit.isCrashing ||

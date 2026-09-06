@@ -58,3 +58,17 @@ test('intercepted missiles do not detonate their impact warhead',()=>{
     trait[NotifyDestroy.onDestroy]({} as any,{} as any);
     expect(detonations).toBe(0);
 });
+
+test('destroyed-count events count their own house and the requested object category', async()=>{
+    const {DestroyedBuildingsCondition}=await import('../game/trigger/condition/DestroyedBuildingsCondition');
+    const {DestroyedUnitsCondition}=await import('../game/trigger/condition/DestroyedUnitsCondition');
+    const player={country:{name:'Target'}},other={country:{name:'Other'}};
+    for(const [Condition,building] of [[DestroyedBuildingsCondition,true],[DestroyedUnitsCondition,false]] as const) {
+        const condition=new Condition({params:['0','2']},{houseName:'Target'});
+        condition.init({getAllPlayers:()=>[player,other]});
+        const event=(owner:any,isBuilding:boolean)=>({type:EventType.ObjectDestroy,target:{owner,isBuilding:()=>isBuilding,isUnit:()=>!isBuilding}});
+        expect(condition.check({},[event(other,building),event(player,!building)])).toBe(false);
+        expect(condition.check({},[event(player,building)])).toBe(false);
+        expect(condition.check({},[event(player,building)])).toBe(true);
+    }
+});
