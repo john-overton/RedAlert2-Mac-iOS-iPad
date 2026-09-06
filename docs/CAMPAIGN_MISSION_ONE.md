@@ -26,6 +26,15 @@ Wait for the camera to pan toward Tanya and for “Battlefield Control Online,�
 then select Tanya and order her to destroy the four Dreadnoughts. With right-click
 orders enabled, left-click selects her and a two-finger click moves or attacks.
 
+**Options → Campaign game speed** offers six settings: Slowest, Slow, Normal,
+Fast, Faster, and Fastest. Normal runs at 23 simulation ticks per second,
+15% faster than the previous default of 20. The setting is saved for future
+missions; changes during a mission apply when you choose Resume Mission.
+Skirmish speed remains controlled by its lobby settings.
+
+In-game movies sit immediately left of the build sidebar and follow window
+resizing. Opening the game menu hides and pauses the movie until you resume.
+
 `--campaign` is opt-in and currently requires `--ra2`. A build without the
 switch does not bundle campaign files. The importer also runs separately:
 
@@ -40,6 +49,10 @@ and converts the intro and three referenced clips from `MOVIES01.MIX` and
 `MOVIES02.MIX` to H.264/AAC using `ffmpeg`. Unavailable movie archives are
 reported; the map can still run without those optional videos. Cached
 conversions are reused when source hashes match.
+
+Movie trigger indices are zero-based positions in the retail movie list,
+not its numbered INI keys. Mission-one indices 67–69 resolve to `A01_p01e`,
+`A01_p02e`, and `A01_p03e`; this corrects the misplaced Soviet briefing.
 
 No retail maps, movies, icons, executables, or game archives are committed.
 Generated app bundles contain local retail data and must not be distributed.

@@ -6,16 +6,54 @@ export class CampaignPresentation {
     private menuOpen = false;
     private flashes = new Map<number, number>();
     private video?: HTMLVideoElement;
-    private readonly onOpen = () => { this.menuOpen = true; };
-    private readonly onClose = () => { this.menuOpen = false; this.locked = undefined; };
+    private videoViewport = '';
+    private readonly positionVideo = (): void => {
+        if (!this.video) return;
+        const canvas = this.renderer.getCanvas();
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = rect.width / canvas.clientWidth;
+        const scaleY = rect.height / canvas.clientHeight;
+        const viewport = this.world.viewport;
+        const width = Math.max(1, Math.min(320, viewport.width * scaleX - 24));
+        this.video.style.width = `${width}px`;
+        this.video.style.left = `${rect.left + (viewport.x + viewport.width) * scaleX - width - 12}px`;
+        this.video.style.top = `${rect.top + viewport.y * scaleY + 12}px`;
+        this.video.style.maxHeight = `${Math.max(1, viewport.height * scaleY - 24)}px`;
+    };
+    private resumeVideo = false;
+    private readonly onOpen = () => {
+        this.menuOpen = true;
+        if (this.video) {
+            this.resumeVideo = !this.video.paused;
+            this.video.pause();
+            this.video.hidden = true;
+        }
+    };
+    private readonly onClose = () => {
+        this.menuOpen = false;
+        this.locked = undefined;
+        if (this.video) {
+            this.video.hidden = false;
+            if (this.resumeVideo) this.video.play().catch(() => {});
+        }
+        this.resumeVideo = false;
+    };
     constructor(private game: any, private renderer: any, private world: any, private interaction: any,
         private sidebar: any, private renderables: any, private menu: any) {
         renderer.onFrame.subscribe(this.update);
         menu.onOpen.subscribe(this.onOpen);
         menu.onCancel.subscribe(this.onClose);
+        window.addEventListener('resize', this.positionVideo);
     }
     private readonly update = (): void => {
         const campaign = this.game.campaign;
+        if (this.video?.isConnected) {
+            const viewport = JSON.stringify(this.world.viewport);
+            if (viewport !== this.videoViewport) {
+                this.videoViewport = viewport;
+                this.positionVideo();
+            }
+        }
         if (!this.menuOpen && this.locked !== campaign.inputLocked) {
             this.locked = campaign.inputLocked;
             this.interaction.setEnabled(!this.locked);
@@ -42,9 +80,10 @@ export class CampaignPresentation {
                 const video = this.video = document.createElement('video');
                 video.src = new URL(`campaign/ra2/allied-01/movie-${event.movie}.mp4`, document.baseURI).href;
                 video.autoplay = true; video.controls = true; video.playsInline = true;
-                video.style.cssText = 'position:fixed;right:12px;top:64px;width:min(320px,35vw);z-index:2000;background:black';
+                video.style.cssText = 'position:fixed;z-index:2000;background:black;object-fit:contain';
                 video.onended = video.onerror = () => video.remove();
                 document.body.append(video);
+                this.positionVideo();
                 video.play().catch(() => { /* Native autoplay policy leaves controls available. */ });
             }
         }
@@ -58,6 +97,7 @@ export class CampaignPresentation {
         this.renderer.onFrame.unsubscribe(this.update);
         this.menu.onOpen.unsubscribe(this.onOpen);
         this.menu.onCancel.unsubscribe(this.onClose);
+        window.removeEventListener('resize', this.positionVideo);
         this.video?.remove();
     }
 }

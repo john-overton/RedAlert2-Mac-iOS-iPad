@@ -1,4 +1,5 @@
 import { powerFrameCap } from '@/engine/PowerState';
+import { campaignSpeedFactor } from '@/game/campaign/CampaignSpeed';
 import { RootScreen } from '@/gui/screen/RootScreen';
 import { CompositeDisposable } from '@/util/disposable/CompositeDisposable';
 import { MedianPing } from './MedianPing';
@@ -237,6 +238,9 @@ export class GameScreen extends RootScreen {
         }
         const { game, theater, hudSide, cameoFilenames } = gameLoadResult;
         this.game = game;
+        if (game.campaign) {
+            game.desiredSpeed.value = game.speed.value = campaignSpeedFactor(this.generalOptions.campaignSpeed.value);
+        }
         this.disposables.add(game, () => this.game = undefined, () => Engine.unloadTheater(theater.type));
         let localPlayer: any;
         try {
@@ -1267,7 +1271,9 @@ export class GameScreen extends RootScreen {
             this.pointer.lock();
             this.playerUi.worldInteraction.setEnabled(true);
             if (this.isSinglePlayer && this.pausedAtSpeed) {
-                game.desiredSpeed.value = this.pausedAtSpeed;
+                game.desiredSpeed.value = game.campaign
+                    ? campaignSpeedFactor(this.generalOptions.campaignSpeed.value)
+                    : this.pausedAtSpeed;
                 this.gameTurnMgr.doGameTurn(performance.now());
                 this.pausedAtSpeed = undefined;
                 this.mixer.setMuted(ChannelType.Effect, false);

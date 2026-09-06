@@ -6,6 +6,7 @@ import { MixFile } from '../redalert2/src/data/MixFile';
 import { VirtualFile } from '../redalert2/src/data/vfs/VirtualFile';
 import { IniFile } from '../redalert2/src/data/IniFile';
 import { CampaignScenario } from '../redalert2/src/data/campaign/CampaignScenario';
+import { resolveCampaignMovie } from '../redalert2/src/data/campaign/CampaignMovies';
 
 const retail = process.argv[2] ?? process.env.RA2_RETAIL_DIR;
 if (!retail || process.argv.length > 3) {
@@ -50,8 +51,8 @@ const art = localMix ? new IniFile(localMix.openFile('art.ini').readAsString()) 
 const clips = new Map<string,string>([['intro',scenario.basic.Intro]]);
 for (const trigger of scenario.triggers) for (const action of trigger.actions) {
     if (action.type === 100) {
-        const movie = art?.getSection('Movies')?.getString(action.params[1]);
-        if (!movie) throw new Error(`Missing retail movie index ${action.params[1]}`);
+        if (!art) throw new Error('Missing retail art.ini');
+        const movie = resolveCampaignMovie(art, Number(action.params[1]));
         clips.set(`movie-${action.params[1]}`,movie);
     }
 }
