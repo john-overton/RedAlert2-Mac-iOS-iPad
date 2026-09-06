@@ -5,6 +5,9 @@ It targets macOS 14 or later and runs the existing web engine in a native
 ARM64 AppKit/WKWebView shell. See the [macOS build guide](docs/MACOS.md)
 for setup, retail icons, controls, troubleshooting, and campaign limitations.
 
+For campaign development, start with the [agent implementation guide](docs/CAMPAIGN_AGENT_GUIDE.md)
+and [mission-one status](docs/CAMPAIGN_MISSION_ONE.md).
+
 <img width="800" height="450" alt="0808" src="https://github.com/user-attachments/assets/c8efcdb7-72c4-47b8-86a7-cecd25eb4ace" />
 
 
