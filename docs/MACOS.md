@@ -113,6 +113,10 @@ currently installed in the Mac shell.
 
 ### Campaigns
 
+Work on the first Allied RA2 mission has begun on a separate branch. See the
+[mission-one implementation checkpoint](CAMPAIGN_MISSION_ONE.md) for the importer,
+audit, and remaining runtime work.
+
 Campaigns are not currently playable, and there is no campaign build switch.
 Bundling mission archives alone would not implement the mission logic. A local
 audit of retail `MAPS01.MIX` found that `all01t.map` uses 15 action types missing

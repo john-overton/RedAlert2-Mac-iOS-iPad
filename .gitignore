@@ -1,6 +1,7 @@
 # --- Game assets: NEVER commit retail-derived files ---
 # Produced by scripts/prepare-gameres.ts from a legally-owned RA2 install.
 gameres-export/
+campaign-export/
 ios/Resources/GameRes/
 ios/Resources/WebDist/
 redalert2/public/local-pack/
