@@ -79,12 +79,12 @@ export class CampaignPresentation {
                 this.video?.remove();
                 const video = this.video = document.createElement('video');
                 video.src = new URL(`campaign/ra2/allied-01/movie-${event.movie}.mp4`, document.baseURI).href;
-                video.autoplay = true; video.controls = true; video.playsInline = true;
+                video.autoplay = true; video.controls = false; video.playsInline = true;
                 video.style.cssText = 'position:fixed;z-index:2000;background:black;object-fit:contain';
                 video.onended = video.onerror = () => video.remove();
                 document.body.append(video);
                 this.positionVideo();
-                video.play().catch(() => { /* Native autoplay policy leaves controls available. */ });
+                video.play().catch(() => video.remove());
             }
         }
         for (const [id, until] of this.flashes) {
