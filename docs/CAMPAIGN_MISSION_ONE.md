@@ -7,8 +7,11 @@ This work targets the classic RA2 engine mode, not Yuri's Revenge mission one.
 ## Current functionality
 
 The first checkpoint adds a retail mission importer and a campaign scenario
-data model. It does **not** add a playable campaign or a campaign menu button.
-The macOS builds and skirmish runtime remain unchanged by this checkpoint.
+data model. The second adds explicit campaign initialization in `GameFactory`,
+with custom house creation, country inheritance, directed alliances, preplaced
+owned objects, house credits/tech levels, HomeCell camera placement, and free radar.
+It does **not** add a playable campaign or a campaign menu button. Skirmish
+creation continues through its existing path unless a campaign scenario is passed.
 
 ```sh
 bun scripts/prepare-campaign.ts "/path/to/your/ra2/install"
@@ -33,6 +36,44 @@ explicitly. The source INI is retained for subsequent terrain and object loading
 Synthetic tests cover unknown instruction preservation, references, player/home
 validation, difficulty flags, malformed records, and definition ordering. No
 retail mission data is included in test fixtures or committed to the repository.
+
+The initialization path appends mission countries after the original country
+list (the retail player remains country ID 13), expands inherited production
+eligibility, and resolves initial object owners by house name. Campaign allies
+remain directional; ordinary skirmish alliances remain symmetric. The campaign
+path suppresses skirmish starting forces, lobby credit overrides, skirmish bots,
+and automatic elimination. Starting the simulation currently raises an explicit
+development error before triggers can run with missing instructions.
+
+### Reproduce the real-mission initialization check
+
+After normal asset setup and the mission import above, start the development
+server in one terminal:
+
+```sh
+cd redalert2
+RA2_HTTP=1 bun run dev --host 127.0.0.1
+```
+
+In another terminal, from the repository root:
+
+```sh
+node scripts/campaign-init-smoke.mjs
+```
+
+The check uses the installed Playwright Chromium browser. If it is missing,
+install the browser matching the project's Playwright version, or point
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE` to an existing compatible Chromium executable.
+`RA2_DEV_URL` overrides the default `http://127.0.0.1:4000`. The check selects
+classic RA2 through a browser-local configuration override, so it does not edit
+the development server's configuration.
+
+It loads the real engine and mission, calls `Game.init`, and checks all initial
+owned object counts, house credits, directed alliances, Tanya's presence, free
+radar, and the incomplete-runtime start gate. The local retail run loaded all
+249 preplaced technos across eight houses. Its JSON result is saved in ignored
+`campaign-export/ra2/allied-01/init-result.json`. This validates simulation
+initialization, not rendering, mission execution, or an end-to-end playthrough.
 
 ## Retail mission audit
 
@@ -73,7 +114,7 @@ deliberately does not infer playability from instruction coverage.
 
 ## Next implementation steps
 
-1. **Scenario initialization:** create mission houses and alliances, resolve
+1. **Scenario initialization (implemented and browser-checked):** create mission houses and alliances, resolve
    original numeric country references, apply country inheritance and house
    economics, spawn preplaced owned units/buildings, and use HomeCell for the
    camera. Suppress skirmish starting forces and automatic elimination rules.
@@ -91,10 +132,10 @@ deliberately does not infer playability from instruction coverage.
 5. **Persistence and validation:** carry campaign identity in saves/replays;
    verify restart/load and objective progression in the native Mac shell.
 
-Two concrete initialization blockers in current code are `GameFactory.create`,
-which only constructs lobby/skirmish players, and `Game.createInitialMapTechnos`,
-which skips initial objects belonging to non-neutral owners. These need explicit
-campaign paths, with skirmish regression coverage.
+The initialization paths in `GameFactory.create` and
+`Game.createInitialMapTechnos` now accept mission houses and their owned map
+objects. Scripted teams, initial unit orders, and campaign trigger execution
+remain the next runtime work.
 
 ## End-to-end acceptance
 
@@ -109,5 +150,6 @@ campaign paths, with skirmish regression coverage.
 - Verify required cinematics, scripted camera/input transitions, and desktop
   controls, and rerun existing skirmish tests.
 
-Import/audit and data-model tests are complete at this checkpoint. Runtime,
-launch, and end-to-end playability work above remains outstanding.
+Import/audit, data-model tests, house initialization, and the real-mission
+initialization check are complete at this checkpoint. Scripted runtime, launch,
+and end-to-end playability work above remains outstanding.

@@ -58,7 +58,7 @@ export class WorldView {
         const startLocationIndex = (!localPlayer || localPlayer.isObserver)
             ? this.game.getCombatants()[0].startLocation
             : localPlayer.startLocation;
-        const startPos = this.game.map.startingLocations[startLocationIndex];
+        const startPos = this.game.campaign?.initialCameraPosition() ?? this.game.map.startingLocations[startLocationIndex];
         const panningHelper = new MapPanningHelper(this.game.map);
         worldScene.cameraPan.setPan(panningHelper.computeCameraPanFromTile(startPos.x, startPos.y));
         try {

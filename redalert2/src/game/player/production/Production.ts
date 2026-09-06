@@ -52,6 +52,10 @@ export class Production {
     get onQueueUpdate() {
         return this._onQueueUpdate.asEvent();
     }
+    setTechLevel(level: number): void {
+        if (!Number.isInteger(level) || level < -1) throw new Error(`Invalid house tech level ${level}`);
+        this.maxTechLevel = level;
+    }
     addQueue(type: QueueType, queue: ProductionQueue) {
         this.queues.set(type, queue);
         queue.onUpdate.subscribe(() => this._onQueueUpdate.dispatch(this, queue));
