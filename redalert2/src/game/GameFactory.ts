@@ -35,6 +35,8 @@ import { Ai } from './ai/Ai';
 import { BotFactory } from './bot/BotFactory';
 import { BotManager } from './BotManager';
 import { isHumanPlayerInfo } from './gameopts/GameOpts';
+import { CampaignScenario } from '../data/campaign/CampaignScenario';
+import { CampaignSetup, prepareCampaignRules } from './campaign/CampaignSetup';
 interface GameMode {
     type: string;
 }
@@ -64,18 +66,19 @@ interface MultiplayerCountry {
     name: string;
 }
 export class GameFactory {
-    static create(gameOptions: GameCreationOptions, mapData: any, baseRules: IniFile, baseArt: IniFile, aiConfig: any, modRules: IniFile, additionalRules: IniFile[], randomSeed1: number | string, randomSeed2: number, gameOpts: GameOpts, gameModeRegistry: GameModeRegistry, skipStalemate: boolean, botConfig: any, debugFlags: any, speedCheat: any, debugBotIndex?: any, actionLogger?: any): Game {
-        const mergedRules: IniFile = baseRules.clone().mergeWith(modRules);
+    static create(gameOptions: GameCreationOptions, mapData: any, baseRules: IniFile, baseArt: IniFile, aiConfig: any, modRules: IniFile, additionalRules: IniFile[], randomSeed1: number | string, randomSeed2: number, gameOpts: GameOpts, gameModeRegistry: GameModeRegistry, skipStalemate: boolean, botConfig: any, debugFlags: any, speedCheat: any, debugBotIndex?: any, actionLogger?: any, campaignScenario?: CampaignScenario): Game {
+        let mergedRules: IniFile = baseRules.clone().mergeWith(modRules);
         for (const additionalRule of additionalRules) {
             mergedRules.mergeWith(additionalRule);
         }
         mergedRules.mergeWith(gameOptions as any);
+        if (campaignScenario) mergedRules = prepareCampaignRules(baseRules, mergedRules, campaignScenario);
         const mergedArt: IniFile = baseArt.clone().mergeWith(gameOptions.artOverrides ?? new IniFile());
         const rules: Rules = new Rules(mergedRules, debugFlags);
         const art: Art = new Art(rules, mergedArt, gameOptions, debugFlags);
         const ai: Ai = new Ai(aiConfig);
         rules.applySpecialFlags(gameOptions.specialFlags as any);
-        GameOptSanitizer.sanitize(gameOpts, rules);
+        if (!campaignScenario) GameOptSanitizer.sanitize(gameOpts, rules);
         const baseMultiplayerRules: Rules = new Rules(baseRules);
         const multiplayerCountries: MultiplayerCountry[] = baseMultiplayerRules.getMultiplayerCountries();
         const multiplayerColors: string[] = [...baseMultiplayerRules.getMultiplayerColors().values()] as any;
@@ -93,9 +96,15 @@ export class GameFactory {
         const botManager: BotManager = BotManager.factory(actionFactory, botFactory, debugBotIndex, actionLogger);
         const game: Game = new Game(world, gameMap, rules, art, ai, randomSeed1, randomSeed2, gameOpts, gameMode.type, playerList, unitSelection, alliances, tickCounter, objectFactory, botManager);
         new ActionFactoryReg().register(actionFactory, game, undefined);
-        this.setupGameTraits(game, rules, gameMap, alliances, gameOpts, skipStalemate, speedCheat);
+        this.setupGameTraits(game, rules, gameMap, alliances, gameOpts, skipStalemate || !!campaignScenario, speedCheat);
         const productionTrait: ProductionTrait = game.traits.get(ProductionTrait) as ProductionTrait;
         const playerFactory: PlayerFactory = new PlayerFactory(rules, gameOpts, productionTrait.getAvailableObjects());
+        if (campaignScenario) {
+            game.campaign = new CampaignSetup(campaignScenario);
+            game.campaign.createPlayers(game, playerFactory, name => Country.factory(name, rules as any));
+            game.addPlayer(playerFactory.createNeutral(rules, '@@NEUTRAL@@'));
+            return game;
+        }
         const randomGen: GameOptRandomGen = GameOptRandomGen.factory(randomSeed1, randomSeed2);
         const generatedColors: Map<PlayerInfo, string> = randomGen.generateColors(gameOpts) as any;
         const generatedCountries: Map<PlayerInfo, string> = randomGen.generateCountries(gameOpts, baseMultiplayerRules) as any;

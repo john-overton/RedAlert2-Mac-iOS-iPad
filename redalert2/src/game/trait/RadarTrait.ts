@@ -75,9 +75,9 @@ export class RadarTrait {
         if (!player.radarTrait)
             return;
         const wasDisabled = player.radarTrait.isDisabled();
-        const shouldDisable = ![...player.buildings].find((building: any) => building.rules.radar && !building.warpedOutTrait.isActive()) ||
+        const shouldDisable = !game.campaign?.hasFreeRadar(player) && (![...player.buildings].find((building: any) => building.rules.radar && !building.warpedOutTrait.isActive()) ||
             player.powerTrait.level === PowerLevel.Low ||
-            [...this.activeLightningStrikes.entries()].some(([strikePlayer, count]) => count && strikePlayer !== player && !game.alliances.areAllied(strikePlayer, player));
+            [...this.activeLightningStrikes.entries()].some(([strikePlayer, count]) => count && strikePlayer !== player && !game.alliances.areAllied(strikePlayer, player)));
         player.radarTrait.setDisabled(shouldDisable);
         if (wasDisabled !== shouldDisable) {
             game.events.dispatch(new RadarOnOffEvent(player, !shouldDisable));
