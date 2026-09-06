@@ -9,6 +9,7 @@ import { AttackTrait } from '@/game/gameobject/trait/AttackTrait';
 import { Weapon } from '@/game/Weapon';
 import { WeaponType } from '@/game/WeaponType';
 export class GarrisonTrait {
+    previousCivilianOwner?: any;
     private building: Building;
     private evacThreshold: number;
     private maxOccupants: number;
@@ -116,7 +117,7 @@ export class GarrisonTrait {
             // emptied; player-built garrisonables (Bio Reactor, bunkers)
             // stay owned.
             if (!units.length && !building.isDestroyed && building.rules.techLevel === -1) {
-                const civilian = context.getCivilianPlayer();
+                const civilian = this.previousCivilianOwner ?? context.getCivilianPlayer();
                 if (civilian) {
                     context.changeObjectOwner(building, civilian);
                 }

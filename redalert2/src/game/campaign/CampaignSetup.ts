@@ -65,6 +65,16 @@ export class CampaignSetup {
 
     }
     present(event: any): void { this.presentation.push(event); }
+    isCivilianHouse(player: any): boolean {
+        let country = player.country?.name;
+        const seen = new Set<string>();
+        while (country && !seen.has(country)) {
+            if (country === 'Neutral' || country === 'Special') return true;
+            seen.add(country);
+            country = this.scenario.ini.getSection(country)?.getString('ParentCountry');
+        }
+        return false;
+    }
     execute(game: any, action: any): void {
         if (this.outcome) return;
         const p = action.params;

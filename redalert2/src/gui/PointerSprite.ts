@@ -66,11 +66,14 @@ export class PointerSprite extends UiObject {
         super.create3DObject();
         if (!this.targetContext) {
             const canvas = document.createElement("canvas");
+            canvas.width = this.size.width;
+            canvas.height = this.size.height;
             const htmlContainer = this.getHtmlContainer();
             htmlContainer.setTranslateMode(true);
             const element = htmlContainer.getElement();
             element.appendChild(canvas);
             element.style.zIndex = String(PointerSprite.HTML_ZINDEX);
+            element.style.pointerEvents = 'none';
             const context = canvas.getContext("2d", { alpha: true });
             if (!context) {
                 throw new Error("Couldn't create pointer canvas context");

@@ -288,7 +288,9 @@ export class DefaultActionHandler {
     update(hover: any, selected: any[], rightClickMove: boolean, keyboardEvent: any, minimap: boolean = false): void {
         this.currentHover = hover;
         this.currentSelected = selected;
-        this.mostSignificantAction = this.updateMostSignificantAction(selected, hover, ActionFilter.All, rightClickMove, false, keyboardEvent, minimap);
+        this.mostSignificantAction = this.updateMostSignificantAction(selected, hover,
+            rightClickMove && selected.length ? ActionFilter.NoSelect : ActionFilter.All,
+            false, false, keyboardEvent, minimap);
         this.currentTarget = this.mostSignificantAction instanceof SelectAction
             ? this.createOrderTarget(hover)
             : this.mostSignificantAction?.target ?? this.createOrderTarget(hover);
