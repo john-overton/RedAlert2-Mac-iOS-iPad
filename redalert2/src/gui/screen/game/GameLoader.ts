@@ -1,3 +1,4 @@
+import { CampaignScenario } from '@/data/campaign/CampaignScenario';
 import { DataStream } from '@/data/DataStream';
 import { Palette } from '@/data/Palette';
 import { OperationCanceledError } from '@puzzl/core/lib/async/cancellation';
@@ -252,7 +253,8 @@ export class GameLoader {
         const theaterIni = Engine.getTheaterIni(activeEngine, mapFile.theaterType);
         const tileSets = new TileSets(theaterIni);
         tileSets.loadTileData(Engine.getTileData(), theaterSettings.extension);
-        const game = GameFactory.create(mapFile, tileSets, Engine.getRules(), Engine.getArt(), Engine.getAi(), rulesIni, mixinRulesInis, gameId, timestamp, gameOptions, this.gameModes, isSinglePlayer, botsLib, this.iniLogger, this.speedCheat, this.debugBotIndex, this.actionLogger);
+        const game = GameFactory.create(mapFile, tileSets, Engine.getRules(), Engine.getArt(), Engine.getAi(), rulesIni, mixinRulesInis, gameId, timestamp, gameOptions, this.gameModes, isSinglePlayer, botsLib, this.iniLogger, this.speedCheat, this.debugBotIndex, this.actionLogger,
+            isSinglePlayer && mapFile.getSection('Basic')?.getBool('MultiplayerOnly', true) === false ? new CampaignScenario(mapFile) : undefined);
         return { game, theater };
     }
     private async loadBotsLib(): Promise<any> {

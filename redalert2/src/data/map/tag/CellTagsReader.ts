@@ -1,21 +1,21 @@
 import { IniSection } from '@/data/IniSection';
 export class CellTagsReader {
     read(section: IniSection, version: number): Array<{
-        tagId: number;
+        tagId: string;
         coords: {
             x: number;
             y: number;
         };
     }> {
         const result: Array<{
-            tagId: number;
+            tagId: string;
             coords: {
                 x: number;
                 y: number;
             };
         }> = [];
         for (const [key, rawValue] of section.entries) {
-            const tagId = typeof rawValue === 'string' ? Number(rawValue) : Number(rawValue as any);
+            const tagId = String(rawValue);
             const coords = this.readCoords(Number(key), version);
             result.push({ tagId, coords });
         }

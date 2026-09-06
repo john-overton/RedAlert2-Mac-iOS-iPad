@@ -9,6 +9,7 @@ import { OperationCanceledError } from "@puzzl/core/lib/async/cancellation/Opera
 import { sleep } from "@puzzl/core/lib/async/sleep";
 interface Game {
     id: string;
+    campaign?: {outcome?: string};
 }
 interface Player {
     country?: {
@@ -54,7 +55,7 @@ export class ScoreScreen extends MainMenuScreen {
         this.musicType = MusicType.Score;
     }
     async onEnter(params: ScoreScreenParams): Promise<void> {
-        this.title = params.singlePlayer
+        this.title = params.game.campaign ? (params.game.campaign.outcome === 'victory' ? 'Mission Accomplished' : 'Mission Failed') : params.singlePlayer
             ? this.strings.get("GUI:SkirmishScore")
             : this.strings.get("GUI:MultiplayerScore");
         this.controller.toggleMainVideo(false);

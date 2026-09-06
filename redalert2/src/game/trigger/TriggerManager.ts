@@ -68,9 +68,10 @@ export class TriggerManager {
             }
         }
         for (const [id, variable] of context.map.getVariables()) {
-            this.localVariables.set(id, variable.clone());
+            this.localVariables.set(String(id), variable.clone());
         }
         for (const trigger of context.map.getTriggers()) {
+            if ((context as any).campaign && !trigger.difficulties[(context as any).campaign.difficulty]) continue;
             this.triggerInstances.set(trigger.id, this.createTriggerInstance(trigger, context));
         }
         this.disposables.add(context.events.subscribe(event => this.pendingGameEvents.push(event)));
@@ -141,9 +142,21 @@ export class TriggerManager {
         }
     }
     private executeActions(trigger: Trigger, targets: MapObject[], context: GameContext): void {
+        (context as any).campaign?.firedTriggers.add(trigger.id);
         for (const action of trigger.actions) {
             const executor = this.executorFactory.create(action, trigger);
             executor.execute(context, targets as any);
+        }
+    }
+    attachTarget(tagId: string, target: any): void {
+        let targets = this.targetsByTag.get(tagId);
+        if (!targets) this.targetsByTag.set(tagId, targets = []);
+        if (!targets.includes(target)) targets.push(target);
+        for (const instance of this.triggerInstances.values()) {
+            if (instance.trigger.tag.id !== tagId) continue;
+            instance.targets = targets;
+            instance.conditions.forEach(c => c.setTargets(targets!));
+            if (instance.trigger.tag.repeatType === TagRepeatType.OnceAll) instance.remainingTargets.add(target);
         }
     }
     setTriggerEnabled(triggerId: string, enabled: boolean): void {
@@ -173,24 +186,24 @@ export class TriggerManager {
         }
     }
     getGlobalVariable(id: string): boolean {
-        return !!this.globalVariables.get(id)?.value;
+        return !!this.globalVariables.get(String(id))?.value;
     }
     toggleGlobalVariable(id: string, value: boolean): void {
-        const variable = this.globalVariables.get(id);
+        const variable = this.globalVariables.get(String(id));
         if (variable === undefined) {
-            this.globalVariables.set(id, new Variable("No name", value));
+            this.globalVariables.set(String(id), new Variable("No name", value));
         }
         else {
             variable.value = value;
         }
     }
     getLocalVariable(id: string): boolean {
-        return !!this.localVariables.get(id)?.value;
+        return !!this.localVariables.get(String(id))?.value;
     }
     toggleLocalVariable(id: string, value: boolean): void {
-        const variable = this.localVariables.get(id);
+        const variable = this.localVariables.get(String(id));
         if (variable === undefined) {
-            this.localVariables.set(id, new Variable("No name", value));
+            this.localVariables.set(String(id), new Variable("No name", value));
         }
         else {
             variable.value = value;

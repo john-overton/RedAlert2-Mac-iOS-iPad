@@ -4,12 +4,16 @@ import { TriggerCondition } from "@/game/trigger/TriggerCondition";
 export class DestroyedAllUnitsCondition extends TriggerCondition {
     private allDestroyed: boolean;
     private houseId: number;
-    constructor(params: any[], trigger: any) {
+    constructor(params: any, trigger: any) {
         super(params, trigger);
         this.allDestroyed = false;
-        this.houseId = Number(params[1]);
+        this.houseId = Number(params.params[1]);
     }
-    check(events: any[], context: any): boolean {
+    check(context: any, events: any[]): boolean {
+        if (context.campaign) {
+            const owner = context.getAllPlayers().find((p: any) => p.country?.id === this.houseId);
+            return !!owner && !owner.getOwnedObjects(true).some((obj: any) => obj.isUnit() && !obj.rules.insignificant && !obj.isDestroyed);
+        }
         if (this.allDestroyed) {
             return true;
         }
@@ -18,6 +22,7 @@ export class DestroyedAllUnitsCondition extends TriggerCondition {
                 return false;
             }
             const target = event.target;
+            if (!target.isTechno()) return false;
             if (!target.isUnit() || target.owner.country?.id !== this.houseId) {
                 return false;
             }

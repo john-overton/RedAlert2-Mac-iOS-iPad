@@ -40,6 +40,11 @@ export class EnterBuildingTask extends Task {
                 return false;
             }
         }
+        else if (this.movePerformed) {
+            // A failed route can finish outside the building. Release the order
+            // instead of leaving an engineer or commando stuck in it forever.
+            return true;
+        }
         else if (!this.movePerformed) {
             this.children.push(new MoveInsideTask(this.game, this.target).setBlocking(false));
             this.movePerformed = true;

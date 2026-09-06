@@ -4,19 +4,26 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$HOME/.bun/bin:$PATH"
 SKIP_WEB=0
+CAMPAIGN=0
 VARIANT=yr
 RETAIL="${RA2_RETAIL_DIR:-}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-web) SKIP_WEB=1 ;;
     --ra2) VARIANT=ra2 ;;
+    --campaign) CAMPAIGN=1 ;;
     --retail-dir)
       [[ $# -ge 2 && -d "$2" ]] || { echo "--retail-dir requires an existing directory" >&2; exit 1; }
       RETAIL="$2"; shift ;;
-    *) echo "Usage: $0 [--no-web] [--ra2] [--retail-dir DIR]" >&2; exit 1 ;;
+    *) echo "Usage: $0 [--no-web] [--ra2] [--campaign] [--retail-dir DIR]" >&2; exit 1 ;;
   esac
   shift
 done
+if [[ $CAMPAIGN == 1 ]]; then
+  [[ "$VARIANT" == ra2 ]] || { echo "--campaign currently requires --ra2" >&2; exit 1; }
+  if [[ -n "$RETAIL" ]]; then bun "$ROOT/scripts/prepare-campaign.ts" "$RETAIL"; fi
+  [[ -s "$ROOT/campaign-export/ra2/allied-01/all01t.map" ]] || { echo "Import mission one with scripts/prepare-campaign.ts or supply --retail-dir" >&2; exit 1; }
+fi
 for required in redalert2/public/general.csf redalert2/public/generalmd.csf gameres-export/ra2.mix; do
   if [[ ! -s "$ROOT/$required" ]]; then
     echo "Missing $required. Run scripts/setup.sh with your retail install first." >&2
@@ -35,6 +42,10 @@ APP="$ROOT/build/macos/$VARIANT/Red Alert 2.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$ROOT/build/macos/ModuleCache"
 # Synchronize generated resources so rebuilds cannot retain obsolete assets.
 rsync -a --delete --exclude local-pack "$ROOT/redalert2/dist/" "$APP/Contents/Resources/WebDist/"
+if [[ $CAMPAIGN == 1 ]]; then
+  mkdir -p "$APP/Contents/Resources/WebDist/campaign/ra2/allied-01"
+  rsync -a --delete --exclude audit.json --exclude '*result.json' --exclude '*.sha256' "$ROOT/campaign-export/ra2/allied-01/" "$APP/Contents/Resources/WebDist/campaign/ra2/allied-01/"
+fi
 rsync -a --delete "$ROOT/gameres-export/" "$APP/Contents/Resources/GameRes/"
 if [[ -n "$RETAIL" ]]; then
   ICON_SOURCE="$(python3 - "$RETAIL" "$VARIANT" <<'PY'

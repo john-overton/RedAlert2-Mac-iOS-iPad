@@ -515,6 +515,8 @@ export class GameScreen extends RootScreen {
         }
     }
     private saveReplay(replay: any): void {
+        // Campaign state is not yet serialized by the replay format.
+        if (this.game?.campaign) return;
         if (!this.replayManager?.saveReplay) {
             console.warn('[GameScreen.saveReplay] replayManager.saveReplay is unavailable');
             return;
@@ -1310,8 +1312,8 @@ export class GameScreen extends RootScreen {
 
         try {
             const isObserver = Boolean(localPlayer?.isObserver);
-            const isVictory = !localPlayer?.defeated ||
-                game?.alliances?.getAllies(localPlayer)?.some((ally: any) => !ally.defeated);
+            const isVictory = game.campaign ? game.campaign.outcome === 'victory' : (!localPlayer?.defeated ||
+                game?.alliances?.getAllies(localPlayer)?.some((ally: any) => !ally.defeated));
 
             console.log('[GameScreen] onGameEnd', {
                 singlePlayer: this.isSinglePlayer,
@@ -1323,9 +1325,9 @@ export class GameScreen extends RootScreen {
 
             if (this.jsxRenderer && this.viewport) {
                 [gameResultPopup] = this.jsxRenderer.render(jsx(GameResultPopup, {
-                    type: isVictory && !isObserver
-                        ? GameResultType.MpVictory
-                        : GameResultType.MpDefeat,
+                    type: game.campaign
+                        ? (isVictory ? GameResultType.SpVictory : GameResultType.SpDefeat)
+                        : (isVictory && !isObserver ? GameResultType.MpVictory : GameResultType.MpDefeat),
                     viewport: this.viewport.value
                 }));
             }
@@ -1344,6 +1346,7 @@ export class GameScreen extends RootScreen {
 
             if (gameResultPopup) {
                 this.uiScene?.add(gameResultPopup);
+                if (game.campaign) this.uiAnimationLoop.start();
             }
 
             if (!isObserver) {

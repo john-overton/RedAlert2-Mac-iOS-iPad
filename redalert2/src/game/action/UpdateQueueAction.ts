@@ -71,6 +71,7 @@ export class UpdateQueueAction extends Action {
         }
     }
     process(): void {
+        if (this.game.campaign?.inputLocked && this.player === this.game.localPlayer) return;
         const player = this.player;
         const item = this.item;
         const queue = player.production.getQueue(this.queueType);

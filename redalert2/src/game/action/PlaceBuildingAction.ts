@@ -42,6 +42,7 @@ export class PlaceBuildingAction extends Action {
         return `Place building ${this.buildingRules.name} at tile (${this.tile.x}, ${this.tile.y})`;
     }
     process(): void {
+        if (this.game.campaign?.inputLocked && this.player === this.game.localPlayer) return;
         const tile = this.game.map.tiles.getByMapCoords(this.tile.x, this.tile.y);
         if (tile) {
             const player = this.player;

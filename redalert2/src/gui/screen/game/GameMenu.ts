@@ -65,7 +65,7 @@ export class GameMenu {
                 this.controller!.close();
                 this._onCancel.dispatch(this);
             },
-            onSave: this.isSinglePlayer
+            onSave: this.isSinglePlayer && !this.game.campaign
                 ? () => {
                     this.controller!.close();
                     this._onCancel.dispatch(this);

@@ -1,4 +1,6 @@
 export enum TriggerEventType {
+    DiscoveredByPlayer = 4,
+    SelectedByPlayer = 33,
     NoEvent = 0,
     EnteredBy = 1,
     SpiedBy = 2,

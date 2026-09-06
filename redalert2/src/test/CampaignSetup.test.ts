@@ -113,6 +113,23 @@ test('skirmish alliances remain symmetric without campaign configuration', () =>
     expect(alliances.getAllies(players[1])).toEqual([players[0]]);
 });
 
-test('initialization does not falsely allow an incomplete campaign to start', () => {
-    expect(() => new CampaignSetup(scenario()).assertReadyToStart()).toThrow('scripted teams and mission outcomes');
+test('runtime rejects unsupported instructions and accepts a covered scenario', () => {
+    const mission = scenario();
+    expect(() => new CampaignSetup(mission).assertReadyToStart()).not.toThrow();
+    mission.scripts.push({id:'UNSUPPORTED',properties:{'0':'999,0'}});
+    expect(() => new CampaignSetup(mission).assertReadyToStart()).toThrow('unsupported instructions');
+});
+
+test('campaign outcomes are explicit and do not depend on surviving allies', () => {
+    for (const [type, expected] of [[1,'victory'],[2,'defeat']] as const) {
+        const campaign = new CampaignSetup(scenario());
+        const human = {country:{id:13},defeated:false};
+        let ended = 0;
+        campaign.inputLocked = true;
+        campaign.execute({getPlayerByName:()=>human,end:()=>ended++},{type,params:[0,'13']});
+        expect(campaign.outcome).toBe(expected);
+        expect(human.defeated).toBe(expected === 'defeat');
+        expect(campaign.inputLocked).toBe(false);
+        expect(ended).toBe(1);
+    }
 });
