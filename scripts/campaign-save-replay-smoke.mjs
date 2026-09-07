@@ -14,7 +14,7 @@ try {
  await page.goto('http://127.0.0.1:4000/?shell=1');
  await page.waitForFunction(()=>window.__ra2debug?.keyBinds,undefined,{timeout:120000});
  console.log('Menu',await page.locator('body').innerText());
- await page.getByText('Campaign: Mission One',{exact:true}).click();
+ await page.getByText('Campaign',{exact:true}).click();
  await page.getByText('Begin Mission',{exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2,undefined,{timeout:30000});
  await page.getByText('Skip Intro',{exact:true}).click();

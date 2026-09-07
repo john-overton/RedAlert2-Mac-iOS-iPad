@@ -1,3 +1,4 @@
+import { EnteredByCondition } from "@/game/trigger/condition/EnteredByCondition";
 import { TagRepeatType } from "@/data/map/tag/TagRepeatType";
 import { TriggerExecutorFactory } from "@/game/trigger/TriggerExecutorFactory";
 import { TriggerConditionFactory } from "@/game/trigger/TriggerConditionFactory";
@@ -96,7 +97,16 @@ export class TriggerManager {
     }
     update(context: GameContext): void {
         const events = this.pendingGameEvents.splice(0, this.pendingGameEvents.length);
-        for (const instance of this.triggerInstances.values()) {
+        // Entry events happened during unit updates, before this polling phase.
+        // Process their triggers first so capture actions can disable ownership-loss
+        // checks, independent of the order of [Triggers] in the scenario file.
+        const instances = [...this.triggerInstances.values()];
+        const entered = (instance: TriggerInstance) => instance.conditions.some(condition =>
+            condition instanceof EnteredByCondition && condition.check(context, events).length > 0);
+        const entryInstances = new Set((context as any).campaign ? instances.filter(entered) : []);
+        instances.sort((a, b) => Number(entryInstances.has(b)) - Number(entryInstances.has(a)));
+        for (const instance of instances) {
+            if (!this.triggerInstances.has(instance.trigger.id)) continue;
             if (!instance.finished && !instance.disabled) {
                 let allConditionsMet = true;
                 const triggeredTargets: MapObject[] = [];

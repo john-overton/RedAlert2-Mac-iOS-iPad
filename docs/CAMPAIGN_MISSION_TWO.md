@@ -15,8 +15,8 @@ open "build/macos/ra2/Red Alert 2.app"
 
 After mission-one victory, choose **Next Mission** on the score screen. Read
 the briefing, then watch or skip the mission-two briefing movie. **Main Menu**
-remains available on the score screen. You can also launch **Campaign: Mission
-Two** directly from the main menu. Failure or quitting does not advance the
+remains available on the score screen. Returning players can also choose **Campaign → Mission Two: Eagle Dawn**
+from the main menu. A brand-new campaign begins at mission one. Failure or quitting does not advance the
 campaign. Mission three is not implemented.
 
 The transition plays retail `A02_f00e.bik`, converted to `allied-02/brief.mp4`.
@@ -78,6 +78,34 @@ Prescribed Soviet base nodes bypass the player's building-adjacency restriction;
 they still require normal production eligibility, credits, construction time,
 and a buildable, unoccupied foundation. Player building placement is unchanged.
 
+## Campaign progress and mission-two interaction fixes
+
+The scrollable campaign selector shows both installed missions and ten disabled
+future-mission placeholders. Completion measures the full 12-mission Allied
+campaign: one victory is 8%, both available victories are 17%. Live campaign
+victories are counted once; defeat, quitting, starting a mission, loading a save,
+and watching a replay do not award completion. **Start campaign from beginning**
+replays mission one while retaining victories and saved games. Progress is local
+to this app/browser profile (`ra2.alliedCampaign.progress.v1`); it is not synced.
+
+Older campaign saves/replays allow the selector to recognize an existing campaign.
+They did not record victory outcomes, so historical completion cannot be recovered
+reliably. Loading an older save still follows the existing replay compatibility
+checks. Newly recorded victories update completion immediately.
+
+Weapon targeting now evaluates friendship from the attacking house toward the
+target house. The original map's alliances are directed: Alliance rocketeers must
+protect French engineers despite France's missing reciprocal alliance, and must
+be able to attack Confederate sentries despite the Confederation's alliance to
+them. C4, airstrike, and disguise targeting use the same source-first convention.
+Ownership and original house identities remain intact.
+
+Campaign entry-event triggers run before polled ownership conditions. This lets
+the American chapel capture trigger remove the chapel-loss trigger in the same
+tick, even though the loss trigger appears earlier in the map. Building-not-exists
+still checks the trigger house's buildings; actual chapel destruction still fails
+the mission. Skirmish trigger ordering is unchanged.
+
 ## Verified checks and limits
 
 With a Vite server running, use:
@@ -96,11 +124,15 @@ The mission-one UI regression now covers its victory score screen, **Next
 Mission**, the actual mission-two briefing video, fresh mission-two state, and
 real mouse selection/movement of Tanya in both left- and right-click order modes.
 The transition starts Americans with 10,000 credits and retains Tanya in Germans.
+The UI check also verifies first entry, completion after victory, disabled future
+missions, persistent progress after reload, and restarting without erasing victory.
 
 The mission-two runtime check validates initial living objects and alliances,
 opening triggers, cross-house orders, engineer base captures, objective changes,
 Soviet construction and AI activation, victory, and separate Tanya/chapel loss
-cases. An isolated transport fixture loads all five passengers and unloads them
+cases. It also checks opening engineer survival, all six sentries as rocketeer
+targets, a rocketeer damaging a Confederate sentry, and an American engineer
+entering/capturing the chapel before the French scripted team. An isolated transport fixture loads all five passengers and unloads them
 using the script interpreter and normal transport tasks.
 
 **This is not a complete combat play-through.** The objective regression removes
@@ -129,7 +161,7 @@ belong in Git or the PR.
 
 The ARM64 Mac app was rebuilt at `build/macos/ra2/Red Alert 2.app` and passed
 `codesign --verify --deep --strict`. Both packaged map/movie manifests matched
-their file sizes and SHA-256 hashes. The 48 focused unit/input/performance tests
+their file sizes and SHA-256 hashes. The 54 focused unit/input/performance tests
 passed, as did mission one's runtime, interaction, and save/replay regressions.
 The entry typecheck retains its 42 pre-existing diagnostics; it is not a clean
 TypeScript baseline. Packaged-app manual combat acceptance remains pending.

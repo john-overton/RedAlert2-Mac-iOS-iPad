@@ -37,6 +37,7 @@ Paths below are relative to the repository root.
 | Area | Entry points | Purpose |
 | --- | --- | --- |
 | Import and packaging | `scripts/prepare-campaign.ts`, `scripts/build-macos.sh`, `redalert2/vite.config.ts` | Extract/audit maps, hash assets, convert movies, serve and bundle campaign files |
+| Progress and selection | `redalert2/src/data/campaign/CampaignProgress.ts`, `redalert2/src/gui/screen/mainMenu/main/selectCampaignMission.ts` | Local victory tracking, first-launch behavior, installed missions and future placeholders |
 | Scenario data | `redalert2/src/data/campaign/CampaignScenario.ts`, `CampaignMovies.ts` in the same directory | Preserve original INI parameters and references; resolve retail movie indices |
 | Simulation setup | `redalert2/src/game/GameFactory.ts`, `redalert2/src/game/campaign/CampaignSetup.ts` | Scenario houses, inherited rules, alliances, ownership, outcomes, presentation requests |
 | Scripted teams | `redalert2/src/game/campaign/CampaignTeams.ts`, `CampaignCapabilities.ts` | Team recruitment/reinforcement and supported script opcodes |
@@ -213,3 +214,17 @@ and the next unverified step. Keep generated assets out of the commit and check
 `git diff --check`. Distinguish committed, pushed, built, and manually verified
 status so the next agent does not repeat work or mistake a smoke test for a
 complete play-through.
+
+## Mission-two regressions to preserve
+
+- Directed alliances must be checked from the actor toward its target. In Eagle
+  Dawn, reverse checks cause friendly engineer deaths and block rocketeer attacks
+  on Confederate sentries. Keep house ownership unchanged for scripted objectives.
+- Test the chapel with both scripted French capture and an American player's
+  engineer order. Campaign entry events must disable the ownership-loss trigger
+  before that tick's polled building-not-exists test. Test actual destruction too.
+- Completion is frontend profile state, never deterministic simulation state.
+  Record victories only from live GameScreen outcomes, not reconstruction or
+  ReplayScreen. Keep restart non-destructive and future missions disabled until
+  they have runtime support and installed assets. Extend the catalog and selector
+  together when implementing the next mission.

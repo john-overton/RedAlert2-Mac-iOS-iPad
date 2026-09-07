@@ -63,6 +63,52 @@ try {
   for (let i=0;i<1500;i++) game.update();
   return {objects:game.getAllPlayers().flatMap(p=>p.getOwnedObjects().map(u=>({id:u.id,name:u.name,owner:p.name,x:u.tile.rx,y:u.tile.ry,hp:u.healthTrait.health}))),deaths, outcome:game.campaign.outcome, locked:game.campaign.inputLocked,tick:game.currentTick, teams:game.campaign.teams.active.map(t=>({id:t.id,line:t.line,members:t.members.map(u=>u.name)})), fired:[...game.campaign.firedTriggers], countries:game.getAllPlayers().map(p=>({name:p.name,country:p.country.name,id:p.country.id,credits:p.credits,objects:p.getOwnedObjects().length})),camera:game.campaign.initialCameraPosition(), expected:map.structures.length+map.vehicles.length+map.infantries.length+map.aircrafts.length};
  },text);
+ if(result.deaths.some(death=>death.name==='ENGINEER'))throw new Error('An opening engineer was killed');
+ const regressions = await page.evaluate(async()=>{
+  const {ActionFactory}=await import('/src/game/action/ActionFactory.ts');
+  const {ActionFactoryReg}=await import('/src/game/action/ActionFactoryReg.ts');
+  const {ActionType}=await import('/src/game/action/ActionType.ts');
+  const {OrderType}=await import('/src/game/order/OrderType.ts');
+  const {ObjectType}=await import('/src/engine/type/ObjectType.ts');
+  const fresh=window.__createCampaignGame();fresh.start();
+  for(let i=0;i<1500;i++)fresh.update();
+  const objects=()=>fresh.getAllPlayers().flatMap(p=>p.getOwnedObjects());
+  const rock=fresh.createUnitForPlayer(fresh.rules.getObject('JUMPJET',ObjectType.Infantry),fresh.getPlayerByName('Alliance'));
+  const frenchEngineer=fresh.createUnitForPlayer(fresh.rules.getObject('ENGINEER',ObjectType.Infantry),fresh.getPlayerByName('French'));
+  const sentries=objects().filter(u=>u.name==='NALASR');
+  for(const sentry of sentries) {
+    if(fresh.areFriendly(rock,sentry))continue;
+    if(!rock.attackTrait.selectWeaponVersus(rock,sentry,fresh,false))throw new Error(`Rocketeer cannot target ${sentry.owner.name} sentry`);
+  }
+  if(rock.attackTrait.selectWeaponVersus(rock,frenchEngineer,fresh,false))throw new Error('Rocketeer targets friendly engineer');
+  const chapel=objects().find(u=>u.name==='CACOLO01');
+  // Start an American engineer beside the chapel to test actual pathing/entry,
+  // before the scripted French capture team can reach it.
+  const engineer=fresh.createUnitForPlayer(fresh.rules.getObject('ENGINEER',ObjectType.Infantry),fresh.localPlayer);
+  const {RadialTileFinder}=await import('/src/game/map/tileFinder/RadialTileFinder.ts');
+  const spawnTile=new RadialTileFinder(fresh.map.tiles,fresh.map.mapBounds,chapel.tile,chapel.getFoundation(),1,4,t=>fresh.map.terrain.getPassableSpeed(t,engineer.rules.speedType,true,false)>0&&!fresh.map.getGroundObjectsOnTile(t).some(o=>o.isTechno())).getNextTile();
+  fresh.spawnObject(engineer,spawnTile);
+  for(let i=0;i<2;i++)fresh.update(); // Reveal the nearby target before issuing a player order.
+  const factory=new ActionFactory();new ActionFactoryReg().register(factory,fresh);
+  const select=factory.create(ActionType.SelectUnits);select.player=fresh.localPlayer;select.unitIds=[engineer.id];select.process();
+  const action=factory.create(ActionType.OrderUnits);action.player=fresh.localPlayer;action.orderType=OrderType.Capture;action.target=fresh.createTarget(chapel,chapel.tile);action.process();
+  for(let i=0;i<500&&chapel.owner!==fresh.localPlayer&&!fresh.campaign.outcome;i++)fresh.update();
+  fresh.update();
+  if(chapel.owner!==fresh.localPlayer||fresh.campaign.outcome||!fresh.campaign.firedTriggers.has('0926B97C'))
+    throw new Error('American chapel capture failed '+JSON.stringify({owner:chapel.owner.name,engineer:{x:engineer.tile.rx,y:engineer.tile.ry,hp:engineer.healthTrait.health,spawned:engineer.isSpawned},locked:fresh.campaign.inputLocked,outcome:fresh.campaign.outcome,fired:[...fresh.campaign.firedTriggers]}));
+  const captureTick=fresh.currentTick;
+  const sentry=sentries.find(u=>u.owner.name==='Confederation');
+  const rockTile=new RadialTileFinder(fresh.map.tiles,fresh.map.mapBounds,sentry.tile,sentry.getFoundation(),1,3,t=>fresh.map.terrain.getPassableSpeed(t,rock.rules.speedType,true,false)>0&&!fresh.map.getGroundObjectsOnTile(t).some(o=>o.isTechno())).getNextTile();
+  fresh.spawnObject(rock,rockTile);
+  fresh.update();fresh.update();
+  const hpBefore=sentry.healthTrait.health;
+  const selectRock=factory.create(ActionType.SelectUnits);selectRock.player=fresh.localPlayer;selectRock.unitIds=[rock.id];selectRock.process();
+  const attack=factory.create(ActionType.OrderUnits);attack.player=fresh.localPlayer;attack.orderType=OrderType.Attack;attack.target=fresh.createTarget(sentry,sentry.tile);attack.process();
+  for(let i=0;i<300&&sentry.healthTrait.health>=hpBefore;i++)fresh.update();
+  if(sentry.healthTrait.health>=hpBefore)throw new Error('Rocketeer attack did not damage Confederate sentry');
+  const result={sentriesTargetable:sentries.length,americanChapelCapturedAt:captureTick,sentryDamage:hpBefore-sentry.healthTrait.health,outcome:fresh.campaign.outcome};
+  fresh.dispose();return result;
+ });
  const runtime = await page.evaluate(async()=>{
   const game=window.__campaignTestGame;
   const {ActionFactory}=await import('/src/game/action/ActionFactory.ts');
@@ -143,7 +189,7 @@ try {
   }
   return {victoryTick,losses,transportCheck,aiTeams,baseQueues:game.getPlayerByName('Russians').production.getAllQueues().map(q=>({status:q.status,items:q.getAll().map(i=>({name:i.rules.name,progress:i.progress}))})),guns:guns.length,tick:game.currentTick,outcome:game.campaign.outcome,fired:[...game.campaign.firedTriggers],objects:game.getAllPlayers().flatMap(p=>p.getOwnedObjects().map(u=>({id:u.id,name:u.name,owner:p.name,x:u.tile.rx,y:u.tile.ry}))),teams:game.campaign.teams.active.map(t=>({id:t.id,line:t.line,members:t.members.map(u=>u.name)}))};
  });
- result.runtime=runtime;
+ result.runtime=runtime; result.regressions=regressions;
  console.log(JSON.stringify(result,null,2));
  writeFileSync(join(root,'build/mission-two-init-result.json'),JSON.stringify(result,null,2));
  if(errors) throw new Error(`${errors} page errors`);
