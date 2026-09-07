@@ -5,6 +5,9 @@ It targets macOS 14 or later and runs the existing web engine in a native
 ARM64 AppKit/WKWebView shell. See the [macOS build guide](docs/MACOS.md)
 for setup, retail icons, controls, troubleshooting, and campaign limitations.
 
+Browse the [documentation index](docs/README.md), including [modding units and stats](docs/MODDING.md)
+and [future additions: world and unit editors](docs/FUTURE_ADDITIONS.md).
+
 For campaign development, start with the [agent implementation guide](docs/CAMPAIGN_AGENT_GUIDE.md),
 [mission-one status](docs/CAMPAIGN_MISSION_ONE.md), and
 [mission two and the transition](docs/CAMPAIGN_MISSION_TWO.md).
