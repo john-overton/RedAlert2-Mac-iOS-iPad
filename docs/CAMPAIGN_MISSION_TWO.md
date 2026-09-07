@@ -15,7 +15,7 @@ open "build/macos/ra2/Red Alert 2.app"
 
 After mission-one victory, choose **Next Mission** on the score screen. Read
 the briefing, then watch or skip the mission-two briefing movie. **Main Menu**
-remains available on the score screen. Returning players can also choose **Campaign → Mission Two: Eagle Dawn**
+remains available on the score screen. Returning players can also choose **Campaign → Red Alert 2 — Allied → Mission Two: Eagle Dawn**
 from the main menu. A brand-new campaign begins at mission one. Failure or quitting does not advance the
 campaign. Mission three is not implemented.
 
@@ -80,11 +80,16 @@ and a buildable, unoccupied foundation. Player building placement is unchanged.
 
 ## Campaign progress and mission-two interaction fixes
 
-The scrollable campaign selector shows both installed missions and ten disabled
+The campaign list shows RA2 Allied plus disabled RA2 Soviet and Yuri’s Revenge
+Allied/Soviet placeholders. Both campaign levels use the Settings page’s framed
+content area, fieldsets and right sidebar; they are not modal overlays. Back from
+the mission picker returns to the campaign list, then Home.
+
+The scrollable mission selector shows both installed missions and ten disabled
 future-mission placeholders. Completion measures the full 12-mission Allied
 campaign: one victory is 8%, both available victories are 17%. Live campaign
 victories are counted once; defeat, quitting, starting a mission, loading a save,
-and watching a replay do not award completion. **Start campaign from beginning**
+and watching a replay do not award completion. **Start from Beginning** in the sidebar
 replays mission one while retaining victories and saved games. Progress is local
 to this app/browser profile (`ra2.alliedCampaign.progress.v1`); it is not synced.
 
@@ -111,6 +116,7 @@ the mission. Skirmish trigger ordering is unchanged.
 With a Vite server running, use:
 
 ```sh
+node scripts/campaign-picker-smoke.mjs
 node scripts/campaign-ui-smoke.mjs
 node scripts/campaign-mission-two-smoke.mjs
 node scripts/campaign-mission-two-save-replay-smoke.mjs

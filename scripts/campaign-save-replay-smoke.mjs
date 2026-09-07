@@ -15,6 +15,7 @@ try {
  await page.waitForFunction(()=>window.__ra2debug?.keyBinds,undefined,{timeout:120000});
  console.log('Menu',await page.locator('body').innerText());
  await page.getByText('Campaign',{exact:true}).click();
+ await page.getByRole('button',{name:/Red Alert 2 — Allied/}).click();
  await page.getByText('Begin Mission',{exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2,undefined,{timeout:30000});
  await page.getByText('Skip Intro',{exact:true}).click();

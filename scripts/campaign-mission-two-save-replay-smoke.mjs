@@ -16,6 +16,7 @@ try {
  console.log('Menu',await page.locator('body').innerText());
  await page.evaluate(()=>localStorage.setItem('ra2.alliedCampaign.progress.v1',JSON.stringify({started:true,completed:[]})));
  await page.getByText('Campaign',{exact:true}).click();
+ await page.getByRole('button',{name:/Red Alert 2 — Allied/}).click();
  await page.getByRole('button',{name:'Mission Two: Eagle Dawn',exact:true}).click();
  await page.getByText('Begin Mission',{exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2,undefined,{timeout:30000});
@@ -112,8 +113,9 @@ try {
  // Upgrade path: old saves identify a started campaign without inventing wins.
  await page.evaluate(()=>{localStorage.removeItem('ra2.alliedCampaign.progress.v1');window.__rootController.goToScreen(0);});
  await page.getByText('Campaign',{exact:true}).click();
- await page.getByRole('dialog',{name:'Allied campaign'}).getByText('0% complete',{exact:false}).waitFor();
- await page.getByRole('button',{name:'Back',exact:true}).click();
+ await page.getByRole('button',{name:/Red Alert 2 — Allied/}).click();
+ await page.getByRole('region',{name:'Allied campaign'}).getByText('0% complete',{exact:false}).waitFor();
+ await page.getByText('Back',{exact:true}).click();
  result.menuSaveLoad=true;result.replayUi=replayUi;result.legacyProgressRecognized=true;
  writeFileSync('build/campaign-mission-two-save-replay-result.json',JSON.stringify(result,null,2));
  if(errors.length)throw new Error('Save/load/replay menus reported browser errors');

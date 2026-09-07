@@ -37,7 +37,7 @@ Paths below are relative to the repository root.
 | Area | Entry points | Purpose |
 | --- | --- | --- |
 | Import and packaging | `scripts/prepare-campaign.ts`, `scripts/build-macos.sh`, `redalert2/vite.config.ts` | Extract/audit maps, hash assets, convert movies, serve and bundle campaign files |
-| Progress and selection | `redalert2/src/data/campaign/CampaignProgress.ts`, `redalert2/src/gui/screen/mainMenu/main/selectCampaignMission.ts` | Local victory tracking, first-launch behavior, installed missions and future placeholders |
+| Progress and selection | `redalert2/src/data/campaign/CampaignProgress.ts`, `redalert2/src/gui/screen/mainMenu/campaign/CampaignScreen.ts`, `CampaignPicker.tsx` in the same directory | Local victory tracking, first-launch behavior, installed missions and future placeholders |
 | Scenario data | `redalert2/src/data/campaign/CampaignScenario.ts`, `CampaignMovies.ts` in the same directory | Preserve original INI parameters and references; resolve retail movie indices |
 | Simulation setup | `redalert2/src/game/GameFactory.ts`, `redalert2/src/game/campaign/CampaignSetup.ts` | Scenario houses, inherited rules, alliances, ownership, outcomes, presentation requests |
 | Scripted teams | `redalert2/src/game/campaign/CampaignTeams.ts`, `CampaignCapabilities.ts` | Team recruitment/reinforcement and supported script opcodes |
@@ -228,3 +228,12 @@ complete play-through.
   ReplayScreen. Keep restart non-destructive and future missions disabled until
   they have runtime support and installed assets. Extend the catalog and selector
   together when implementing the next mission.
+
+The campaign UI uses the same HtmlView, options fieldsets, scroll container and
+right sidebar as Settings. Home opens a campaign list; selecting RA2 Allied starts
+mission one for a new profile or opens the mission picker for a returning profile.
+RA2 Soviet and both Yuri’s Revenge campaigns are disabled placeholders. Back from
+missions returns to campaigns; Back from campaigns returns Home. Keep restart in
+the sidebar so it remains accessible while scrolling. Run
+`scripts/campaign-picker-smoke.mjs` to check matching settings bounds, placeholder
+states, scrolling and both Back transitions.
