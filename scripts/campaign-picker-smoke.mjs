@@ -1,0 +1,42 @@
+// Requires the local RA2 Vite server and imported campaign assets.
+import {chromium} from '../redalert2/node_modules/playwright-core/index.mjs';
+import {readFileSync,writeFileSync} from 'node:fs';
+const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
+try {
+ const page=await browser.newPage({viewport:{width:1280,height:900}});
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/config.ini*',route=>route.fulfill({body:readFileSync('redalert2/public/config.ini','utf8').replace('engine = yr','engine = ra2').replace('generalmd.csf','general.csf'),contentType:'text/plain'}));
+ await page.addInitScript(()=>localStorage.setItem('ra2.alliedCampaign.progress.v1',JSON.stringify({started:true,completed:['allied-01']})));
+ await page.goto('http://127.0.0.1:4000/?shell=1');
+ await page.getByText('Options',{exact:true}).waitFor({timeout:120000});
+ await page.getByText('Options',{exact:true}).click();
+ const opts=page.locator('.opts.general-opts');await opts.waitFor();
+ const optionsBounds=await opts.boundingBox();
+ await page.getByText('Back',{exact:true}).click();
+ await page.getByText('Campaign',{exact:true}).click();
+ const list=page.getByRole('region',{name:'Campaign selection'});await list.waitFor();
+ if(await list.locator('button:disabled').count()!==3)throw new Error('Placeholder campaigns must be disabled');
+ const campaignBounds=await list.boundingBox();
+ if(JSON.stringify(optionsBounds)!==JSON.stringify(campaignBounds))throw new Error('Campaign picker does not share the settings content area');
+ await page.getByText('Back',{exact:true}).waitFor();
+ await page.screenshot({path:'build/campaign-list.png'});
+ await page.getByRole('button',{name:/Red Alert 2 — Allied/}).click();
+ const missions=page.getByRole('region',{name:'Allied campaign'});await missions.waitFor();
+ await missions.getByText('8% complete',{exact:false}).waitFor();
+ if(await missions.locator('button:disabled').count()!==10)throw new Error('Future missions must be disabled');
+ await page.getByText('Start from Beginning',{exact:true}).waitFor();
+ await page.screenshot({path:'build/campaign-selector.png'});
+ await missions.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+ const last=await missions.getByRole('button',{name:'Mission 12 — Coming soon',exact:true}).boundingBox();
+ const bounds=await missions.boundingBox();
+ if(last.y<bounds.y||last.y+last.height>bounds.y+bounds.height+1)throw new Error('Last mission is clipped after scrolling');
+ const restart=await page.getByText('Start from Beginning',{exact:true}).boundingBox();
+ if(restart.x<bounds.x+bounds.width)throw new Error('Restart overlaps mission list');
+ await page.getByText('Back',{exact:true}).click();
+ await list.waitFor();
+ await page.getByText('Back',{exact:true}).click();
+ await page.getByText('Campaign',{exact:true}).waitFor();
+ if(errors.length)throw new Error(errors.join('\n'));
+ writeFileSync('build/campaign-picker-result.json',JSON.stringify({optionsBounds,campaignBounds,placeholders:3,futureMissions:10,scrolling:true,backNavigation:true,errors},null,2));
+ console.log('Campaign settings layout, scrolling and both navigation layers passed');
+} finally {await browser.close();}

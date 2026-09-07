@@ -1,6 +1,5 @@
 import type { ReplayManager } from '@/gui/ReplayManager';
 import { readCampaignProgress, recordCampaignProgress } from '@/data/campaign/CampaignProgress';
-import { selectCampaignMission } from './selectCampaignMission';
 import { campaignMissions, campaignMissionForMap } from '@/data/campaign/CampaignMissions';
 import { launchCampaign, loadCampaignManifest } from '../../game/launchCampaign';
 import { Engine } from '@/engine/Engine';
@@ -76,13 +75,14 @@ export class HomeScreen implements Screen {
                                 } catch { /* One unreadable replay must not block the campaign. */ }
                             }
                         }
-                        const progress = readCampaignProgress();
                         const available = installed.filter(entry => entry.manifest);
-                        const mission = progress.started
-                            ? await selectCampaignMission(progress, available.map(entry => entry.mission))
-                            : campaignMissions[0];
-                        const entry = available.find(entry => entry.mission.id === mission?.id);
-                        if (entry) await launchCampaign(entry.mission, entry.manifest, this.rootController, this.strings, this.messageBoxApi);
+                        await this.controller?.pushScreen(MainMenuScreenType.Campaign, {
+                            installed:available.map(entry => entry.mission),
+                            launch:async (mission: typeof campaignMissions[number]) => {
+                                const entry = available.find(entry => entry.mission.id === mission.id);
+                                if (entry) await launchCampaign(entry.mission, entry.manifest, this.rootController, this.strings, this.messageBoxApi);
+                            },
+                        });
                     }
                     catch (error) { await this.messageBoxApi.alert(String(error), 'OK'); }
                     finally { this.launchingCampaign = false; }

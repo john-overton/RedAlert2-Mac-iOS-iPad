@@ -1,3 +1,4 @@
+import { CampaignScreen } from './campaign/CampaignScreen';
 import { RootScreen } from '../RootScreen';
 import { MainMenu } from './component/MainMenu';
 import { MainMenuController } from './MainMenuController';
@@ -105,6 +106,7 @@ export class MainMenuRootScreen extends RootScreen {
         if (!this.subScreens.has(MainMenuScreenType.Score)) {
             this.subScreens.set(MainMenuScreenType.Score, ScoreScreen as any);
         }
+        this.subScreens.set(MainMenuScreenType.Campaign, CampaignScreen);
         for (const [screenType, screenClass] of this.subScreens) {
             const screen: any = await this.createScreen(screenType, screenClass, controller);
             if (screen) {
@@ -228,6 +230,9 @@ export class MainMenuRootScreen extends RootScreen {
                 console.error("[MainMenuRootScreen] Couldn't get map dir for LAN setup", error);
             }
             screen = new screenClass(this.rootController, this.strings, this.jsxRenderer, rules, mapFileLoader, mapList, gameModes, this.localPrefs, this.messageBoxApi, mapDir);
+        }
+        else if (screenType === MainMenuScreenType.Campaign) {
+            screen = new screenClass(this.jsxRenderer, this.messageBoxApi);
         }
         else if (screenType === MainMenuScreenType.Home) {
             screen = new screenClass(this.strings, this.messageBoxApi, this.appVersion, false, false, this.fullScreen, this.rootController, (this as any).replayManager);

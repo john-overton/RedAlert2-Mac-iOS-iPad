@@ -3285,3 +3285,48 @@ input[type="range"]:focus {
 #ra2web-root .bot-upload-btn:hover {
     background: rgba(178, 34, 34, 0.7);
 }
+
+/* Campaigns share the options page's framed content, typography and scrolling. */
+#ra2web-root .campaign-picker .campaign-choice {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 38px;
+    margin: 12px 0;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    text-align: left;
+    white-space: normal;
+}
+#ra2web-root .campaign-picker .campaign-choice strong,
+#ra2web-root .campaign-picker .campaign-choice span {
+    display: block;
+}
+#ra2web-root .campaign-picker .campaign-choice span {
+    margin-top: 6px;
+    font-size: 0.9em;
+}
+#ra2web-root .campaign-picker progress {
+    width: 100%;
+    accent-color: #c33;
+}
+
+#ra2web-root .campaign-picker .campaign-choice {
+    background: rgba(20, 0, 0, 0.85);
+    color: inherit;
+    border: 1px solid #a00000;
+    cursor: pointer;
+}
+#ra2web-root .campaign-picker .campaign-choice:hover:not(:disabled) {
+    background: #4a0808;
+    border-color: #ff3333;
+}
+#ra2web-root .campaign-picker .campaign-choice:focus-visible {
+    outline: 2px solid #ffff00;
+    outline-offset: 2px;
+}
+#ra2web-root .campaign-picker .campaign-choice:disabled {
+    color: #999;
+    border-color: #542323;
+    cursor: default;
+}

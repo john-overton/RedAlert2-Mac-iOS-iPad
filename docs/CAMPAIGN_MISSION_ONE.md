@@ -18,7 +18,7 @@ scripts/build-macos.sh --ra2 --campaign --retail-dir "/path/to/ra2/install"
 open "build/macos/ra2/Red Alert 2.app"
 ```
 
-Choose **Campaign**, read the briefing, and begin. Returning players can choose
+Choose **Campaign → Red Alert 2 — Allied**, read the briefing, and begin. Returning players can choose
 **Mission One: Lone Guardian** in the mission selector. On victory,
 choose **Next Mission** to play the bridging briefing and start Eagle Dawn. The briefing
 movie has a **Skip Intro** button. The opening in-game sequence temporarily
