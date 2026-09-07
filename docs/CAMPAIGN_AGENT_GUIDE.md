@@ -237,3 +237,7 @@ missions returns to campaigns; Back from campaigns returns Home. Keep restart in
 the sidebar so it remains accessible while scrolling. Run
 `scripts/campaign-picker-smoke.mjs` to check matching settings bounds, placeholder
 states, scrolling and both Back transitions.
+
+A further visual polish pass is deferred until the remaining campaign work is
+finished. See [campaign selector UI technical debt](TECH_DEBT.md#campaign-selector-ui-polish)
+for scope, preserved behavior, and acceptance checks.
