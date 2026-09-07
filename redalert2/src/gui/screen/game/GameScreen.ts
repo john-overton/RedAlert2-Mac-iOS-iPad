@@ -1,3 +1,4 @@
+import { recordCampaignProgress } from '@/data/campaign/CampaignProgress';
 import { controllableObjects } from '@/game/campaign/CampaignControl';
 import { campaignMissions, campaignMissionForMap } from '@/data/campaign/CampaignMissions';
 import { launchCampaign, loadCampaignManifest } from './launchCampaign';
@@ -715,6 +716,9 @@ export class GameScreen extends RootScreen {
         return lockstepManager;
     }
     private onGameStart(localPlayer: any, game: any, uiInitResult: any, actionQueue: any, actionFactory: any, replay: any): void {
+        const campaignMission = game.campaign && campaignMissionForMap(game.gameOpts.mapName);
+        if (campaignMission) recordCampaignProgress(campaignMission);
+
         this.localPrefs.removeItem(StorageKey.LastConnection);
         this.loadingScreenApi?.dispose();
         this.music?.play(MusicType.Normal);
@@ -1350,6 +1354,9 @@ export class GameScreen extends RootScreen {
             const isObserver = Boolean(localPlayer?.isObserver);
             const isVictory = game.campaign ? game.campaign.outcome === 'victory' : (!localPlayer?.defeated ||
                 game?.alliances?.getAllies(localPlayer)?.some((ally: any) => !ally.defeated));
+
+            const completedMission = game.campaign && isVictory && campaignMissionForMap(game.gameOpts.mapName);
+            if (completedMission) recordCampaignProgress(completedMission, true);
 
             console.log('[GameScreen] onGameEnd', {
                 singlePlayer: this.isSinglePlayer,

@@ -89,7 +89,7 @@ export class AttackOrder extends Order {
             targetObj?.isBuilding() &&
             targetObj.c4ChargeTrait &&
             (this.forceAttack ||
-                !this.game.areFriendly(targetObj, this.sourceObject) ||
+                !this.game.areFriendly(this.sourceObject, targetObj) ||
                 targetObj.cabHutTrait)) {
             this.isC4 = true;
             this.feedbackType = OrderFeedbackType.SpecialAttack;

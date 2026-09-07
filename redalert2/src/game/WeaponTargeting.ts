@@ -99,7 +99,7 @@ export class WeaponTargeting {
         else if (this.weaponRules.damage < 0) {
             this.targetChecks.push((target, context, alliances) => !!(target !== this.gameObject &&
                 target?.isUnit() &&
-                alliances?.areFriendly(target, this.gameObject) &&
+                alliances?.areFriendly(this.gameObject, target) &&
                 target.healthTrait && target.healthTrait.health < 100 &&
                 this.gameObject.isAircraft() === target.isAircraft()));
         }
@@ -111,7 +111,7 @@ export class WeaponTargeting {
             else {
                 this.targetChecks.push((target, context, alliances, forcefire) => !((!forcefire || this.warheadRules.mindControl) &&
                     target?.isTechno() &&
-                    alliances?.areFriendly(target, this.gameObject)));
+                    alliances?.areFriendly(this.gameObject, target)));
             }
             this.targetChecks.push((target, context, alliances) => !(target?.isTechno() &&
                 target.cloakableTrait?.isCloaked() &&

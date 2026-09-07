@@ -1,4 +1,7 @@
-import { campaignMissions } from '@/data/campaign/CampaignMissions';
+import type { ReplayManager } from '@/gui/ReplayManager';
+import { readCampaignProgress, recordCampaignProgress } from '@/data/campaign/CampaignProgress';
+import { selectCampaignMission } from './selectCampaignMission';
+import { campaignMissions, campaignMissionForMap } from '@/data/campaign/CampaignMissions';
 import { launchCampaign, loadCampaignManifest } from '../../game/launchCampaign';
 import { Engine } from '@/engine/Engine';
 import { EngineType } from '@/engine/EngineType';
@@ -20,6 +23,7 @@ interface SidebarButton {
     onClick: () => void | Promise<void>;
 }
 export class HomeScreen implements Screen {
+    private launchingCampaign = false;
     private strings: Strings;
     private messageBoxApi: MessageBoxApi;
     private appVersion: string;
@@ -29,7 +33,7 @@ export class HomeScreen implements Screen {
     private controller?: MainMenuController;
     public title: string;
     public musicType: MusicType;
-    constructor(strings: Strings, messageBoxApi: MessageBoxApi, appVersion: string, storageEnabled: boolean = false, quickMatchEnabled: boolean = false, fullScreen?: FullScreen, private rootController?: any) {
+    constructor(strings: Strings, messageBoxApi: MessageBoxApi, appVersion: string, storageEnabled: boolean = false, quickMatchEnabled: boolean = false, fullScreen?: FullScreen, private rootController?: any, private replayManager?: ReplayManager) {
         this.strings = strings;
         this.messageBoxApi = messageBoxApi;
         this.appVersion = appVersion;
@@ -53,14 +57,37 @@ export class HomeScreen implements Screen {
             ? await Promise.all(campaignMissions.map(async mission => ({mission, manifest:await loadCampaignManifest(mission)})))
             : [];
         const buttons: SidebarButton[] = [
-            ...installed.filter(entry => entry.manifest).map(({mission,manifest}) => ({
-                label: `Campaign: ${mission.label}`,
-                tooltip: `Allied campaign — ${mission.title} (experimental)`,
+            ...(installed.some(entry => entry.manifest) ? [{
+                label: 'Campaign',
+                tooltip: 'Play the Allied campaign or choose a mission',
                 onClick: async () => {
-                    try { await launchCampaign(mission, manifest, this.rootController, this.strings, this.messageBoxApi); }
+                    if (this.launchingCampaign) return;
+                    this.launchingCampaign = true;
+                    try {
+                        // Builds before the progress tracker still have saves/replays.
+                        // Recognize a previous campaign without inventing victories.
+                        if (!readCampaignProgress().started && this.replayManager) {
+                            const entries = await this.replayManager.loadList().catch(() => []);
+                            for (const saved of [...entries].sort((a, b) => b.timestamp - a.timestamp)) {
+                                try {
+                                    const replay = await this.replayManager.loadReplay(saved);
+                                    const prior = campaignMissionForMap(replay.gameOpts.mapName ?? '');
+                                    if (prior) { recordCampaignProgress(prior); break; }
+                                } catch { /* One unreadable replay must not block the campaign. */ }
+                            }
+                        }
+                        const progress = readCampaignProgress();
+                        const available = installed.filter(entry => entry.manifest);
+                        const mission = progress.started
+                            ? await selectCampaignMission(progress, available.map(entry => entry.mission))
+                            : campaignMissions[0];
+                        const entry = available.find(entry => entry.mission.id === mission?.id);
+                        if (entry) await launchCampaign(entry.mission, entry.manifest, this.rootController, this.strings, this.messageBoxApi);
+                    }
                     catch (error) { await this.messageBoxApi.alert(String(error), 'OK'); }
+                    finally { this.launchingCampaign = false; }
                 }
-            })),
+            }] : []),
             {
                 label: 'Skirmish',
                 tooltip: 'Play a single-player skirmish against the AI',

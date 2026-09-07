@@ -13,7 +13,7 @@ try {
  await page.goto('http://127.0.0.1:4000/?shell=1');
  await page.waitForFunction(()=>window.__ra2debug?.keyBinds,undefined,{timeout:120000});
  console.log('Menu',await page.locator('body').innerText());
- await page.getByText('Campaign: Mission One',{exact:true}).click();
+ await page.getByText('Campaign',{exact:true}).click();
  await page.getByText('Begin Mission',{exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2,undefined,{timeout:30000});
  await page.getByText('Skip Intro',{exact:true}).click();
@@ -133,7 +133,23 @@ try {
    const {ScreenType}=await import('/src/gui/screen/ScreenType.ts');
    await d.gameScreen.controller.goToScreenBlocking(ScreenType.MainMenuRoot);
  });
- await page.getByText('Campaign: Mission Two',{exact:true}).waitFor();
- writeFileSync('build/campaign-ui-result.json',JSON.stringify({errors,state,mouseOrders:['right','left'],outcome:'victory',bridgeVideo,missionTwo,missionTwoMouseOrders:['right','left'],returnedToMenu:true},null,2));
+ await page.getByText('Campaign',{exact:true}).waitFor();
+ await page.getByText('Campaign',{exact:true}).click();
+ const selector=page.getByRole('dialog',{name:'Allied campaign'});
+ await selector.getByText('8% complete',{exact:false}).waitFor();
+ await selector.getByRole('button',{name:'Mission One: Lone Guardian — Completed',exact:true}).waitFor();
+ if(await selector.locator('button:disabled').count()!==10)throw new Error('Future missions must remain unavailable');
+ await page.screenshot({path:'build/campaign-selector.png'});
+ await page.keyboard.press('Escape');
+ await page.reload();
+ await page.getByText('Campaign',{exact:true}).click();
+ await page.getByRole('dialog',{name:'Allied campaign'}).getByText('8% complete',{exact:false}).waitFor();
+ await page.getByRole('button',{name:'Start campaign from beginning',exact:true}).click();
+ await page.getByText('Begin Mission',{exact:true}).click();
+ await page.getByText('Skip Intro',{exact:true}).click();
+ await page.waitForFunction(()=>window.__ra2debug?.game?.gameOpts?.mapName==='all01t.map',undefined,{timeout:120000});
+ const progress=await page.evaluate(()=>JSON.parse(localStorage.getItem('ra2.alliedCampaign.progress.v1')));
+ if(progress.completed.join(',')!=='allied-01')throw new Error('Restart erased completion or credited an unfinished mission');
+ writeFileSync('build/campaign-ui-result.json',JSON.stringify({errors,state,mouseOrders:['right','left'],outcome:'victory',bridgeVideo,missionTwo,missionTwoMouseOrders:['right','left'],returnedToMenu:true,selector:{persisted:true,restartPreservedCompletion:true,progress}},null,2));
  if(errors.length)throw new Error('Campaign UI reported JavaScript errors');
 } finally {await browser.close();}

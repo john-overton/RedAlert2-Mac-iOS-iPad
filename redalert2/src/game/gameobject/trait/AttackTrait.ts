@@ -114,7 +114,7 @@ export class AttackTrait implements NotifyTick, NotifyDamage, NotifyTeleport {
             }
             if (t?.isBuilding() &&
                 e.rules.airstrikeTeamType &&
-                !s.areFriendly(t, e) &&
+                !s.areFriendly(e, t) &&
                 r.find((e: any) => e.warhead.rules.airstrike)) {
                 r = r.filter((e: any) => e.warhead.rules.airstrike);
             }
@@ -186,7 +186,7 @@ export class AttackTrait implements NotifyTick, NotifyDamage, NotifyTeleport {
                 t.moveTrait.isIdle() &&
                 !e.rules.detectDisguise &&
                 !e.owner.sharedDetectDisguiseTrait?.has(t) &&
-                !r.areFriendly(t, e)) {
+                !r.areFriendly(e, t)) {
                 return false;
             }
             const o = i.getDisguise();

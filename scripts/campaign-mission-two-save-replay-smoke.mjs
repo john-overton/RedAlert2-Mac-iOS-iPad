@@ -14,7 +14,9 @@ try {
  await page.goto('http://127.0.0.1:4000/?shell=1');
  await page.waitForFunction(()=>window.__ra2debug?.keyBinds,undefined,{timeout:120000});
  console.log('Menu',await page.locator('body').innerText());
- await page.getByText('Campaign: Mission Two',{exact:true}).click();
+ await page.evaluate(()=>localStorage.setItem('ra2.alliedCampaign.progress.v1',JSON.stringify({started:true,completed:[]})));
+ await page.getByText('Campaign',{exact:true}).click();
+ await page.getByRole('button',{name:'Mission Two: Eagle Dawn',exact:true}).click();
  await page.getByText('Begin Mission',{exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2,undefined,{timeout:30000});
  await page.getByText('Skip Intro',{exact:true}).click();
@@ -105,7 +107,14 @@ try {
   if(screen.game.getHash()!==window.__savedHash)throw new Error('Replay menu playback diverged');
   return {tick:screen.game.currentTick,finished:screen.gameTurnMgr.isFinished()};
  });
- result.menuSaveLoad=true;result.replayUi=replayUi;
+ const progress=await page.evaluate(()=>JSON.parse(localStorage.getItem('ra2.alliedCampaign.progress.v1')));
+ if(progress.completed.length)throw new Error('Save/load/replay awarded an unearned victory');
+ // Upgrade path: old saves identify a started campaign without inventing wins.
+ await page.evaluate(()=>{localStorage.removeItem('ra2.alliedCampaign.progress.v1');window.__rootController.goToScreen(0);});
+ await page.getByText('Campaign',{exact:true}).click();
+ await page.getByRole('dialog',{name:'Allied campaign'}).getByText('0% complete',{exact:false}).waitFor();
+ await page.getByRole('button',{name:'Back',exact:true}).click();
+ result.menuSaveLoad=true;result.replayUi=replayUi;result.legacyProgressRecognized=true;
  writeFileSync('build/campaign-mission-two-save-replay-result.json',JSON.stringify(result,null,2));
  if(errors.length)throw new Error('Save/load/replay menus reported browser errors');
  console.log('Mission two save and replay state checks passed',result.expected.tick,result.records);
