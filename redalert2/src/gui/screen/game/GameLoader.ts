@@ -16,6 +16,8 @@ import { ShpBuilder } from '@/engine/renderable/builder/ShpBuilder';
 import { PipOverlay } from '@/engine/renderable/entity/PipOverlay';
 import { CanvasSpriteBuilder } from '@/engine/renderable/builder/CanvasSpriteBuilder';
 import { TileSets } from '@/game/theater/TileSets';
+import { PlayerFactory } from '@/game/player/PlayerFactory';
+import { OBS_COUNTRY_ID, OBS_TEAM_ID } from '@/game/gameopts/constants';
 import { GameFactory } from '@/game/GameFactory';
 import { TrailerSmokeFx } from '@/engine/renderable/fx/TrailerSmokeFx';
 import { ShpAggregator } from '@/engine/renderable/builder/ShpAggregator';
@@ -30,12 +32,14 @@ import { MixinRules } from '@/game/ini/MixinRules';
 import { isNotNullOrUndefined } from '@/util/typeGuard';
 export class GameLoader {
     constructor(private appVersion: string, private workerHostApi: any, private cdnResourceLoader: any, private appResourceLoader: any, private rules: any, private gameModes: any, private sound: any, private iniLogger: any, private actionLogger: any, private speedCheat: any, private gameResConfig: any, private vxlGeometryPool: any, private buildingImageDataCache: any, private debugBotIndex: any, private devMode: boolean) { }
-    async load(gameId: string, timestamp: number, gameOptions: any, mapFile: any, playerName: string, isSinglePlayer: boolean, loadingScreenApi: any, cancellationToken?: any): Promise<any> {
+    async load(gameId: string, timestamp: number, gameOptions: any, mapFile: any, playerName: string, isSinglePlayer: boolean, loadingScreenApi: any, cancellationToken?: any, observer = false): Promise<any> {
+        cancellationToken?.throwIfCancelled();
         const loadingPlayerInfos = this.resolveLoadingPlayerInfos(gameId, timestamp, gameOptions);
+        if (observer) loadingPlayerInfos.push({ name: playerName, countryId: OBS_COUNTRY_ID, colorId: -2, teamId: OBS_TEAM_ID });
         loadingScreenApi.start(loadingPlayerInfos, gameOptions.mapTitle, playerName);
         try {
             this.workerHostApi?.warmUpPool?.();
-            return await this.doLoad(gameId, timestamp, gameOptions, mapFile, playerName, isSinglePlayer, loadingScreenApi, cancellationToken);
+            return await this.doLoad(gameId, timestamp, gameOptions, mapFile, playerName, isSinglePlayer, loadingScreenApi, cancellationToken, observer);
         }
         finally {
             this.workerHostApi?.dispose?.();
@@ -51,7 +55,7 @@ export class GameLoader {
             countryId: generatedCountries.get(player) ?? player.countryId,
         }));
     }
-    private async doLoad(gameId: string, timestamp: number, gameOptions: any, mapFile: any, playerName: string, isSinglePlayer: boolean, loadingScreenApi: any, cancellationToken?: any): Promise<any> {
+    private async doLoad(gameId: string, timestamp: number, gameOptions: any, mapFile: any, playerName: string, isSinglePlayer: boolean, loadingScreenApi: any, cancellationToken?: any, observer = false): Promise<any> {
         if (!Engine.vfs) {
             throw new Error('Virtual File System not initialized');
         }
@@ -74,80 +78,92 @@ export class GameLoader {
             throw new Error(`Bot library version mismatch. Expected ${this.appVersion}, but got ${botsLib.version}`);
         }
         const { game, theater } = await this.createGame(gameId, timestamp, gameOptions, mapFile, isSinglePlayer, botsLib);
-        let hudSide = SideType.GDI;
-        let localPlayer: any;
-        playerName ??= game.campaign?.scenario.playerHouse.id;
-        if (playerName) {
-            localPlayer = game.getPlayerByName(playerName);
-            if (!localPlayer.isObserver) {
-                // The HUD art pipeline is binary (sidec01 = Allied shell,
-                // sidec02 = Soviet shell). Yuri wears the Soviet shell until
-                // the YR-style sidebar (all-new art names in sidec02md.mix)
-                // is implemented.
-                hudSide = localPlayer.country.side === SideType.GDI ? SideType.GDI : SideType.Nod;
+        // Until the load result is returned, this loader owns the simulation and theater.
+        try {
+            let hudSide = SideType.GDI;
+            let localPlayer: any;
+            playerName ??= game.campaign?.scenario.playerHouse.id;
+            if (playerName) {
+                // A network observer is presentation state only. Adding it to the
+                // roster would change player numbering, random setup and sync hashes.
+                localPlayer = observer
+                    ? new PlayerFactory(game.rules, game.gameOpts, undefined).createObserver(playerName, game.rules)
+                    : game.getPlayerByName(playerName);
+                if (!localPlayer.isObserver) {
+                    // The HUD art pipeline is binary (sidec01 = Allied shell,
+                    // sidec02 = Soviet shell). Yuri wears the Soviet shell until
+                    // the YR-style sidebar (all-new art names in sidec02md.mix)
+                    // is implemented.
+                    hudSide = localPlayer.country.side === SideType.GDI ? SideType.GDI : SideType.Nod;
+                }
             }
-        }
-        let cdnResources: any;
-        if (this.gameResConfig.isCdn()) {
-            cdnResources = await this.cdnResourceLoader.loadResources([
-                ResourceType.Sounds,
-                ...(hudSide === SideType.GDI
-                    ? [ResourceType.EvaAlly, ResourceType.UiAlly]
-                    : [ResourceType.EvaSov, ResourceType.UiSov]),
-                ResourceType.Cameo,
-            ], cancellationToken, (percent) => loadingScreenApi.onLoadProgress(30 + (percent / 100) * 15));
-        }
-        if (cdnResources) {
-            Engine.vfs.addArchive(new MixFile(new DataStream(cdnResources.pop(ResourceType.Cameo))), this.cdnResourceLoader.getResourceFileName(ResourceType.Cameo));
-            await Engine.vfs.addMixFile('cameocd.mix');
-        }
-        const cameoFilenames = this.collectCameoFileNames(game);
-        await this.loadHudSideImages(cdnResources, hudSide);
-        loadingScreenApi.onLoadProgress(40);
-        await sleep(1);
-        if (cdnResources) {
-            const soundResources = [
-                ResourceType.Sounds,
-                hudSide === SideType.GDI ? ResourceType.EvaAlly : ResourceType.EvaSov,
-            ];
-            for (const resourceType of soundResources) {
-                Engine.vfs.addArchive(new MixFile(new DataStream(cdnResources.pop(resourceType))), this.cdnResourceLoader.getResourceFileName(resourceType));
+            let cdnResources: any;
+            if (this.gameResConfig.isCdn()) {
+                cdnResources = await this.cdnResourceLoader.loadResources([
+                    ResourceType.Sounds,
+                    ...(hudSide === SideType.GDI
+                        ? [ResourceType.EvaAlly, ResourceType.UiAlly]
+                        : [ResourceType.EvaSov, ResourceType.UiSov]),
+                    ResourceType.Cameo,
+                ], cancellationToken, (percent) => loadingScreenApi.onLoadProgress(30 + (percent / 100) * 15));
             }
-            await Engine.vfs.addBagFile('audio.bag');
+            if (cdnResources) {
+                Engine.vfs.addArchive(new MixFile(new DataStream(cdnResources.pop(ResourceType.Cameo))), this.cdnResourceLoader.getResourceFileName(ResourceType.Cameo));
+                await Engine.vfs.addMixFile('cameocd.mix');
+            }
+            const cameoFilenames = this.collectCameoFileNames(game);
+            await this.loadHudSideImages(cdnResources, hudSide);
+            loadingScreenApi.onLoadProgress(40);
+            await sleep(1);
+            if (cdnResources) {
+                const soundResources = [
+                    ResourceType.Sounds,
+                    hudSide === SideType.GDI ? ResourceType.EvaAlly : ResourceType.EvaSov,
+                ];
+                for (const resourceType of soundResources) {
+                    Engine.vfs.addArchive(new MixFile(new DataStream(cdnResources.pop(resourceType))), this.cdnResourceLoader.getResourceFileName(resourceType));
+                }
+                await Engine.vfs.addBagFile('audio.bag');
+            }
+            loadingScreenApi.onLoadProgress(45);
+            await sleep(1);
+            const isMobile = /iPhone|Android|CrOS|Windows Phone|webOS/i.test(navigator.userAgent) || isIpad();
+            if (!isMobile) {
+                console.time('Load sounds');
+                await this.prepareSounds(cancellationToken, (percent) => loadingScreenApi.onLoadProgress(45 + (percent / 100) * 15));
+                console.timeEnd('Load sounds');
+            }
+            loadingScreenApi.onLoadProgress(60);
+            await sleep(1);
+            if (!isMobile) {
+                const images = Engine.getImages();
+                const imageFinder = new ImageFinder(images as any, theater);
+                console.time('Load textures');
+                await this.prepareTextures(game.rules, game.art, mapFile, imageFinder, cancellationToken, (percent) => loadingScreenApi.onLoadProgress(60 + (percent / 100) * 10));
+                console.timeEnd('Load textures');
+            }
+            loadingScreenApi.onLoadProgress(70);
+            await sleep(1);
+            console.time('Load voxels');
+            await this.prepareVxlGeometries(game.rules, game.art, game.map, Engine.getVoxels(), cancellationToken, (percent) => loadingScreenApi.onLoadProgress(70 + (percent / 100) * 20), game.campaign?.scenario);
+            console.timeEnd('Load voxels');
+            await sleep(1);
+            cancellationToken?.throwIfCancelled();
+            IsoCoords.init({
+                x: 0,
+                y: (game.map.mapBounds.getFullSize().width * Coords.getWorldTileSize()) / 2,
+            });
+            game.init(localPlayer);
+            cancellationToken?.throwIfCancelled();
+            loadingScreenApi.onLoadProgress(95);
+            await sleep(1);
+            return { game, theater, hudSide, cameoFilenames };
+        } catch (error) {
+            try { game.dispose(); }
+            catch (disposeError) { console.warn('Could not dispose the failed game load', disposeError); }
+            Engine.unloadTheater(theater.type);
+            throw error;
         }
-        loadingScreenApi.onLoadProgress(45);
-        await sleep(1);
-        const isMobile = /iPhone|Android|CrOS|Windows Phone|webOS/i.test(navigator.userAgent) || isIpad();
-        if (!isMobile) {
-            console.time('Load sounds');
-            await this.prepareSounds(cancellationToken, (percent) => loadingScreenApi.onLoadProgress(45 + (percent / 100) * 15));
-            console.timeEnd('Load sounds');
-        }
-        loadingScreenApi.onLoadProgress(60);
-        await sleep(1);
-        if (!isMobile) {
-            const images = Engine.getImages();
-            const imageFinder = new ImageFinder(images as any, theater);
-            console.time('Load textures');
-            await this.prepareTextures(game.rules, game.art, mapFile, imageFinder, cancellationToken, (percent) => loadingScreenApi.onLoadProgress(60 + (percent / 100) * 10));
-            console.timeEnd('Load textures');
-        }
-        loadingScreenApi.onLoadProgress(70);
-        await sleep(1);
-        console.time('Load voxels');
-        await this.prepareVxlGeometries(game.rules, game.art, game.map, Engine.getVoxels(), cancellationToken, (percent) => loadingScreenApi.onLoadProgress(70 + (percent / 100) * 20), game.campaign?.scenario);
-        console.timeEnd('Load voxels');
-        await sleep(1);
-        cancellationToken?.throwIfCancelled();
-        IsoCoords.init({
-            x: 0,
-            y: (game.map.mapBounds.getFullSize().width * Coords.getWorldTileSize()) / 2,
-        });
-        game.init(localPlayer);
-        cancellationToken?.throwIfCancelled();
-        loadingScreenApi.onLoadProgress(95);
-        await sleep(1);
-        return { game, theater, hudSide, cameoFilenames };
     }
     private collectCameoFileNames(game: any): string[] {
         const filenames: string[] = [];

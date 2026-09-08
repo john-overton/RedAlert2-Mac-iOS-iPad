@@ -114,7 +114,8 @@ export class LanLoadingScreenApi implements LoadingScreenApi {
         const extendedInfos = (this.players ?? []).map((player) => {
             const peerId = assignmentByName.get(player.name);
             const transportMember = peerId ? transportByPeerId.get(peerId) : undefined;
-            const status = !transportMember
+            const localObserver = this.lanMatchSession instanceof NetworkMatchSession && this.lanMatchSession.isObserver() && player.name === this.localPlayerName;
+            const status = localObserver ? PlayerConnectionStatus.Connected : !transportMember
                 ? PlayerConnectionStatus.Disconnected
                 : transportMember.isSelf || transportMember.status === 'connected'
                     ? PlayerConnectionStatus.Connected
@@ -122,7 +123,7 @@ export class LanLoadingScreenApi implements LoadingScreenApi {
             return {
                 name: player.name,
                 status,
-                loadPercent: peerId ? lanSnapshot.loadPercentByPeerId[peerId] ?? 0 : 0,
+                loadPercent: localObserver ? this.lastLoadPercent : peerId ? lanSnapshot.loadPercentByPeerId[peerId] ?? 0 : 0,
                 country: countries[player.countryId],
                 color: player.countryId === OBS_COUNTRY_ID
                     ? '#fff'

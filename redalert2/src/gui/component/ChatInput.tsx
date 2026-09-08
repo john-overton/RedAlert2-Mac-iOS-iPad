@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { ChatRecipientType } from '@/network/chat/ChatMessage';
-import { RECIPIENT_TEAM, RECIPIENT_ALL } from '@/network/gservConfig';
+import { RECIPIENT_TEAM, RECIPIENT_ALL, RECIPIENT_OBSERVERS } from '@/network/gservConfig';
 const IMPLICIT_CHANNEL_NAME = '';
 interface ChatInputProps {
     chatHistory?: {
@@ -30,6 +30,7 @@ interface ChatInputProps {
         };
     };
     channels?: string[];
+    allowWhispers?: boolean;
     strings: {
         get: (key: string, ...args: any[]) => string;
     };
@@ -52,7 +53,7 @@ interface ChatInputProps {
 }
 export const ChatInput = forwardRef<{
     send: () => void;
-}, ChatInputProps>(({ chatHistory: s, channels: r = [], strings: t, className: e, tooltip: i, forceColor: a, noCycleHint: n, submitEmpty: o, onKeyDown: l, onKeyUp: c, onBlur: h, onCancel: u, onSubmit: d, }, g) => {
+}, ChatInputProps>(({ chatHistory: s, channels: r = [], allowWhispers = true, strings: t, className: e, tooltip: i, forceColor: a, noCycleHint: n, submitEmpty: o, onKeyDown: l, onKeyUp: c, onBlur: h, onCancel: u, onSubmit: d, }, g) => {
     const p = useRef<HTMLInputElement>(null);
     const [m, f] = useState(() => M());
     const [y, T] = useState(() => {
@@ -69,7 +70,7 @@ export const ChatInput = forwardRef<{
             name: e,
         }));
         let t: string | undefined, i: string | undefined;
-        if (s) {
+        if (s && allowWhispers) {
             t = s.lastWhisperFrom?.value;
             i = s.lastWhisperTo?.value;
             if (t)
@@ -83,7 +84,7 @@ export const ChatInput = forwardRef<{
         type: ChatRecipientType;
         name: string;
     } | undefined) {
-        return e && (e.type !== ChatRecipientType.Channel || r.includes(e.name));
+        return e && (e.type === ChatRecipientType.Channel ? r.includes(e.name) : allowWhispers);
     }
     function R(e: {
         type: ChatRecipientType;
@@ -101,7 +102,8 @@ export const ChatInput = forwardRef<{
         if (!A(y)) {
             T({ type: ChatRecipientType.Channel, name: r[0] ?? IMPLICIT_CHANNEL_NAME });
         }
-    }, [r]);
+        f(M());
+    }, [r, allowWhispers]);
     useEffect(() => {
         if (s) {
             const e = (e: any) => {
@@ -142,6 +144,8 @@ export const ChatInput = forwardRef<{
         name: string;
     }) {
         if (e.type === ChatRecipientType.Channel) {
+            if (e.name === RECIPIENT_OBSERVERS)
+                return "To Observers:";
             if (e.name === RECIPIENT_TEAM)
                 return t.get("TS:ToAllies");
             if (e.name === RECIPIENT_ALL)
@@ -195,12 +199,12 @@ export const ChatInput = forwardRef<{
             c?.(e);
         }} onChange={(e) => {
             const t = e.target.value;
-            const i = t.match(/^\/(?:page|whisper|w|msg|m) ([A-Za-z0-9-_']+) /i);
+            const i = allowWhispers && t.match(/^\/(?:page|whisper|w|msg|m) ([A-Za-z0-9-_']+) /i);
             if (i) {
                 R({ type: ChatRecipientType.Whisper, name: i[1] });
                 e.target.value = '';
             }
-            const r = t.match(/^\/r(eply)? /i);
+            const r = allowWhispers && t.match(/^\/r(eply)? /i);
             if (r) {
                 if (s?.lastWhisperFrom.value !== undefined) {
                     R({

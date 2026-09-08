@@ -5,14 +5,14 @@ import { parseServerAddress, WebSocketConnection } from './WebSocketConnection';
 import { decodePacket, encodeOrderPacket, encodeSyncPacket, encodeRelayedSyncPacket, type StartGameMessage } from '@/network/server/Protocol';
 import type { LanLaunchDescriptor } from '@/network/lan/LanRoomSession';
 
-function fixture() {
+function fixture(observer = false) {
     const outgoing: (string | Uint8Array)[] = [];
     const connection = {
         onMessage: new EventDispatcher<any, string | Uint8Array>(), onClose: new EventDispatcher<any, string>(),
         sendRaw: (data: Uint8Array) => outgoing.push(data), sendImmediate: (data: unknown) => outgoing.push(JSON.stringify(data)), close() {},
     };
     const start: StartGameMessage = {
-        type: 'startGame', gameId: 'test', generation: 0, timestamp: 1, gameOpts: {} as any, clientIds: [1, 2],
+        observer, observationId: observer ? 1 : undefined, type: 'startGame', gameId: 'test', generation: 0, timestamp: 1, gameOpts: {} as any, clientIds: [1, 2],
         humanAssignments: [{ clientId: 1, slotIndex: 0, name: 'Alice' }, { clientId: 2, slotIndex: 1, name: 'Bob' }], orderLatency: 2, netFrameInterval: 1,
     };
     const descriptor: LanLaunchDescriptor = {
@@ -256,4 +256,67 @@ test('other generations cannot load, drop or desync the current match or fill it
     expect(match.tryConsumeTurn(0)).toBeUndefined();
     frame(1, 1);
     expect(match.tryConsumeTurn(0)?.dropPeerIds).toEqual([]);
+});
+
+
+describe('observer history', () => {
+    const historyFrame = (frame: number, drop = false) => ({ frame, orders: (drop ? [1] : [1, 2]).map(clientId => ({clientId, actions: ''})),
+        drops: drop ? [{clientId: 2, frame, takeover: 'ai'}] : [], hash: frame * 10, defeatMask: '0' });
+    const reply = (frames: ReturnType<typeof historyFrame>[], observationId = 1) => ({type: 'history', gameId: 'test', observationId,
+        fromFrame: frames[0]?.frame ?? 1, frames, liveFrame: frames.at(-1)?.frame ?? 0, allLoaded: true});
+    test('replays original commander orders and AI drops, independently checks hashes without gameplay sends', () => {
+        const {match, outgoing, receive, frame} = fixture(true);
+        try {
+            match.reportLoadProgress(50); expect(outgoing).toHaveLength(0);
+            match.reportLoadProgress(100); match.reportLoadProgress(100);
+            expect(outgoing).toHaveLength(1);
+            expect(JSON.parse(outgoing[0] as string)).toMatchObject({type:'history',fromFrame:1,maxFrames:32,observationId:1});
+            frame(1, 1); receive({type: 'allLoaded'});
+            expect(match.areAllPlayersLoaded()).toBe(false);
+            receive(reply([historyFrame(1), historyFrame(2, true)]));
+            expect(match.areAllPlayersLoaded()).toBe(true);
+            expect(match.tryConsumeTurn(0)?.batches.map(batch => batch.peerId)).toEqual(['1','2']);
+            expect(match.submitLocalTurn(0, new Uint8Array([1]))).toBeUndefined();
+            match.sendSync(0,10);
+            expect(match.tryConsumeTurn(1)?.dropPeerIds).toEqual(['2']);
+            expect(match.takesOverWithAi('2')).toBe(true);
+            match.sendSync(1,20);
+            expect(match.fatalError).toBeUndefined(); expect(outgoing).toHaveLength(1);
+            expect(match.getCatchupProgress()).toEqual({frame:2,liveFrame:2});
+        } finally {match.dispose();}
+    });
+    test('stale observation responses and unsolicited relays cannot affect a new observation', () => {
+        const {match, outgoing, receive} = fixture(true);
+        try {
+            match.reportLoadProgress(100);
+            receive(reply([historyFrame(1)], 9));
+            receive(encodeRelayedSyncPacket(999,999,1));
+            expect(match.getSnapshot().bufferedTicks).toEqual([]);
+            receive(reply([historyFrame(1)]));
+            match.tryConsumeTurn(0); match.sendSync(0,11);
+            expect(match.fatalError?.frame).toBe(1);
+            expect(outgoing).toHaveLength(1);
+        } finally {match.dispose();}
+    });
+    test('unconsumed history is bounded and return cancels polling without closing the room', async () => {
+        const {match, outgoing, receive} = fixture(true);
+        match.reportLoadProgress(100);
+        receive(reply(Array.from({length:32},(_,i)=>historyFrame(i+1))));
+        await new Promise(resolve=>setTimeout(resolve,10));
+        expect(outgoing).toHaveLength(1); expect(match.getSnapshot().bufferedTicks).toHaveLength(32);
+        expect(match.isCatchingUp()).toBe(true);
+        for(let tick=0;tick<16;tick++){match.tryConsumeTurn(tick);match.sendSync(tick,(tick+1)*10);}
+        await new Promise(resolve=>setTimeout(resolve,10));
+        expect(JSON.parse(outgoing.at(-1) as string)).toMatchObject({type:'history',fromFrame:33});
+        match.returnToLobby('finished');
+        receive({...reply([]),fromFrame:33,liveFrame:32});
+        await new Promise(resolve=>setTimeout(resolve,110));
+        expect(outgoing).toHaveLength(3); match.dispose();
+    });
+    test('history cannot skip frames, omit commanders or exceed the batch bound', () => {
+        for (const frames of [[historyFrame(2)], [{...historyFrame(1),orders:[]}], Array.from({length:33},(_,i)=>historyFrame(i+1))]) {
+            const {match,receive}=fixture(true);match.reportLoadProgress(100);
+            receive({...reply(frames),fromFrame:1});expect(match.fatalError).toBeDefined();match.dispose();
+        }
+    });
 });

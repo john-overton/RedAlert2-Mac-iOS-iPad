@@ -36,6 +36,8 @@ export class LobbyClient {
     clientId?: number;
     private match?: NetworkMatchSession;
     private latestGeneration = 0;
+    private latestObservationId = 0;
+    private observePending = false;
     private handshakeResolve?: () => void;
     private handshakeReject?: (error: Error) => void;
     private intentionalClose = false;
@@ -62,7 +64,8 @@ export class LobbyClient {
         connection.onClose.subscribe(this.closed);
     }
     async connect(address: string, hello: HelloMessage): Promise<void> {
-        this.intentionalClose = false; this.latestGeneration = 0; this.disconnectError = undefined; this.health = undefined;
+        this.observePending = false;
+        this.intentionalClose = false; this.latestGeneration = 0; this.latestObservationId = 0; this.disconnectError = undefined; this.health = undefined;
         await this.connection.connect(address);
         return new Promise<void>((resolve, reject) => {
             const timer = setTimeout(() => {
@@ -76,7 +79,14 @@ export class LobbyClient {
         });
     }
     command(name: string, args?: Record<string, unknown>): void { this.connection.sendImmediate({ type: 'command', name, args }); }
-    chat(text: string, to: 'all' | 'team' | number = 'all'): void { this.connection.sendImmediate({ type: 'chat', to, text }); }
+    chat(text: string, to: 'all' | 'team' | 'observers' | number = 'all'): void { this.connection.sendImmediate({ type: 'chat', to, text }); }
+    observeGame(): void {
+        if (!this.session || this.session.state !== 'started' || !this.session.gameId || this.match) throw new Error('No active game available to observe.');
+        if (this.observePending) return;
+        this.observePending = true;
+        try { this.command('observe', { gameId: this.session.gameId, generation: this.session.generation }); }
+        catch (error) { this.observePending = false; throw error; }
+    }
     contentReady(id: string): void { this.command('content_ready', {id}); }
     private requestContent(message: Omit<ContentRequest,'type'|'requestId'>, signal?: AbortSignal): Promise<ContentResponse> {
         if (signal?.aborted) return Promise.reject(new Error('Content transfer cancelled'));
@@ -158,7 +168,7 @@ export class LobbyClient {
         this.healthTimer = setInterval(() => this.emitConnectionHealth(), 1000);
     };
     close(): void {
-        this.intentionalClose = true;
+        this.intentionalClose = true; this.observePending = false;
         clearInterval(this.healthTimer); this.healthTimer = undefined; this.health = undefined;
         this.cancelContentRequests(new Error('Connection cancelled.'));
         this.handshakeReject?.(new Error('Connection cancelled.'));
@@ -191,7 +201,8 @@ export class LobbyClient {
                     this.healthTimer = setInterval(() => this.emitConnectionHealth(), 1000);
                     this.handshakeResolve?.(); this.onSession.dispatch(this, message.session); break;
                 case 'session':
-                    if (message.session.generation < this.latestGeneration) break;
+                    if (message.session.generation < Math.max(this.latestGeneration, this.session?.generation ?? 0)) break;
+                    if (message.session.state !== 'started' || message.session.generation !== this.session?.generation || message.session.gameId !== this.session?.gameId) this.observePending = false;
                     this.session = message.session; this.onSession.dispatch(this, message.session); break;
                 case 'connectionHealth':
                     this.health = {players:message.players, timeoutMs:message.timeoutMs};
@@ -204,6 +215,7 @@ export class LobbyClient {
                 case 'message': this.onMessage.dispatch(this, message); break;
                 case 'ping': this.connection.sendImmediate({ type: 'pong', t: message.t }); break;
                 case 'error': {
+                    this.observePending = false;
                     const description = ERRORS[message.code];
                     const error = new LobbyConnectionError(message.code, message.code === 'invalidPacket' && message.message
                         ? `${description} ${message.message}. Please report this detail if it repeats.`
@@ -218,25 +230,32 @@ export class LobbyClient {
                     this.onError.dispatch(this, error); break;
                 }
                 case 'matchEnded': {
+                    if (message.generation === this.session?.generation && message.gameId === this.session?.gameId) this.observePending = false;
                     if (message.generation !== this.latestGeneration) break;
                     if (this.match && message.gameId !== this.match.start.gameId) break;
+                    this.match?.notifyMatchEnded(message);
                     this.releaseMatch();
                     this.onMatchEnded.dispatch(this, message); break;
                 }
                 case 'startGame': {
-                    if (message.generation <= this.latestGeneration) break;
+                    if (message.generation < this.latestGeneration) break;
+                    if (message.generation === this.latestGeneration && (!message.observer || !message.observationId || message.observationId <= this.latestObservationId || this.match)) break;
+                    if (message.observer && (!Number.isSafeInteger(message.observationId) || message.observationId! <= 0)) throw new Error('Invalid observation identity.');
+                    this.observePending = false;
                     clearInterval(this.healthTimer); this.healthTimer = undefined;
                     if (this.clientId === undefined || !this.session || this.match) throw new Error('Unexpected game start.');
                     const local = message.humanAssignments.find(item => item.clientId === this.clientId);
-                    if (!local) throw new Error('The server did not assign a local player.');
+                    if (!local && !message.observer) throw new Error('The server did not assign a local player.');
                     this.match = new NetworkMatchSession(this.connection, message, {
-                        kind: 'lan', roomId: message.gameId, gameId: message.gameId, timestamp: message.timestamp,
+                        observer: message.observer, kind: 'lan', roomId: message.gameId, gameId: message.gameId, timestamp: message.timestamp,
                         hostPeerId: String(this.session.clients.find(item => item.admin)?.id ?? this.clientId),
-                        localPeerId: String(this.clientId), localPlayerName: local.name, gameOpts: message.gameOpts,
+                        localPeerId: String(this.clientId), localPlayerName: local?.name ?? this.session.clients.find(item => item.id === this.clientId)?.name ?? 'Observer', gameOpts: message.gameOpts,
                         humanAssignments: message.humanAssignments.map(item => ({ peerId: String(item.clientId), slotIndex: item.slotIndex, name: item.name })),
                         mapTransferStateByPeerId: {}, returnRoute: { screenType: 0 },
                     });
+                    if (message.generation > this.latestGeneration) this.latestObservationId = 0;
                     this.latestGeneration = message.generation;
+                    if (message.observer) this.latestObservationId = message.observationId!;
                     this.match.onReturnToLobby.subscribe(this.releaseMatch);
                     this.onStartGame.dispatch(this, message); break;
                 }

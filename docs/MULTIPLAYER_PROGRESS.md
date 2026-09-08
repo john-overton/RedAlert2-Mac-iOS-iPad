@@ -360,3 +360,61 @@ with a fresh HTTP Vite server on port 4001:
 ```sh
 RA2_PERSISTENT_UI_SMOKE=1 RA2_PERSISTENT_HOST_DEFEAT=1 RA2_PERSISTENT_CONTENT=1 RA2_DEV_URL=http://127.0.0.1:4001 PLAYWRIGHT_CHROMIUM_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' ~/.bun/bin/bun scripts/lockstep-engine-smoke.mjs
 ```
+
+## 2026-09-08 — observer roles, spectator chat and late-join catch-up
+
+Implemented the observer slice locally, following `MULTIPLAYER_OBSERVERS_PLAN.md`:
+
+- Separate player/observer/waiting roles; observers occupy no commander slot and
+  can join full rooms. Default running-room joins offer Observe Game / Wait in
+  Lobby. Explicit observers launch after content verification. Player-only gates
+  exclude observers and waiters from Ready, loading, orders, sync and lag handling.
+- Server-enforced observer-only chat, all-team visibility for observers, immutable
+  sender/team metadata, labeled/color-coded audiences and observer-only composers.
+  Waiters receive public chat without observer/team access. Whispers retain their
+  intended recipients; replay chat remains public-only.
+- Committed history includes original seed/roster/options, orders, agreed hashes
+  and deterministic AI takeover/destruction drops. Detached local observers do
+  not alter simulation player numbering. History is pulled in bounded chunks at
+  both catch-up and live edge; observers send no gameplay orders or sync reports.
+- Archive limits: 64 MiB of accounted payload (pending included), 100,000 frames,
+  chunks of at most 32 frames / 64 KiB, sequential cursor and rate bounds. Archive
+  exhaustion disables observation without interrupting commanders. Catch-up uses
+  an 8 ms simulation budget, reduced rendering and historical sound/EVA suppression.
+- Match generation plus server-minted observation attempt ID isolate retries and
+  cancellation. Return to Lobby retains the room. Match end during observer loading
+  cancels the launch; loader cancellation releases simulation/theater resources.
+  Pending observation requests reset across round changes without stale resets.
+- Handshake protocol **4**, binary orders protocol **3**. Rebuild clients together.
+
+Validation:
+
+- **178 tests passed, 0 failed, 2,195 assertions** across 27 files. Includes wire
+  chat routing/forgery checks, bounded history, observer isolation, drop/commit
+  integration, stale generations/attempts, animation and HUD composer regressions.
+- Real Chromium engines: pregame observer and both commanders matched every hash;
+  pausing observation did not stop commanders. Late observer replayed 1,200 ticks,
+  including a guest's AI takeover, in **5.73 seconds**, peak **47 buffered frames**.
+- Extended engine replay: all **10,000 hashes matched**, actual observer animation
+  caught up in **59.40 seconds**, peak **48 frames**, 9,998 historical ticks under
+  audio suppression. Browser/server probes reported no errors in both runs.
+- Production lobby controls: role selection, observer joining a full room,
+  same-generation retry, running-room choice, automatic return and a second match
+  on the same room, with all three engines matching 100 ticks in each round.
+  Ending round two during delayed observer loading returned to the lobby without
+  resurrecting the cancelled game.
+- Solo host advanced 150 ticks without an opponent or premature victory.
+- Production web and Node server bundles pass. Fresh standalone macOS helper
+  passed password/content, repeated-round/socket retention, host departure,
+  invalid/occupied port and EOF/quit cleanup tests.
+- Entry typecheck retains the **42 baseline errors**, with none in changed files.
+  `git diff --check` and smoke script syntax checks pass.
+
+Browser hosting used a bridge replacement backed by the real Bun server. These
+checks do not claim native WKWebView, physical Mac/Linux or iPad acceptance.
+Packaged macOS YR/RA2 applications were not rebuilt. No commit or push was made.
+
+Reports: `build/observer-engine-smoke.json`, `build/observer-long-smoke.json`,
+`build/multiplayer-observers/observer-lobby-ui.json`. Build/test logs and the fresh
+standalone helper are under ignored `build/multiplayer-observers/`. Reproduce with
+fresh HTTP Vite on port 4001 and the three observer smoke commands in the plan.

@@ -29,7 +29,10 @@ class Connection implements ServerConnection {
         }
         this.receive(JSON.stringify(message));
     }
-    command(name: string, args: Record<string, unknown> = {}) { this.json({ type: 'command', name, args }); }
+    command(name: string, args: Record<string, unknown> = {}) {
+        if (name === 'observe') { const session = this.all('session').at(-1)?.session; args = { gameId: session?.gameId, generation: session?.generation, ...args }; }
+        this.json({ type: 'command', name, args });
+    }
     all(type: string): any[] { return this.messages.filter(m => typeof m === 'string').map(m => JSON.parse(m as string)).filter(m => m.type === type); }
     packets() { return this.messages.filter(m => m instanceof Uint8Array).map(m => decodePacket(m as Uint8Array)); }
 }
@@ -162,9 +165,9 @@ test('embedded physical host retains lifecycle ownership after admin transfer an
     a.close('left'); expect(server.session.state).toBe('ended'); expect(b.closed).toBe('Server closed');
 });
 
-test('unsupported spectators and multi-tick network frames cannot enter a match', () => {
+test('spectators are enabled while multi-tick network frames remain unsupported', () => {
     const { server, join } = setup({ allowSpectators: true }); const host = join('Host');
-    host.command('allow_spectators', { allow: true }); expect(server.session.allowSpectators).toBe(false);
+    host.command('allow_spectators', { allow: true }); expect(server.session.allowSpectators).toBe(true);
     expect(() => setup({ netFrameInterval: 2 })).toThrow('Invalid network timing');
 });
 
@@ -518,4 +521,91 @@ test('return during loading releases the loading barrier while physical departur
     a.json({ type: 'returnToLobby', reason: 'forfeit' });
     expect(server.session.state).toBe('waiting');
     expect(join('Replacement').closed).toBeUndefined();
+});
+
+test('observer roles release seats and exclude readiness, load and packet barriers', () => {
+    const { server, join } = setup(); const a = join('Host'), o = join('Observer', { role: 'observer' });
+    expect(server.session.clients[1].slotIndex).toBeNull();
+    a.command('map_ready', { digest: 'digest' }); a.command('startgame');
+    expect(a.all('startGame')).toHaveLength(1); expect(o.all('startGame')).toHaveLength(0);
+    a.json({ type: 'loaded', percent: 100 }); expect(a.all('allLoaded')).toHaveLength(1);
+    o.receive(encodeOrderPacket(2,1,new Uint8Array([9]))); o.receive(encodeSyncPacket(1,999));
+    expect(a.packets().some(p => p.kind === 'orders' && p.clientId === 2)).toBe(false);
+    expect(o.packets()).toHaveLength(0); expect(server.session.state).toBe('started');
+    o.command('map_ready', { digest:'digest' }); o.command('observe');
+    expect(o.all('startGame')[0].observer).toBe(true);
+});
+
+test('observer chat stamps identity and blocks cross-role whispers and forged team access', () => {
+    const { join } = setup(); const a=join('Host'), b=join('Ally'), o=join('Observer',{role:'observer'}), p=join('Other Observer',{role:'observer'});
+    a.command('player',{teamId:1}); b.command('player',{teamId:1});
+    o.json({type:'chat',to:'all',text:'leak'}); o.json({type:'chat',to:1,text:'leak'}); o.json({type:'chat',to:'team',text:'leak'});
+    expect(a.all('chat')).toHaveLength(0);
+    o.json({type:'chat',to:'observers',text:'hello',sender:{name:'Host'}});
+    expect(p.all('chat')[0].sender.name).toBe('Observer'); expect(a.all('chat')).toHaveLength(0);
+    a.json({type:'chat',to:'team',text:'attack'});
+    expect(o.all('chat').at(-1).text).toBe('attack'); expect(b.all('chat')).toHaveLength(1);
+    a.json({type:'chat',to:2,text:'private'}); expect(o.all('chat')).toHaveLength(2);
+});
+
+test('running joins authenticate into waiting without seats or team/history access', () => {
+    const { server, start, join }=setup(); const {a}=start(); const w=join('Waiting');
+    expect(server.session.clients.at(-1)?.role).toBe('waiting'); expect(server.session.clients.at(-1)?.slotIndex).toBeNull();
+    a.json({type:'chat',to:'team',text:'secret'}); expect(w.all('chat')).toHaveLength(0); expect(w.packets()).toHaveLength(0);
+    w.json({type:'chat',to:'observers',text:'bad'}); expect(w.all('error').at(-1).code).toBe('invalidCommand');
+    w.command('map_ready',{digest:'digest'}); w.command('observe'); expect(w.all('startGame')[0].observer).toBe(true);
+});
+
+test('late observers pull only agreed contiguous history and retries isolate observation attempts', () => {
+    const {start,join,server}=setup(); const {a,b}=start();
+    const o=join('Observer',{role:'observer'}); o.command('map_ready',{digest:'digest'}); o.command('observe');
+    const first=o.all('startGame')[0];
+    o.command('observe'); expect(o.all('startGame')).toHaveLength(1);
+    const pull=(fromFrame:number, observationId=first.observationId)=>o.json({type:'history',gameId:first.gameId,generation:first.generation,observationId,fromFrame});
+    a.receive(encodeSyncPacket(1,10)); pull(1); expect(o.all('history').at(-1).frames).toHaveLength(0);
+    b.receive(encodeSyncPacket(1,10)); pull(1); expect(o.all('history').at(-1).frames[0]).toEqual({frame:1,orders:[{clientId:1,actions:''},{clientId:2,actions:''}],drops:[],hash:10,defeatMask:'0'});
+    expect(o.packets()).toHaveLength(0);
+    o.json({type:'returnToLobby',gameId:first.gameId,generation:first.generation,observationId:first.observationId,reason:'finished'});
+    o.command('observe'); const second=o.all('startGame').at(-1); expect(second.observationId).toBeGreaterThan(first.observationId);
+    const count=o.all('history').length; pull(2); expect(o.all('history')).toHaveLength(count);
+    pull(1,second.observationId); expect(o.all('history').at(-1).frames).toHaveLength(1);
+    expect(server.session.state).toBe('started');
+});
+
+test('history exhaustion refuses observation without interrupting combatants', () => {
+    const {start,join,server}=setup({observerArchiveMaxBytes:1});const {a,b}=start();const o=join('Observer',{role:'observer'});
+    o.command('map_ready',{digest:'digest'});o.command('observe');expect(o.all('error').at(-1).code).toBe('observerUnavailable');
+    a.receive(encodeSyncPacket(1,10));b.receive(encodeSyncPacket(1,10));expect(server.session.state).toBe('started');expect(a.closed).toBeUndefined();
+});
+
+test('observer role restores a free seat, cannot claim occupied seats or kick active commanders', () => {
+ const {server,join}=setup();const a=join('Host'),b=join('Guest');b.command('role',{role:'observer'});expect(server.session.slots[1].type).toBe(1);
+ b.command('role',{role:'player'});expect(server.session.clients[1].role).toBe('player');expect(server.session.clients[1].slotIndex).toBe(1);
+ a.command('role',{role:'observer'});a.command('player',{slotIndex:1});expect(server.session.clients[0].role).toBe('observer');
+ b.command('map_ready',{digest:'digest'});b.command('state',{ready:true,mapDigest:'digest'});a.command('startgame');b.json({type:'loaded',percent:100});
+ const match=b.all('startGame')[0];a.command('kick_ai',{gameId:match.gameId,generation:match.generation,clientId:2});expect(b.closed).toBeUndefined();expect(server.session.state).toBe('started');
+});
+
+test('committed catch-up retains departed commander orders and scheduled AI drop', () => {
+ const {start,join}=setup({gameOpts:{...gameOpts,disconnectAi:true}});const {a,b}=start();
+ a.receive(encodeOrderPacket(1,1,new Uint8Array()));b.receive(encodeOrderPacket(2,1,new Uint8Array()));b.close('left');
+ for(let frame=1;frame<=3;frame++)a.receive(encodeSyncPacket(frame,frame*10));
+ a.receive(encodeOrderPacket(1,2,new Uint8Array()));a.receive(encodeSyncPacket(4,40));
+ const o=join('Observer',{role:'observer'});o.command('map_ready',{digest:'digest'});o.command('observe');const startMessage=o.all('startGame')[0];
+ o.json({type:'history',gameId:startMessage.gameId,generation:1,observationId:startMessage.observationId,fromFrame:1});
+ const frames=o.all('history')[0].frames;expect(frames[2].orders.map((p:any)=>p.clientId)).toEqual([1,2]);expect(frames[3].drops).toEqual([{clientId:2,frame:4,takeover:'ai'}]);
+});
+
+test('a stale observe command cannot promote a waiter or subscribe them to a later round', () => {
+    const { server, start, join } = setup(); const { a, b } = start(); const waiting = join('Next round');
+    const first = a.all('startGame')[0];
+    waiting.command('map_ready', { digest: 'digest' });
+    a.json({ type: 'returnToLobby', reason: 'finished' }); b.json({ type: 'returnToLobby', reason: 'finished' });
+    b.command('state', { ready: true, mapDigest: 'digest' }); a.command('startgame');
+    const second = a.all('startGame').at(-1); expect(second.generation).toBe(first.generation + 1);
+    waiting.command('observe', { gameId: first.gameId, generation: first.generation });
+    expect(waiting.all('startGame')).toHaveLength(0);
+    expect(server.session.clients.find(client => client.name === 'Next round')?.role).toBe('waiting');
+    waiting.command('observe'); expect(waiting.all('startGame')[0].generation).toBe(second.generation);
+    expect(server.session.clients.find(client => client.name === 'Next round')?.role).toBe('observer');
 });

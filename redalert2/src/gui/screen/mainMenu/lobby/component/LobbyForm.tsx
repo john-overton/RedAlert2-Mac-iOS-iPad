@@ -37,6 +37,7 @@ interface LobbyFormProps {
     messages?: any[];
     localUsername?: string;
     channels?: any[];
+    allowWhispers?: boolean;
     chatHistory?: any;
     activeSlotIndex: number;
     countryUiNames: any;
@@ -222,7 +223,7 @@ export class LobbyForm extends React.Component<LobbyFormProps> {
 
         {this.props.messages !== undefined &&
                 this.props.localUsername !== undefined &&
-                this.props.onSendMessage && (<Chat messages={this.props.messages} localUsername={this.props.localUsername} channels={this.props.channels ?? []} chatHistory={this.props.chatHistory} onSendMessage={this.props.onSendMessage} onCancelMessage={() => { }} tooltips={{
+                this.props.onSendMessage && (<Chat messages={this.props.messages} localUsername={this.props.localUsername} channels={this.props.channels ?? []} allowWhispers={this.props.allowWhispers} chatHistory={this.props.chatHistory} onSendMessage={this.props.onSendMessage} onCancelMessage={() => { }} tooltips={{
                     button: strings.get("STT:EmoteButton"),
                     input: isHost
                         ? strings.get("STT:HostEditInput")

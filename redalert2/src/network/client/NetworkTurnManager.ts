@@ -134,6 +134,7 @@ export class NetworkTurnManager {
     }
 
     private submitLocalTurn(tick: number): string | undefined {
+        if (this.matchSession.isObserver()) { this.inputActions.dequeueAll(); return; }
         if (this.submittedTicks.has(tick)) {
             return undefined;
         }

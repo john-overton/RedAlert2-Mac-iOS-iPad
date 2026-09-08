@@ -206,3 +206,51 @@ test('two rounds reuse a connection, with stale round traffic isolated and lobby
         expect(errors).toEqual([]);
     } finally { lobby.close(); }
 });
+
+test('observers can cancel and restart in the same generation without stale history or assignment changes', async () => {
+    const socket = new FakeSocket();
+    const lobby = new LobbyClient(new WebSocketConnection(() => socket as any));
+    const connecting = lobby.connect('host', {...hello,role:'observer'});
+    socket.open(); await Promise.resolve();
+    socket.receive({type:'welcome',clientId:9,session:{state:'started',gameId:'round',generation:1,clients:[{id:1,name:'Alice',admin:true},{id:9,name:'Watcher',role:'observer'}]}});
+    await connecting;
+    const start = (observationId:number) => ({type:'startGame',observer:true,observationId,liveFrame:0,gameId:'round',generation:1,timestamp:1,
+        gameOpts:{players:[{name:'Alice'}]},humanAssignments:[{clientId:1,slotIndex:0,name:'Alice'}],clientIds:[1],orderLatency:2,netFrameInterval:1});
+    const errors:unknown[]=[];lobby.onError.subscribe(error=>errors.push(error));
+    try {
+        lobby.observeGame();const pendingCount=socket.sent.length;lobby.observeGame();expect(socket.sent).toHaveLength(pendingCount);expect(JSON.parse(socket.sent.at(-1)!)).toMatchObject({name:'observe',args:{gameId:'round',generation:1}});
+        socket.receive(start(1));const first=lobby.getMatchSession();
+        expect(first.isObserver()).toBe(true);expect(first.descriptor.localPlayerName).toBe('Watcher');
+        expect(first.descriptor.humanAssignments).toEqual([{peerId:'1',slotIndex:0,name:'Alice'}]);
+        expect(first.descriptor.gameOpts).toEqual(start(1).gameOpts);
+        first.returnToLobby('finished');lobby.observeGame();socket.receive(start(2));const second=lobby.getMatchSession();
+        expect(second).not.toBe(first);second.reportLoadProgress(100);
+        socket.receive(start(1));expect(lobby.getMatchSession()).toBe(second);
+        socket.receive({type:'history',gameId:'round',generation:1,observationId:1,fromFrame:1,frames:[{frame:1,orders:[{clientId:1,actions:''}],drops:[],hash:0,defeatMask:'0'}],liveFrame:1,allLoaded:true});
+        expect(second.areAllPlayersLoaded()).toBe(false);
+        let notified = false;second.onMatchEnded.subscribe(()=>{expect(lobby.getMatchSession()).toBe(second);notified=true;});
+        socket.receive({type:'matchEnded',gameId:'round',generation:1,reason:'finished'});
+        expect(notified).toBe(true);expect(()=>lobby.getMatchSession()).toThrow('not started');expect(errors).toEqual([]);
+    } finally {lobby.close();}
+});
+
+test('pending observation resets across room transitions but stale snapshots and end messages cannot reset a new request', async () => {
+    const socket=new FakeSocket();const lobby=new LobbyClient(new WebSocketConnection(()=>socket as any));
+    const connecting=lobby.connect('host',{...hello,role:'observer'});socket.open();await Promise.resolve();
+    const round=(generation:number,state='started')=>({state,generation,gameId:state==='started'?`round-${generation}`:undefined,clients:[{id:9,name:'Watcher',role:'observer'}]});
+    socket.receive({type:'welcome',clientId:9,session:round(1)});await connecting;
+    const count=()=>socket.sent.map(data=>JSON.parse(data)).filter(message=>message.name==='observe').length;
+    try {
+        lobby.observeGame();expect(count()).toBe(1);
+        socket.receive({type:'session',session:round(1)});lobby.observeGame();expect(count()).toBe(1);
+        // A new session can arrive after the server ignored an old request, with no observer start reply.
+        socket.receive({type:'session',session:round(2)});lobby.observeGame();expect(count()).toBe(2);
+        socket.receive({type:'session',session:round(1)});
+        socket.receive({type:'matchEnded',gameId:'round-1',generation:1,reason:'finished'});
+        expect(lobby.session?.generation).toBe(2);lobby.observeGame();expect(count()).toBe(2);
+        socket.receive({type:'session',session:round(2,'waiting')});
+        expect(()=>lobby.observeGame()).toThrow('No active game');
+        socket.receive({type:'session',session:round(3)});lobby.observeGame();expect(count()).toBe(3);
+        expect(JSON.parse(socket.sent.at(-1)!)).toMatchObject({name:'observe',args:{gameId:'round-3',generation:3}});
+    } finally {lobby.close();}
+});

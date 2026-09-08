@@ -1,6 +1,6 @@
 # Multiplayer observers and persistent lobbies — implementation handoff
 
-Status: persistent-room foundation implemented locally; observer milestones remain planned. Updated 2026-09-08.
+Status: persistent rooms, observer roles, spectator chat and bounded late-join catch-up implemented. Updated 2026-09-08.
 
 ## Current implementation checkpoint
 
@@ -13,27 +13,29 @@ departure policy. Each remaining commander must independently leave its round
 before another can start; an individual completion claim cannot reset a match
 that still has other commanders. Desync is reported separately from completion.
 
-This is the persistent-room foundation, **not observer support**. Observer role
-selection, spectator chat routing/badges, running-room admission, bounded match
-history and catch-up remain unimplemented. Keep observer controls disabled until
-those paths and their isolation tests exist. See the latest validation entry in
-[MULTIPLAYER_PROGRESS.md](MULTIPLAYER_PROGRESS.md) for checks actually run.
+Observer roles now work in waiting and running rooms, including rooms with no
+free commander seat. Default running-room joins wait for an explicit Observe Game
+choice; joining explicitly as Observer starts observation after content validation.
+Observers use the original roster and seed plus a detached local observer, replaying
+committed frame history without sending orders or syncs or entering player barriers.
+Chat audiences are enforced by the server, with immutable identity/team metadata.
+Handshake protocol is now **4**; binary orders remain **3**.
 
-## Start here
+History is capped at 64 MiB of accounted payload or 100,000 frames per match,
+including pending frames. Exhaustion disables observation without stopping players.
+History pulls return at most 32 frames / 64 KiB; the observer uses bounded buffering
+and an 8 ms catch-up simulation budget with reduced rendering and historical
+sound/EVA suppression. Observation attempt IDs protect cancellation and same-round
+retry. See [MULTIPLAYER_PROGRESS.md](MULTIPLAYER_PROGRESS.md) for validation.
 
-Implement this document's observer and persistent-room workflow on branch
-`allied-campaign` in `/Users/johnoverton/RedAlert2-Mac-iOS-iPad`.
-The user will start a fresh conversation using this document. The preceding
-conversation is not needed. Read the relevant code before making changes; the
-protocol and lifecycle details below describe the current baseline, not a final
-API design. Work autonomously within this scope and run the relevant checks.
-Do not publish, push, or send messages to other people. The user authorized the
-local solo-start patch commit and this plan; observer implementation is future
-work for the restarted session.
+## Scope and remaining acceptance
 
-The game is primarily Yuri's Revenge, with original RA2 campaign work carried
-forward. Shared web/engine/network code serves native macOS and Linux builds.
-Preserve classic RA2 support too. Full imported assets already exist locally.
+Shared web/engine/network code serves native macOS and Linux builds and retains
+classic RA2 support. Physical Mac/Linux interoperability and iPad performance still
+need device acceptance. The implementation below is local; do not publish, push,
+or send messages to other people without authorization. Remaining sections preserve
+the requirements and design rationale; the checkpoint above describes implemented
+behavior rather than treating every original milestone as future work.
 
 ## User requirements
 
@@ -253,6 +255,9 @@ RA2_HTTP=1 node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 4001 --str
 # Run from repository root with the development server above running
 RA2_DEV_URL=http://127.0.0.1:4001 PLAYWRIGHT_CHROMIUM_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' ~/.bun/bin/bun scripts/lockstep-engine-smoke.mjs
 RA2_DEV_URL=http://127.0.0.1:4001 RA2_SOLO_SMOKE=1 PLAYWRIGHT_CHROMIUM_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' ~/.bun/bin/bun scripts/lockstep-engine-smoke.mjs
+~/.bun/bin/bun scripts/observer-engine-smoke.mjs
+RA2_OBSERVER_LONG_SMOKE=1 ~/.bun/bin/bun scripts/observer-engine-smoke.mjs
+~/.bun/bin/bun scripts/observer-lobby-ui-smoke.mjs
 # Add RA2_GAME_UI_SMOKE=1 to the two-client run for existing HUD chat checks.
 # Do not combine that flag with the solo mode (HUD test expects two clients).
 bash scripts/build-macos.sh
@@ -285,8 +290,7 @@ the right app. Applications/Dock copies may still point at older binaries.
 
 ## Additional completed side quest after this plan was committed
 
-The working tree now also contains an implemented connection-stall/AI-takeover
-patch (not yet committed at handoff). Preserve it; inspect `git status` and
+The baseline includes the connection-stall/AI-takeover patch. Preserve it; inspect `git status` and
 `docs/MULTIPLAYER_PROGRESS.md` before starting observer work. It adds:
 
 - `NetworkStallOverlay.tsx` and `networkStall.css`: centered, wall-clock stall UI;
@@ -307,6 +311,6 @@ patch (not yet committed at handoff). Preserve it; inspect `git status` and
 Observer catch-up MUST include these deterministic takeover/destruction actions,
 not only ordinary player commands. A waiting/observing connection must never
 appear as a lagging commander, be turned into AI, or trigger army destruction.
-Host Quit still stops embedded hosting; retaining the host's connection/process
-when its commander leaves remains part of the persistent-room work above.
+Return to Lobby now retains the host connection/process; explicit Leave Server
+still stops embedded hosting.
 This patch does not provide reconnect/resume or replace the observer roadmap.

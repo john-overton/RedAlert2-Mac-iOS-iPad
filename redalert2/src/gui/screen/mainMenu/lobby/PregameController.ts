@@ -80,6 +80,7 @@ export interface PregameSnapshot {
 export interface PregameLobbyFormOptions {
     lobbyType: LobbyType;
     activeSlotIndex: number;
+    allowWhispers?: boolean;
     selectedGameServer?: string;
     messages?: any[];
     localUsername?: string;
@@ -354,6 +355,7 @@ export class PregameController {
             mpDialogSettings,
             selectedGameServer: options.selectedGameServer,
             activeSlotIndex: options.activeSlotIndex,
+            allowWhispers: options.allowWhispers,
             teamsAllowed: mpDialogSettings.alliesAllowed,
             teamsRequired: mpDialogSettings.mustAlly,
             playerSlots,

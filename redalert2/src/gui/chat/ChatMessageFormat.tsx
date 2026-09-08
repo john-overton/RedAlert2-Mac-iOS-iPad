@@ -24,7 +24,10 @@ export class ChatMessageFormat {
             name: string;
         };
         from: string;
+        badge?: { label: string; color: string };
+        senderColor?: string;
     }) {
+        if (message.badge) return `[${message.badge.label}] ${message.from}:`;
         let prefix: string;
         if (message.to.type === ChatRecipientType.Channel) {
             prefix = message.to.name === RECIPIENT_TEAM
@@ -50,6 +53,8 @@ export class ChatMessageFormat {
             name: string;
         };
         from: string;
+        badge?: { label: string; color: string };
+        senderColor?: string;
         time: Date;
     }, onUserClick?: (username: string) => void): React.ReactNode {
         const displayName = message.to.type === ChatRecipientType.Whisper && message.from === this.localUsername
@@ -58,7 +63,7 @@ export class ChatMessageFormat {
         let formattedName: React.ReactNode = displayName;
         const userPlaceholder = "{user}";
         if (message.to.type !== ChatRecipientType.Page) {
-            const userColor = this.userColors?.get(message.from);
+            const userColor = message.senderColor ?? this.userColors?.get(message.from);
             if (userColor !== undefined) {
                 formattedName = React.createElement("span", { style: { color: userColor } }, formattedName);
             }
@@ -68,6 +73,8 @@ export class ChatMessageFormat {
             }
         }
         const timestamp = this.strings.get("TS:ChatTimestamp", message.time.toLocaleTimeString(undefined, { timeStyle: "short" })) + " ";
+        if (message.badge) return React.createElement(React.Fragment, null, timestamp,
+            React.createElement("span", { style: { color: message.badge.color } }, `[${message.badge.label}] `), formattedName, ":");
         let formatString: string;
         if (message.to.type === ChatRecipientType.Channel) {
             formatString = message.to.name === RECIPIENT_TEAM

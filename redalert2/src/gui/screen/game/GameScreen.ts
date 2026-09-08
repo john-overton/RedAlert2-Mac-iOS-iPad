@@ -1,3 +1,4 @@
+import { ObserverCatchupOverlay } from './ObserverCatchupOverlay';
 import { NetworkStallOverlay } from './NetworkStallOverlay';
 import { recordCampaignProgress } from '@/data/campaign/CampaignProgress';
 import { controllableObjects } from '@/game/campaign/CampaignControl';
@@ -160,6 +161,23 @@ export class GameScreen extends RootScreen {
         const gameId = lanLaunch?.gameId ?? params.gameId;
         const timestamp = lanLaunch?.timestamp ?? params.timestamp;
         this.returnTo = params.returnTo ?? lanLaunch?.returnRoute;
+        if (this.lanMatchSession instanceof NetworkMatchSession && this.lanMatchSession.isObserver()) {
+            const match = this.lanMatchSession;
+            const ended = () => {
+                cancellationTokenSource.cancel();
+                this.gameEndHandled = true;
+                this.gameTurnMgr?.setErrorState();
+                this.gameAnimationLoop?.stop();
+                queueMicrotask(() => {
+                    if (this.lanMatchSession !== match) return;
+                    match.returnToLobby('forfeit');
+                    this.controller?.goToScreen(ScreenType.MainMenuRoot, { route: this.returnTo });
+                });
+            };
+            match.onMatchEnded.subscribe(ended);
+            this.disposables.add(() => match.onMatchEnded.unsubscribe(ended));
+            if (match.matchEnded) { ended(); return; }
+        }
         this.isTournament = params.tournament;
         const playerName = this.playerName = lanLaunch?.localPlayerName ?? params.playerName;
         const isSinglePlayer = this.isSinglePlayer = params.create && params.singlePlayer;
@@ -203,6 +221,7 @@ export class GameScreen extends RootScreen {
         let mapFile: any;
         try {
             const mapFileData = await this.transferAndLoadMapFile(params, gameOpts.mapName, gameOpts.mapDigest, cancellationToken);
+            if (cancellationToken.isCancelled()) return;
             if (!gameOpts.mapOfficial) {
                 this.debugMapFile = mapFileData;
                 this.disposables.add(() => this.debugMapFile = undefined);
@@ -238,7 +257,7 @@ export class GameScreen extends RootScreen {
         }
         let gameLoadResult: any;
         try {
-            gameLoadResult = await this.gameLoader.load(gameId, timestamp, gameOpts, mapFile, playerName, this.isSinglePlayer, loadingScreenApi, cancellationToken);
+            gameLoadResult = await this.gameLoader.load(gameId, timestamp, gameOpts, mapFile, playerName, this.isSinglePlayer, loadingScreenApi, cancellationToken, this.lanMatchSession instanceof NetworkMatchSession && this.lanMatchSession.isObserver());
         }
         catch (error) {
             console.error('[GameScreen] Failed to load game', {
@@ -254,6 +273,8 @@ export class GameScreen extends RootScreen {
             return;
         }
         if (cancellationToken.isCancelled()) {
+            gameLoadResult.game.dispose();
+            Engine.unloadTheater(gameLoadResult.theater.type);
             return;
         }
         const { game, theater, hudSide, cameoFilenames } = gameLoadResult;
@@ -264,7 +285,8 @@ export class GameScreen extends RootScreen {
         this.disposables.add(game, () => this.game = undefined, () => Engine.unloadTheater(theater.type));
         let localPlayer: any;
         try {
-            localPlayer = game.getPlayerByName(playerName);
+            localPlayer = this.lanMatchSession instanceof NetworkMatchSession && this.lanMatchSession.isObserver()
+                ? game.localPlayer : game.getPlayerByName(playerName);
         }
         catch (error) {
             console.error('[GameScreen] Failed to resolve local player after load', {
@@ -686,6 +708,7 @@ export class GameScreen extends RootScreen {
             ? new SidebarModel(game, this.replay)
             : new CombatantSidebarModel(localPlayer, game);
         const messageList = new MessageList(game.rules.audioVisual.messageDuration, 6, undefined);
+        messageList.observerChat = this.lanMatchSession instanceof NetworkMatchSession && this.lanMatchSession.isObserver();
         const chatHistory = new ChatHistory();
         this.sidebarModel = sidebarModel;
         this.disposables.add(() => this.sidebarModel = undefined);
@@ -734,7 +757,14 @@ export class GameScreen extends RootScreen {
             ? new NetworkTurnManager(game, localPlayer, actionQueue, actionFactory, lanMatchSession, this.actionLogger, this.lockstepLogger, replayRecorder)
             : new LanLockstepTurnManager(game, localPlayer, actionQueue, actionFactory, lanMatchSession, this.actionLogger, this.lockstepLogger, replayRecorder);
         if (lockstepManager instanceof NetworkTurnManager) {
-            this.disposables.add(new NetworkStallOverlay(lanMatchSession as NetworkMatchSession, lockstepManager, () => this.activeWorldScene?.viewport ?? this.viewport.value));
+            const match = lanMatchSession as NetworkMatchSession;
+            if (match.isObserver()) {
+                const returnToLobby = () => {
+                    match.returnToLobby('forfeit');
+                    this.controller?.goToScreen(ScreenType.MainMenuRoot, { route: this.returnTo });
+                };
+                this.disposables.add(new ObserverCatchupOverlay(match, returnToLobby));
+            } else this.disposables.add(new NetworkStallOverlay(match, lockstepManager, () => this.activeWorldScene?.viewport ?? this.viewport.value));
             const onFatalError = (error: { message: string }) => this.handleError(new Error(error.message), error.message);
             lockstepManager.onFatalError.subscribe(onFatalError);
             this.disposables.add(() => lockstepManager.onFatalError.unsubscribe(onFatalError));
@@ -1190,6 +1220,8 @@ export class GameScreen extends RootScreen {
         this.gameAnimationLoop = new GameAnimationLoop(localPlayer, this.renderer, this.sound, this.gameTurnMgr, {
             skipFrames: true,
             skipBudgetMillis: 8,
+            isCatchingUp: this.lanMatchSession instanceof NetworkMatchSession && this.lanMatchSession.isObserver()
+                ? () => (this.lanMatchSession as NetworkMatchSession | undefined)?.isCatchingUp() ?? false : undefined,
             frameLimit: this.generalOptions.graphics.frameLimit,
             // Live getter, so an OS thermal transition mid-match takes effect on
             // the very next frame with nothing to subscribe or tear down.

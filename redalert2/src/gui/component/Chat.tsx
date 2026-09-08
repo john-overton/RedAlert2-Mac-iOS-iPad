@@ -38,6 +38,7 @@ interface ChatProps {
         };
     };
     channels?: any[];
+    allowWhispers?: boolean;
     localUsername?: string;
     userColors?: any;
     onSendMessage: (message: any) => void;
@@ -62,7 +63,7 @@ export class Chat extends Component<ChatProps> {
           {messages.map((message, index) => this.renderMessage(message, index))}
         </div>
         <div className="new-message-wrapper">
-          <ChatInput ref={el => { this.textBox = el; }} chatHistory={chatHistory} channels={channels} className="new-message" tooltip={tooltips?.input} strings={strings} onSubmit={this.props.onSendMessage} onCancel={this.props.onCancelMessage}/>
+          <ChatInput ref={el => { this.textBox = el; }} chatHistory={chatHistory} channels={channels} allowWhispers={this.props.allowWhispers} className="new-message" tooltip={tooltips?.input} strings={strings} onSubmit={this.props.onSendMessage} onCancel={this.props.onCancelMessage}/>
           <button className="icon-button send-message-button" data-r-tooltip={tooltips?.button} onClick={() => this.textBox?.send()}/>
         </div>
       </div>);
@@ -91,7 +92,7 @@ export class Chat extends Component<ChatProps> {
         const classes = ["message"];
         let prefix: React.ReactNode;
         if (message.from !== undefined) {
-            prefix = formatter.formatPrefixHtml(message, (name: string) => {
+            prefix = formatter.formatPrefixHtml(message, this.props.allowWhispers === false ? undefined : (name: string) => {
                 if (this.props.chatHistory &&
                     message.to &&
                     message.to.type !== ChatRecipientType.Page &&

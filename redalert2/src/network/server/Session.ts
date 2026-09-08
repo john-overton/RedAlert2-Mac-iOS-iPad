@@ -3,6 +3,7 @@ import type { SlotInfo } from '../gameopt/SlotInfo';
 
 export interface SessionClient {
     id: number;
+    role: 'player' | 'observer' | 'waiting';
     name: string;
     slotIndex: number | null;
     countryId: number;
@@ -29,4 +30,5 @@ export interface Session {
     orderLatency: number;
     netFrameInterval: number;
     allowSpectators: boolean;
+    observationUnavailable?: string;
 }

@@ -15,7 +15,8 @@ import { LobbyType, PlayerStatus, SlotOccupation } from '@/gui/screen/mainMenu/l
 import { SlotType } from '@/network/gameopt/SlotInfo';
 import { ChatHistory } from '@/gui/chat/ChatHistory';
 import { ChatRecipientType } from '@/network/chat/ChatMessage';
-import { RECIPIENT_ALL, RECIPIENT_TEAM } from '@/network/gservConfig';
+import { chatBadge } from '@/gui/screen/game/NetworkChatHandler';
+import { RECIPIENT_ALL, RECIPIENT_TEAM, RECIPIENT_OBSERVERS } from '@/network/gservConfig';
 import { OBS_TEAM_ID } from '@/game/gameopts/constants';
 import { LobbyClient } from '@/network/client/LobbyClient';
 import { createMultiplayerIdentity } from '@/network/MultiplayerIdentity';
@@ -35,6 +36,10 @@ export class MultiplayerScreen extends MainMenuScreen {
     private error?: string;
     private hosting = false;
     private launching = false;
+    private joinRole: 'player' | 'observer' = 'player';
+    private observePending = false;
+    private observePendingGeneration?: number;
+    private autoObserveGeneration?: number;
     private addresses: string[] = [];
     private messages: any[] = [];
     private chatHistory = new ChatHistory();
@@ -64,6 +69,7 @@ export class MultiplayerScreen extends MainMenuScreen {
 
     onEnter(): void {
         this.launching = false;
+        this.observePending = false;
         this.active = true;
         this.controller.toggleMainVideo(false);
         // Game teardown restores base resources before sibling menu screens are
@@ -176,24 +182,28 @@ export class MultiplayerScreen extends MainMenuScreen {
                 if (this.active && client === this.client) this.form?.applyOptions((options: any) => { options.connectionHealth = health; });
             });
             client.onChat.subscribe(message => {
-                const name = client.session?.clients.find(member => member.id === message.clientId)?.name || 'Commander';
-                const recipient = typeof message.to === 'number' ? client.session?.clients.find(member => member.id === message.to)?.name || 'Commander' : message.to === 'team' ? RECIPIENT_TEAM : RECIPIENT_ALL;
-                this.messages = [...this.messages, { from: name, to: { type: typeof message.to === 'number' ? ChatRecipientType.Whisper : ChatRecipientType.Channel, name: recipient }, text: message.text, time: new Date() }].slice(-180);
+                const name = message.sender.name;
+                const recipient = typeof message.to === 'number' ? message.recipient?.name || 'Commander' : message.to === 'team' ? RECIPIENT_TEAM : message.to === 'observers' ? RECIPIENT_OBSERVERS : RECIPIENT_ALL;
+                this.messages = [...this.messages, { from: name, to: { type: typeof message.to === 'number' ? ChatRecipientType.Whisper : ChatRecipientType.Channel, name: recipient }, text: message.text, time: new Date(), sender: { ...message.sender }, recipient: message.recipient ? { ...message.recipient } : undefined,
+                    badge: chatBadge(message.to, message.sender.teamId), senderColor: [...this.rules.getMultiplayerColors().values()][message.sender.colorId]?.asHexString() ?? '#fff' }].slice(-180);
                 this.render();
             });
             client.onError.subscribe(error => {
                 if (client !== this.client) return;
+                this.observePending = false;
                 if (error.disconnected || error.code === 'disconnected' || error.code === 'kicked') {
                     void this.disconnect().then(() => this.report(error));
                 } else this.report(error);
             });
             client.onStartGame.subscribe(() => {
                 const match = client.getMatchSession();
+                this.observePending = false;
+                this.autoObserveGeneration = match.start.generation;
                 this.launching = true;
                 this.rootController.goToScreen(ScreenType.Game, { create: true, lanLaunch: match.getLaunchDescriptor(),
                     lanMatchSession: match, persistentRoom: true, returnTo: new MainMenuRoute(MainMenuScreenType.Multiplayer, {}) });
             });
-            await client.connect(address, { ...identity, type: 'hello', name: this.fields.playerName.trim(), password: this.fields.password });
+            await client.connect(address, { ...identity, type: 'hello', name: this.fields.playerName.trim(), password: this.fields.password, role: host ? 'player' : this.joinRole });
             if (generation !== this.generation || client !== this.client) { client.close(); return; }
             if (host && !client.session!.gameOpts.mapOfficial) {
                 await this.publishSelectedMap(this.pregame.getSnapshot());
@@ -214,10 +224,37 @@ export class MultiplayerScreen extends MainMenuScreen {
     }
 
     private onSession = (session: Session): void => {
+        if (session.state !== 'started' || session.generation !== this.observePendingGeneration) this.observePending = false;
         this.hydrateSession(session);
         this.render();
-        if (this.active && session.state === 'waiting') void this.checkContent(session);
+        if (this.active && !this.launching) void this.checkContent(session).then(() => {
+            const current = this.client?.session;
+            const self = current?.clients.find(member => member.id === this.client?.clientId);
+            if (this.active && current?.state === 'started' && self?.role === 'observer'
+                && this.autoObserveGeneration !== current.generation && this.canObserve(current)) {
+                this.autoObserveGeneration = current.generation;
+                this.observeGame();
+            }
+        });
     };
+
+    private canObserve(session: Session): boolean {
+        const self = session.clients.find(member => member.id === this.client?.clientId);
+        return Boolean(session.state === 'started' && session.allowSpectators && !session.observationUnavailable
+            && self?.role !== 'player' && self?.mapReady && this.validatedMap === session.gameOpts.mapDigest
+            && !this.contentBusy && (!session.content || (self.contentReady === session.content.id && this.mountedContent === session.content.id)));
+    }
+
+    private observeGame(): void {
+        const session = this.client?.session;
+        if (!session || !this.canObserve(session) || this.observePending) return;
+        this.observePending = true;
+        this.observePendingGeneration = session.generation;
+        this.error = undefined;
+        this.render();
+        try { this.client!.observeGame(); }
+        catch (error) { this.observePending = false; this.report(error); }
+    }
 
     private async publishSelectedMap(snapshot: any): Promise<void> {
         const client = this.client;
@@ -423,6 +460,8 @@ export class MultiplayerScreen extends MainMenuScreen {
         this.pregame = new PregameController(this.strings, this.rules, this.mapFileLoader,
             this.mapList, this.gameModes, this.localPrefs, this.fields.playerName);
         this.launching = false;
+        this.observePending = false;
+        this.autoObserveGeneration = undefined;
         this.chatHistory.reset();
         if (this.active) {
             this.controller.setSidebarPreview();
@@ -434,12 +473,13 @@ export class MultiplayerScreen extends MainMenuScreen {
         const self = session.clients.find(member => member.id === this.client?.clientId);
         const props = this.pregame.createLobbyFormProps({ lobbyType: session.state === 'waiting' && self?.admin && !self.ready ? LobbyType.MultiplayerHost : LobbyType.MultiplayerGuest,
             activeSlotIndex: self?.slotIndex ?? -1, messages: this.messages, localUsername: self?.name,
-            chatHistory: this.chatHistory, channels: [RECIPIENT_ALL, RECIPIENT_TEAM], onSendMessage: (message: any) => {
+            chatHistory: this.chatHistory, channels: self?.role === 'observer' ? [RECIPIENT_OBSERVERS] : self?.role === 'waiting' || session.state === 'started' ? [RECIPIENT_ALL] : [RECIPIENT_ALL, RECIPIENT_TEAM],
+            allowWhispers: self?.role !== 'observer', onSendMessage: (message: any) => {
                 const text = typeof message === 'string' ? message : message?.value;
                 if (!text?.trim()) return;
                 const recipient = message?.recipient;
-                let target: 'all' | 'team' | number = recipient?.name === RECIPIENT_TEAM ? 'team' : 'all';
-                if (recipient?.type === ChatRecipientType.Whisper) {
+                let target: 'all' | 'team' | 'observers' | number = self?.role === 'observer' ? 'observers' : recipient?.name === RECIPIENT_TEAM ? 'team' : 'all';
+                if (self?.role !== 'observer' && recipient?.type === ChatRecipientType.Whisper) {
                     const member = session.clients.find(member => member.name === recipient.name);
                     if (!member) { this.report('That commander has left the game.'); return; }
                     target = member.id;
@@ -493,12 +533,20 @@ export class MultiplayerScreen extends MainMenuScreen {
         if (!this.active) return;
         const session = this.client?.session;
         const self = session?.clients.find(member => member.id === this.client?.clientId);
-        const canReady = Boolean(session?.state === 'waiting' && self?.mapReady && !this.contentBusy && (!session?.content || self.contentReady === session.content.id));
+        const canReady = Boolean(session?.state === 'waiting' && self?.role === 'player' && self?.mapReady && !this.contentBusy && (!session?.content || self.contentReady === session.content.id));
         const ready = () => { if (canReady) this.send('state', { ready: !self?.ready }); };
         const props = { fields: this.fields, busy: this.busy, error: this.error, canHost: Boolean((window as any).__RA2_SHELL__?.hostGame),
             lobbyProps: session ? this.lobbyProps(session) : undefined, serverName: session?.serverName, addresses: this.addresses,
             status: session?.state === 'started' ? 'Match in progress — waiting for the next round' : session?.state === 'ended' ? 'Match stopped — waiting for commanders to return' : session ? `${session.clients.filter(member => member.ready).length}/${session.clients.length} ready` : undefined,
             matchRunning: Boolean(session && session.state !== 'waiting'),
+            role: self?.role, joinRole: this.joinRole,
+            onJoinRole: (role: 'player' | 'observer') => { this.joinRole = role; this.render(); },
+            onRole: (role: 'player' | 'observer') => this.send('role', { role }),
+            allowObservers: session?.allowSpectators,
+            observers: session?.clients.filter(member => member.slotIndex === null).map(member => ({ name: member.name, role: member.role })),
+            canObserve: Boolean(session && this.canObserve(session) && !this.observePending),
+            observePending: this.observePending, observationUnavailable: session?.observationUnavailable,
+            onObserve: () => this.observeGame(), onWait: () => { if (session) this.autoObserveGeneration = session.generation; this.error = undefined; this.render(); },
             contentStatus: this.contentStatus, contentBusy: this.contentBusy,
             canManageContent: session?.state === 'waiting' && self?.admin, hasContent: Boolean(session?.content?.files.length),
             onContentFiles: (files: File[]) => void this.importContent(files), onRemoveContent: () => void this.removeContent(),
@@ -515,7 +563,7 @@ export class MultiplayerScreen extends MainMenuScreen {
             this.controller.setMainComponent(component);
         }
         const buttons: any[] = session ? [
-            ...(self?.admin ? [{ label: 'Start Game', disabled: session.state !== 'waiting' || !session.clients.every(member => member.ready && member.mapReady && (!session.content || member.contentReady === session.content.id)) || !session.clients.some(member => member.slotIndex !== null),
+            ...(self?.admin ? [{ label: 'Start Game', disabled: session.state !== 'waiting' || !session.clients.filter(member => member.role === 'player' && member.slotIndex !== null).every(member => member.ready && member.mapReady && (!session.content || member.contentReady === session.content.id)) || !session.clients.some(member => member.slotIndex !== null),
                 onClick: () => this.send('startgame') }, { label: 'Change Map', disabled: session.state !== 'waiting' || self.ready || this.contentBusy, onClick: () => this.controller.pushScreen(MainMenuScreenType.MapSelection,
                     { lobbyType: LobbyType.MultiplayerHost, gameOpts: this.pregame.getGameOpts(), usedSlots: () => this.pregame.getUsedSlots() }) }] : []),
             { label: self?.ready ? 'Cancel Ready' : 'Ready', disabled: !canReady, onClick: ready },

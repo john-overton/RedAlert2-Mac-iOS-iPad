@@ -44,6 +44,7 @@ interface PlaybackHandle {
     stop(): void;
 }
 export class Sound {
+    public gameplaySuppressed = false;
     private audioSystem: AudioSystem;
     private audioFiles: AudioFiles;
     private soundSpecs: SoundSpecs;
@@ -122,6 +123,7 @@ export class Sound {
         }
     }
     private playWithOptions(spec: SoundSpec, channel: ChannelType, volume: number, pan: number, limit: number, loops: number): PlaybackHandle | undefined {
+        if (this.gameplaySuppressed && channel !== ChannelType.Ui) return;
         if (!spec.sounds.length)
             return;
         this.cleanOldHandles();

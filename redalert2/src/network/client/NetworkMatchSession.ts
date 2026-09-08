@@ -6,6 +6,7 @@ import { WebSocketConnection } from './WebSocketConnection';
 
 /** Server-authoritative frame buffer. Wire frame 1 corresponds to simulation tick 0. */
 export class NetworkMatchSession {
+    readonly onMatchEnded = new EventDispatcher<this, Extract<ServerMessage, { type: 'matchEnded' }>>();
     readonly onReturnToLobby = new EventDispatcher<this, 'finished' | 'forfeit'>();
     readonly onChat = new EventDispatcher<this, Extract<ServerMessage, { type: 'chat' }>>();
     readonly onSnapshotChange = new EventDispatcher<this, LanMatchSnapshotState>();
@@ -24,13 +25,21 @@ export class NetworkMatchSession {
     private lastLocalSync = 0;
     private lastConsumedFrame = 0;
     private allLoaded = false;
+    private observerLoaded = false;
+    private historyNextFrame = 1;
+    private historyPending?: number;
+    private historyTimer?: ReturnType<typeof setTimeout>;
+    private liveFrame = 0;
+    private readonly agreedSyncs = new Map<number, string>();
     private disposed = false;
     private leftRoom = false;
     private returnedToLobby = false;
     fatalError?: { message: string; frame?: number };
+    matchEnded?: Extract<ServerMessage, { type: 'matchEnded' }>;
 
     constructor(readonly connection: WebSocketConnection, readonly start: StartGameMessage, readonly descriptor: LanLaunchDescriptor) {
         if (start.netFrameInterval !== 1) throw new Error('Unsupported network frame interval.');
+        this.liveFrame = start.liveFrame ?? 0;
         this.active = new Set(start.clientIds.map(String));
         this.connection.onMessage.subscribe(this.receive);
         this.connection.onClose.subscribe(this.closed);
@@ -38,20 +47,26 @@ export class NetworkMatchSession {
 
     getLaunchDescriptor(): LanLaunchDescriptor { return this.descriptor; }
     getHumanAssignment(peerId: string) { return this.descriptor.humanAssignments.find(item => item.peerId === peerId); }
+    isObserver(): boolean { return this.start.observer === true; }
+    getCatchupProgress(): { frame: number; liveFrame: number } { return { frame: this.lastConsumedFrame, liveFrame: this.liveFrame }; }
+    isCatchingUp(): boolean { return this.isObserver() && this.liveFrame - this.lastConsumedFrame > 2; }
+    notifyMatchEnded(message: Extract<ServerMessage, { type: 'matchEnded' }>): void { this.matchEnded = message; this.onMatchEnded.dispatch(this, message); }
     isHost(): boolean { return this.descriptor.localPeerId === this.descriptor.hostPeerId; }
     kickToAi(clientId: number): void {
         this.controlError = undefined;
         if (this.isHost()) this.send(() => this.connection.sendImmediate({ type: 'command', name: 'kick_ai', args: { clientId, gameId: this.start.gameId, generation: this.start.generation } }));
     }
     takesOverWithAi(peerId: string): boolean { return this.aiTakeovers.has(peerId); }
-    areAllPlayersLoaded(): boolean { return this.allLoaded; }
-    sendChat(to: 'all' | 'team' | number, text: string): void {
+    areAllPlayersLoaded(): boolean { return this.allLoaded && (!this.isObserver() || (this.observerLoaded && (this.lastConsumedFrame > 0 || this.frames.has(1)))); }
+    sendChat(to: 'all' | 'team' | 'observers' | number, text: string): void {
         this.send(() => this.connection.sendImmediate({ type: 'chat', to, text }));
     }
     reportLoadProgress(percent: number): void {
+        if (this.isObserver()) { if (percent >= 100) { this.observerLoaded = true; this.requestHistory(); } return; }
         this.send(() => this.connection.sendImmediate({ type: 'loaded', gameId: this.start.gameId, generation: this.start.generation, percent: Math.max(0, Math.min(100, Math.floor(percent))) }));
     }
     submitLocalTurn(tick: number, actions: Uint8Array): string | undefined {
+        if (this.isObserver()) return;
         if (this.fatalError || this.disposed || this.leftRoom || this.returnedToLobby) return;
         const frame = tick + 1;
         const existing = this.submitted.get(frame);
@@ -65,6 +80,13 @@ export class NetworkMatchSession {
     sendSync(tick: number, hash: number, defeatMask = 0n): void {
         if (this.fatalError || this.disposed || this.leftRoom || this.returnedToLobby) return;
         const frame = tick + 1;
+        if (this.isObserver()) {
+            if (frame !== this.lastLocalSync + 1 || frame !== this.lastConsumedFrame) { this.fail('Invalid observer sync sequence.', frame); return; }
+            this.lastLocalSync = frame;
+            if (this.agreedSyncs.get(frame) !== `${hash >>> 0}:${BigInt.asUintN(64, defeatMask)}`) this.fail(`Game out of sync at frame ${frame}.`, frame);
+            this.agreedSyncs.delete(frame);
+            return;
+        }
         const packet = encodeSyncPacket(frame, hash, defeatMask, this.start.generation);
         // Compare the wire-normalized local value, independently of the server's echo.
         const value = `${hash >>> 0}:${BigInt.asUintN(64, defeatMask)}`;
@@ -79,6 +101,7 @@ export class NetworkMatchSession {
     tryConsumeTurn(tick: number): LanResolvedTurn | undefined {
         if (!this.allLoaded || this.fatalError || this.disposed || this.leftRoom || this.returnedToLobby) return;
         const frame = tick + 1;
+        if (this.isObserver() && (frame !== this.lastConsumedFrame + 1 || this.lastLocalSync !== this.lastConsumedFrame || !this.frames.has(frame))) return;
         const drops = [...this.drops].filter(([id, at]) => at <= frame && this.active.has(id)).map(([id]) => id);
         const expected = this.descriptor.humanAssignments.map(item => item.peerId).filter(id => this.active.has(id) && !drops.includes(id));
         const packets = this.frames.get(frame);
@@ -86,6 +109,7 @@ export class NetworkMatchSession {
         this.frames.delete(frame);
         this.lastConsumedFrame = frame;
         drops.forEach(id => this.active.delete(id));
+        if (this.isObserver()) this.scheduleHistory(0);
         const submittedAt = frame - this.start.orderLatency;
         const id = this.submitted.get(submittedAt);
         if (id) { this.submitted.delete(submittedAt); this.onActionsReceived.dispatch(this, id); }
@@ -106,8 +130,48 @@ export class NetworkMatchSession {
     }
     fail(message: string, frame?: number): void {
         if (this.fatalError) return;
+        clearTimeout(this.historyTimer);
         this.fatalError = { message, frame };
         this.onFatalError.dispatch(this, this.fatalError);
+    }
+    private scheduleHistory(delay: number): void {
+        if (this.historyTimer || this.historyPending !== undefined || !this.observerLoaded || this.frames.size > 16 || this.fatalError || this.disposed || this.leftRoom || this.returnedToLobby) return;
+        this.historyTimer = setTimeout(() => { this.historyTimer = undefined; this.requestHistory(); }, Math.max(10, delay));
+    }
+    private requestHistory(): void {
+        if (this.historyPending !== undefined || this.frames.size > 16 || this.fatalError || this.disposed || this.leftRoom || this.returnedToLobby) return;
+        this.historyPending = this.historyNextFrame;
+        this.send(() => this.connection.sendImmediate({ type: 'history', gameId: this.start.gameId, generation: this.start.generation,
+            observationId: this.start.observationId!, fromFrame: this.historyNextFrame, maxFrames: 32 }));
+    }
+    private receiveHistory(message: Extract<ServerMessage, {type: 'history'}>): void {
+        if (!this.isObserver() || message.gameId !== this.start.gameId || message.generation !== this.start.generation || message.observationId !== this.start.observationId) return;
+        if (message.fromFrame !== this.historyPending) return;
+        this.historyPending = undefined;
+        if (message.frames.length > 32 || this.frames.size + message.frames.length > 64 || !Number.isSafeInteger(message.liveFrame) || message.liveFrame < this.liveFrame) throw new Error('Invalid observer history window.');
+        this.liveFrame = message.liveFrame;
+        this.allLoaded = message.allLoaded;
+        for (const entry of message.frames) {
+            if (entry.frame !== this.historyNextFrame || entry.frame > this.liveFrame || !Number.isInteger(entry.hash) || entry.hash < 0 || entry.hash > 0xffffffff || typeof entry.defeatMask !== 'string' || !/^(0|[1-9][0-9]{0,19})$/.test(entry.defeatMask) || BigInt(entry.defeatMask) > 0xffffffffffffffffn) throw new Error('Invalid observer history sequence.');
+            const packets = new Map<string, Uint8Array>();
+            for (const order of entry.orders) {
+                if (!this.start.clientIds.includes(order.clientId) || packets.has(String(order.clientId))) throw new Error('Invalid observer order roster.');
+                if (typeof order.actions !== 'string' || order.actions.length > 65536 || !/^[A-Za-z0-9+/]*={0,2}$/.test(order.actions)) throw new Error('Invalid observer actions.');
+                const actions = Uint8Array.from(atob(order.actions), char => char.charCodeAt(0));
+                packets.set(String(order.clientId), actions);
+            }
+            for (const drop of entry.drops) {
+                if (!this.start.clientIds.includes(drop.clientId) || drop.frame !== entry.frame || this.drops.has(String(drop.clientId))) throw new Error('Invalid observer drop.');
+                this.drops.set(String(drop.clientId), drop.frame);
+                if (drop.takeover === 'ai') this.aiTakeovers.add(String(drop.clientId));
+            }
+            const expected = this.start.clientIds.filter(id => (this.drops.get(String(id)) ?? Infinity) > entry.frame);
+            if (packets.size !== expected.length || expected.some(id => !packets.has(String(id)))) throw new Error('Incomplete observer frame.');
+            this.frames.set(entry.frame, packets);
+            this.agreedSyncs.set(entry.frame, `${entry.hash >>> 0}:${BigInt.asUintN(64, BigInt(entry.defeatMask))}`);
+            this.historyNextFrame++;
+        }
+        this.scheduleHistory(message.frames.length ? 0 : 100);
     }
     private getSyncReports(frame: number) {
         let reports = this.syncs.get(frame);
@@ -152,6 +216,7 @@ export class NetworkMatchSession {
         if (this.fatalError || this.disposed || this.leftRoom || this.returnedToLobby) return;
         try {
             if (typeof data !== 'string') {
+                if (this.isObserver()) return;
                 const packet = decodePacket(data);
                 if (packet.generation !== this.start.generation) return;
                 if (packet.kind === 'syncRelay') { this.receiveSync(packet); return; }
@@ -166,6 +231,8 @@ export class NetworkMatchSession {
                 const message: ServerMessage = JSON.parse(data);
                 if (['loaded', 'allLoaded', 'ack', 'disconnect', 'matchHealth', 'outOfSync', 'matchEnded'].includes(message.type)
                     && (!('generation' in message) || message.generation !== this.start.generation)) return;
+                if (message.type === 'history') { if (data.length > 65536) throw new Error('Observer history packet too large.'); this.receiveHistory(message); this.onSnapshotChange.dispatch(this, this.getSnapshot()); return; }
+                if (this.isObserver() && ['loaded', 'allLoaded', 'disconnect'].includes(message.type)) return;
                 if (message.type === 'matchHealth') { this.matchHealth = message.players; return; }
                 if (message.type === 'error' && message.code === 'invalidCommand') { this.controlError = message.message; return; }
                 if (message.type === 'chat') { this.onChat.dispatch(this, message); return; }
@@ -186,17 +253,19 @@ export class NetworkMatchSession {
         if (this.returnedToLobby || this.leftRoom) return;
         // Disposal may precede the screen's return callback. This room control must still be sent.
         this.returnedToLobby = true;
+        clearTimeout(this.historyTimer);
         try {
-            this.connection.sendImmediate({ type: 'returnToLobby', gameId: this.start.gameId, generation: this.start.generation, reason });
+            this.connection.sendImmediate({ type: 'returnToLobby', gameId: this.start.gameId, generation: this.start.generation, reason, ...(this.isObserver() ? { observationId: this.start.observationId } : {}) });
         } catch (error) {
             this.fail(`Connection to the game server was lost. ${error instanceof Error ? error.message : String(error)}`);
         }
         this.onReturnToLobby.dispatch(this, reason);
     }
-    leaveRoom(): void { this.leftRoom = true; this.connection.close(); }
+    leaveRoom(): void { clearTimeout(this.historyTimer); this.leftRoom = true; this.connection.close(); }
     dispose(): void {
         if (this.disposed) return;
         this.disposed = true;
+        clearTimeout(this.historyTimer); this.agreedSyncs.clear();
         this.connection.onMessage.unsubscribe(this.receive);
         this.connection.onClose.unsubscribe(this.closed);
         this.frames.clear(); this.submitted.clear(); this.syncs.clear(); this.lastRelayedSync.clear();

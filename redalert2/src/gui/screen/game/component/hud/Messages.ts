@@ -8,6 +8,7 @@ import { CanvasUtils } from "@/engine/gfx/CanvasUtils";
 import { HtmlView } from "@/gui/jsx/HtmlView";
 import { HudChat } from "./HudChat";
 type Message = {
+    badge?: { label: string; color: string };
     color: string;
     text: string;
     animate: boolean;
@@ -127,7 +128,8 @@ export class Messages extends UiComponent<MessagesProps> {
             let charsToShow = Math.round(animProgress * msg.text.length);
             if (animProgress < 1)
                 needsTick = true;
-            for (let line of this.wrapText(msg.text, maxLineLength)) {
+            let firstLine = true;
+            for (let line of this.wrapText(msg.text, Math.max(1, maxLineLength - (msg.badge ? msg.badge.label.length + 3 : 0)))) {
                 if (line.length > charsToShow) {
                     line = line.slice(0, charsToShow);
                     charsToShow = 0;
@@ -135,15 +137,22 @@ export class Messages extends UiComponent<MessagesProps> {
                 else {
                     charsToShow -= line.length;
                 }
-                y += this.drawLine(line, msg.color, y);
+                let offset = 0;
+                if (firstLine && msg.badge) {
+                    const badgeText = `[${msg.badge.label}] `;
+                    this.drawLine(badgeText, msg.badge.color, y);
+                    offset = this.ctx.measureText(badgeText).width + 4;
+                }
+                y += this.drawLine(line, msg.color, y, offset);
+                firstLine = false;
             }
         }
         this.texture.needsUpdate = true;
         if (needsTick)
             this.props.onMessageTick?.();
     }
-    drawLine(text: string, color: string, y: number): number {
-        return CanvasUtils.drawText(this.ctx, text, 0, y, {
+    drawLine(text: string, color: string, y: number, x = 0): number {
+        return CanvasUtils.drawText(this.ctx, text, x, y, {
             color,
             fontFamily: "'Fira Sans Condensed', Arial, sans-serif",
             fontSize: 13,

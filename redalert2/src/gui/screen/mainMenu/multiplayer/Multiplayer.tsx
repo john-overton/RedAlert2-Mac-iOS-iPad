@@ -23,6 +23,17 @@ export interface MultiplayerProps {
     status?: string;
     ready?: boolean;
     matchRunning?: boolean;
+    role?: 'player' | 'observer' | 'waiting';
+    joinRole?: 'player' | 'observer';
+    allowObservers?: boolean;
+    observers?: { name: string; role: string }[];
+    canObserve?: boolean;
+    observePending?: boolean;
+    observationUnavailable?: string;
+    onObserve?: () => void;
+    onWait?: () => void;
+    onRole?: (role: 'player' | 'observer') => void;
+    onJoinRole?: (role: 'player' | 'observer') => void;
     disconnectAi?: boolean;
     onDisconnectAi?: (enabled: boolean) => void;
     canReady?: boolean;
@@ -66,6 +77,21 @@ export function Multiplayer(props: MultiplayerProps) {
                     <option value="ai">Replace with AI (Normal)</option>
                 </select>
             </label>
+            {!props.matchRunning && <label className="mp-field">Your role
+                <select aria-label="Your role" value={props.role ?? 'player'} disabled={props.ready || props.contentBusy}
+                    onChange={event => props.onRole?.(event.target.value as 'player' | 'observer')}>
+                    {props.role === 'waiting' && <option value="waiting" disabled>Waiting for a player slot</option>}
+                    <option value="player">Player</option>
+                    {props.allowObservers && <option value="observer">Observer</option>}
+                </select>
+            </label>}
+            {Boolean(props.observers?.length) && <p className="mp-observers">{props.observers!.map(member => `${member.name} (${member.role === 'observer' ? 'Observer' : 'Waiting'})`).join(' · ')}</p>}
+            {props.matchRunning && props.role !== 'player' && <div className="mp-running-choice">
+                <p>A match is running. Observe it or stay here for the next round.</p>
+                <button className="dialog-button" disabled={!props.canObserve} onClick={props.onObserve}>{props.observePending ? 'Preparing observer…' : 'Observe Game'}</button>
+                <button className="dialog-button" onClick={props.onWait}>Wait in Lobby</button>
+                {props.observationUnavailable && <p role="status">{props.observationUnavailable}</p>}
+            </div>}
             <ConnectionStatus health={props.connectionHealth} players={props.connectionPlayers ?? []}/>
             {props.error && <div className="mp-error" role="alert">{props.error}</div>}
             <details className="mp-content" open={Boolean(props.contentStatus)}><summary>Maps and Custom Units</summary>
@@ -76,12 +102,12 @@ export function Multiplayer(props: MultiplayerProps) {
                     }}/></label>}
                 <div role="status">{props.contentStatus || 'Select a custom map and its unit rules, art and resources.'}</div>
                 {props.contentBusy ? <button className="dialog-button" onClick={props.onCancelContent}>Cancel Transfer</button> : <>
-                    {props.hasContent && <button className="dialog-button" onClick={props.onRetryContent} disabled={props.ready || props.matchRunning}>Verify Content</button>}
+                    {props.hasContent && <button className="dialog-button" onClick={props.onRetryContent} disabled={props.ready}>Verify Content</button>}
                     {props.canManageContent && props.hasContent && <button className="dialog-button" onClick={props.onRemoveContent} disabled={props.ready}>Remove Content</button>}
                 </>}
             </details>
             <LobbyForm {...props.lobbyProps} beforeChatContent={<><div className="mp-ready-bar">
-                <span>{props.matchRunning ? 'The match is still running. You can ready up when everyone has returned.' : props.ready ? 'Ready for battle' : !props.canReady ? 'Waiting for map and content verification.' : 'Choose your side, color and team, then click Ready.'}</span>
+                <span>{!props.matchRunning && props.role === 'observer' ? 'You will observe the next round. Observers do not need to Ready.' : props.matchRunning ? 'The match is still running. You can ready up when everyone has returned.' : props.ready ? 'Ready for battle' : !props.canReady ? 'Waiting for map and content verification.' : 'Choose your side, color and team, then click Ready.'}</span>
                 <button className="dialog-button" type="button" disabled={!props.canReady} onClick={props.onReady}>{props.ready ? 'Cancel Ready' : 'Ready'}</button>
             </div>
                 {Boolean(props.managedPlayers?.length) && <details className="mp-host-controls"><summary>Manage Players</summary>
@@ -109,6 +135,10 @@ export function Multiplayer(props: MultiplayerProps) {
             <form onSubmit={event => { event.preventDefault(); props.onJoin(); }}>
                 <fieldset><legend>Join Game</legend>
                     <p>Enter the host’s address and password to join their battle.</p>
+                    <label className="mp-field"><span>Join as</span><select aria-label="Join as" value={props.joinRole ?? 'player'} disabled={props.busy}
+                        onChange={event => props.onJoinRole?.(event.target.value as 'player' | 'observer')}>
+                        <option value="player">Player</option><option value="observer">Observer</option>
+                    </select></label>
                     {field('address', 'Address', 'text', '192.168.1.20:1620')}
                     {field('password', 'Password', 'password', 'If required')}
                     <button className="dialog-button" type="submit" disabled={props.busy}>Join Game</button>

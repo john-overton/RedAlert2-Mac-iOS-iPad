@@ -50,6 +50,25 @@ and Ready resets for another round. A defeated host can return without stopping
 the server. **Leave Server**, closing the host app, or losing the physical host's
 connection still stops embedded hosting, even after transferring administration.
 
+Select **Observer** under **Join as**, or change **Your role** in a waiting room,
+to watch without occupying a commander seat. A normal connection to a running room
+offers **Observe Game** and **Wait in Lobby**. Explicit observers automatically
+begin watching after map/content verification. Observers need no Ready vote and
+cannot stall player loading, orders or sync consensus. Their Return to Lobby button
+also cancels catch-up; Observe Game can retry within the same round.
+
+Observers can read public chat and every team's chat, with labeled audience badges
+and player colors. Their composer sends only to **Observers**. Waiting members are
+not observers and receive no observer/team messages. Private whispers keep their
+original recipients. Replay chat remains public-only.
+
+Late observers rebuild the original simulation from bounded committed history,
+including disconnect-to-AI/destruction events, and verify each frame's agreed hash.
+Catch-up shows progress and suppresses historical gameplay audio. The server retains
+at most 100,000 frames or 64 MiB of accounted history per match; exceeding either
+limit makes observation unavailable while commanders continue playing. This is
+observation from the beginning, not player reconnect/resume or a saved snapshot.
+
 ## Implemented
 
 - Runtime-independent `src/network/server/`: authoritative lobby, separately
@@ -59,7 +78,7 @@ connection still stops embedded hosting, even after transferring administration.
 - Binary order relay with two frames of latency by default, pre-seeded empty
   frames, ordered bounded buffering, server-stamped disconnect frames, and sync
   hash/defeat-mask comparison on both server and clients. Server-stamped sync
-  relays and handshake use protocol 3 with per-match generations; older protocol clients are rejected. Packet sizes, future-frame windows, client count,
+  relays use orders protocol 3 and the handshake uses protocol 4, with per-match generations; older clients are rejected. Packet sizes, future-frame windows, client count,
   command rate, and socket backpressure are bounded.
 - `src/network/client/`: direct address parsing, WebSocket lifecycle/retry,
   lobby client, frame buffer, and `NetworkTurnManager`. GameScreen selects it
@@ -197,10 +216,8 @@ clients must use the same build; restart Vite after rebuilding changed source.
   pending comparisons are bounded and released when a peer disconnects.
 - Deterministic disconnect frames are unit-tested. Cable-pull behaviour,
   long-running matches, real cross-platform devices, and iPad hashing cost
-  still need acceptance testing. In-game chat/diplomacy/connection-detail
-  integration remains separate from the implemented lobby chat and lag signal.
-- Phase 1 uses one simulation tick per network frame. Spectators and custom bot
-  uploads are explicitly disabled. Official maps must already be present and match. Custom maps and unit
+  still need acceptance testing. Physical device acceptance remains separate from the local engine and browser checks.
+- The relay uses one simulation tick per network frame. Custom bot uploads are disabled. Official maps must already be present and match. Custom maps and unit
   content can now be delivered by the host. Existing CRC map keys remain unchanged;
   delivery manifests and file verification use SHA-256.
 - iPhone/iPad hosting, relay, LAN discovery, join-link scanning/deep-link registration,

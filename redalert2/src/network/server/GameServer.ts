@@ -1,3 +1,5 @@
+import { MatchArchive } from './MatchArchive';
+import type { StartGameMessage } from './Protocol';
 import { Parser } from '../gameopt/Parser';
 import { ActionType } from '../../game/action/ActionType';
 import { HEARTBEAT_INTERVAL_MS, CONNECTION_WARNING_MS, CONNECTION_TIMEOUT_MS, HANDSHAKE_TIMEOUT_MS } from '../ConnectionHealth';
@@ -20,6 +22,8 @@ export interface GameServerOptions {
     orderLatency?: number;
     netFrameInterval?: number;
     allowSpectators?: boolean;
+    observerArchiveMaxBytes?: number;
+    observerArchiveMaxFrames?: number;
     /** Solo practice and host-versus-AI rooms are allowed by default. */
     allowSinglePlayer?: boolean;
     countryCount?: number;
@@ -42,6 +46,11 @@ interface Peer {
     floodAt: number;
     floodCount: number;
     warned: boolean;
+    observationId?: number;
+    observing?: boolean;
+    historyCursor?: number;
+    historyAt?: number;
+    historyCount?: number;
     contentBusy?: boolean;
     contentGeneration?: number;
 }
@@ -60,6 +69,8 @@ export class GameServer {
     private readonly now: () => number;
     private readonly syncs = new Map<number, Map<number, string>>();
     private readonly active = new Set<number>();
+    private archive?: MatchArchive;
+    private matchStart?: StartGameMessage;
     private nextId = 1;
     private allLoaded = false;
     private embeddedHostId?: number;
@@ -82,13 +93,13 @@ export class GameServer {
             const slot = options.slotsInfo?.[i];
             // The host connects as an ordinary client, so saved human slots begin open.
             return slot?.type === 4 ? clone(slot) : { type: slot?.type === 0 ? 0 : 1 };
-        }), gameOpts, orderLatency, netFrameInterval, allowSpectators: false };
+        }), gameOpts, orderLatency, netFrameInterval, allowSpectators: options.allowSpectators ?? true };
         gameOpts.humanPlayers = [];
         gameOpts.aiPlayers = Array.from({ length: gameOpts.maxSlots }, (_, i) => this.model.slots[i].type === 4 ? gameOpts.aiPlayers[i] : undefined);
     }
     get isStopped(): boolean { return this.stopped; }
     private get countryMax(): number { return (this.options.countryCount ?? (this.options.identity.engine === 'yr' ? 10 : 9)) - 1; }
-    get session(): Session { return clone(this.model); }
+    get session(): Session { return { ...clone(this.model), ...(this.model.state === 'started' && !this.archive?.available ? { observationUnavailable: 'Match history exceeded its limit; observation is unavailable for this round.' } : {}) }; }
     start(): void | Promise<void> { return this.transport?.listen(connection => this.accept(connection)); }
     accept(connection: ServerConnection): void {
         if (this.stopped || this.peers.size >= 24) { connection.close('Server unavailable'); return; }
@@ -102,7 +113,7 @@ export class GameServer {
         if (this.stopped) return;
         this.stopped = true;
         this.model.state = 'ended';
-        this.upload = undefined; this.contentFiles.clear();
+        this.upload = undefined; this.contentFiles.clear(); this.archive = undefined; this.matchStart = undefined;
         this.broadcast({ type: 'message', key: 'serverClosed' });
         for (const peer of [...this.peers]) { this.peers.delete(peer); peer.connection.close('Server closed'); }
         this.transport?.close();
@@ -145,6 +156,7 @@ export class GameServer {
         catch { this.drop(peer); }
     }
     private broadcast(message: ServerMessage | Uint8Array): void { for (const peer of [...this.peers]) if (peer.client) this.send(peer, message); }
+    private broadcastCombatants(message: ServerMessage | Uint8Array): void { for (const peer of this.combatants()) this.send(peer, message); }
     private syncLobby(): void { this.updatePlayers(); this.broadcast({ type: 'session', session: this.session }); }
     private updatePlayers(): void {
         this.model.gameOpts.humanPlayers = this.model.clients.filter(c => c.slotIndex !== null).sort((a, b) => a.slotIndex! - b.slotIndex!).map(c => ({ name: c.name, countryId: c.countryId, colorId: c.colorId, startPos: c.startPos, teamId: c.teamId }));
@@ -195,8 +207,9 @@ export class GameServer {
                     peer.contentBusy = true;
                     void this.contentRequest(peer, message).finally(() => { peer.contentBusy = false; });
                 }
+                else if (message.type === 'history') this.history(peer, message);
                 else if (message.type === 'loaded') { if (this.isCurrentMatch(message)) this.loaded(peer, message.percent); }
-                else if (message.type === 'returnToLobby') { if (this.isCurrentMatch(message)) this.returnToLobby(peer, message.reason); }
+                else if (message.type === 'returnToLobby') { if (this.isCurrentMatch(message)) this.returnToLobby(peer, message.reason, message.observationId); }
                 else {
                     const now = this.now();
                     if (now - peer.floodAt >= 1000) { peer.floodAt = now; peer.floodCount = 0; }
@@ -212,7 +225,7 @@ export class GameServer {
     private hello(peer: Peer, hello: HelloMessage): void {
         const expected = this.options.identity;
         let error: string | undefined;
-        if (this.model.state !== 'waiting') error = 'gameStarted';
+        if (this.model.state === 'ended') error = 'gameStarted';
         else if (this.options.password && !hello.password) error = 'passwordRequired';
         else if (this.options.password && hello.password !== this.options.password) error = 'passwordWrong';
         else if (hello.mod !== expected.mod || hello.modHash !== expected.modHash || hello.engine !== expected.engine) error = 'modMismatch';
@@ -220,10 +233,12 @@ export class GameServer {
         else if (hello.assetFingerprint !== expected.assetFingerprint) error = 'assetMismatch';
         else if (hello.protocol !== HANDSHAKE_PROTOCOL || hello.ordersProtocol !== ORDERS_PROTOCOL) error = 'protocolMismatch';
         else if (!label(hello.name) || this.model.clients.some(c => c.name.toLowerCase() === hello.name.trim().toLowerCase())) error = 'invalidName';
-        const slot = this.model.slots.findIndex(s => s.type === 1);
-        if (!error && slot < 0 && !this.model.allowSpectators) error = 'full';
+        if (!error && hello.role !== undefined && hello.role !== 'player' && hello.role !== 'observer') error = 'invalidRole';
+        if (!error && hello.role === 'observer' && !this.model.allowSpectators) error = 'spectatorsDisabled';
+        const slot = this.model.state === 'waiting' && hello.role !== 'observer' ? this.model.slots.findIndex(s => s.type === 1) : -1;
+        if (!error && slot < 0 && this.model.state === 'waiting' && hello.role !== 'observer') error = 'full';
         if (error) { this.reject(peer, error); return; }
-        peer.client = { id: this.nextId++, name: hello.name.trim(), slotIndex: slot < 0 ? null : slot, countryId: selection(hello.preferredCountry, this.countryMax) ? hello.preferredCountry : -2, colorId: selection(hello.preferredColor, 7) ? hello.preferredColor : -2, startPos: -2, teamId: -2, admin: this.model.clients.length === 0, ready: false, mapReady: false, loaded: 0, ping: 0 };
+        peer.client = { id: this.nextId++, role: hello.role === 'observer' ? 'observer' : slot >= 0 ? 'player' : 'waiting', name: hello.name.trim(), slotIndex: slot < 0 ? null : slot, countryId: selection(hello.preferredCountry, this.countryMax) ? hello.preferredCountry : -2, colorId: selection(hello.preferredColor, 7) ? hello.preferredColor : -2, startPos: -2, teamId: -2, admin: this.model.clients.length === 0, ready: false, mapReady: false, loaded: 0, ping: 0 };
         if (this.embeddedHostId === undefined && !this.options.dedicated) this.embeddedHostId = peer.client.id;
         this.model.clients.push(peer.client);
         if (slot >= 0) this.model.slots[slot] = { type: 3, name: peer.client.name };
@@ -236,10 +251,26 @@ export class GameServer {
         const client = peer.client!;
         if (!args || typeof args !== 'object' || Array.isArray(args)) { this.fail(peer, 'Invalid arguments'); return; }
         if (name === 'sync_lobby') { this.send(peer, { type: 'session', session: this.session }); return; }
+        if (name === 'role') {
+            if (this.model.state === 'waiting') client.ready = false;
+            if (args.role !== 'player' && args.role !== 'observer') { this.fail(peer, 'Invalid role'); return; }
+            if (this.model.state === 'started' && client.role === 'waiting' && args.role === 'observer' && this.model.allowSpectators) { client.role = 'observer'; this.syncLobby(); return; }
+            name = args.role === 'observer' ? 'spectate' : 'player';
+        }
+        if (name === 'observe') {
+            if (!this.isCurrentMatch(args)) return;
+            if (client.role === 'waiting' && this.model.allowSpectators) { client.role = 'observer'; this.syncLobby(); }
+            this.observe(peer); return;
+        }
+        if (name === 'map_ready' || name === 'content_ready') {
+            if (name === 'map_ready') client.mapReady = args.digest === this.model.gameOpts.mapDigest;
+            else client.contentReady = args.id === this.model.content?.id ? args.id as string : undefined;
+            client.ready = false; this.syncLobby(); return;
+        }
         if (name === 'kick_ai' && this.model.state === 'started') {
             if (args.generation !== this.model.generation || args.gameId !== this.model.gameId) return;
             const target = [...this.peers].find(p => p.client?.id === args.clientId);
-            if (!client.admin || !this.allLoaded || !target || target === peer || !this.active.has(target.client!.id)) {
+            if (!client.admin || !this.active.has(client.id) || !this.allLoaded || !target || target === peer || !this.active.has(target.client!.id)) {
                 this.fail(peer, 'Only the host can replace another active player with AI.'); return;
             }
             target.takeover = 'ai';
@@ -264,7 +295,7 @@ export class GameServer {
             client.name = args.name.trim();
             if (client.slotIndex !== null) this.model.slots[client.slotIndex].name = client.name;
         } else if (name === 'player') {
-            const slot = args.slotIndex ?? client.slotIndex;
+            const slot = args.slotIndex ?? client.slotIndex ?? this.model.slots.findIndex(s => s.type === 1);
             if (!integer(slot, 0, this.model.slots.length - 1)) { this.fail(peer, 'Invalid slot'); return; }
             let target: SessionClient | NonNullable<GameOpts['aiPlayers'][number]> = client;
             if (slot !== client.slotIndex) {
@@ -277,14 +308,14 @@ export class GameServer {
             if (typeof args.startPos === 'number' && args.startPos >= 0 && [...this.model.clients, ...this.model.gameOpts.aiPlayers.filter(Boolean)].some(c => c !== target && c!.startPos === args.startPos)) { this.fail(peer, 'Start position is occupied'); return; }
             if (target === client && slot !== client.slotIndex) {
                 if (client.slotIndex !== null) this.model.slots[client.slotIndex] = { type: 1 };
-                client.slotIndex = slot; this.model.slots[slot] = { type: 3, name: client.name };
+                client.role = 'player'; client.slotIndex = slot; this.model.slots[slot] = { type: 3, name: client.name };
             }
             for (const key of ['countryId', 'colorId', 'startPos', 'teamId'] as const) if (args[key] !== undefined) target[key] = args[key] as number;
             if (target !== client) this.resetReady();
         } else if (name === 'spectate') {
             if (!this.model.allowSpectators) { this.fail(peer, 'Spectators are disabled'); return; }
             if (client.slotIndex !== null) this.model.slots[client.slotIndex] = { type: 1 };
-            client.slotIndex = null;
+            client.slotIndex = null; client.role = 'observer'; client.ready = false;
         } else {
             if (!client.admin) { this.fail(peer, 'Only the host can change this'); return; }
             if (name === 'option') {
@@ -310,7 +341,8 @@ export class GameServer {
                 this.model.gameOpts.aiPlayers[slot] = name === 'slot_bot' ? { difficulty: args.difficulty as number, ...(args.customBotId ? { customBotId: args.customBotId as string } : {}), countryId: -2, colorId: -2, startPos: -2, teamId: -2 } : undefined;
                 this.resetReady();
             } else if (name === 'allow_spectators') {
-                if (args.allow !== false) { this.fail(peer, 'Spectators are not supported in this protocol version'); return; }
+                if (typeof args.allow !== 'boolean') { this.fail(peer, 'Invalid spectator setting'); return; }
+                if (!args.allow && this.model.clients.some(c => c.role === 'observer')) { this.fail(peer, 'Observers must leave their role first'); return; }
                 this.model.allowSpectators = args.allow;
             } else if (name === 'kick') {
                 const target = [...this.peers].find(p => p.client?.id === args.clientId);
@@ -329,7 +361,7 @@ export class GameServer {
     private async contentRequest(peer: Peer, request: ContentRequest): Promise<void> {
         const reply = (result: {error?: string; data?: string} = {}) => this.send(peer, {type:'contentResult', requestId:request.requestId, ...result});
         try {
-            if (!integer(request.requestId, 1, 0xffffffff) || this.model.state !== 'waiting') throw new Error('Content transfer unavailable');
+            if (!integer(request.requestId, 1, 0xffffffff) || (this.model.state !== 'waiting' && request.action !== 'get')) throw new Error('Content transfer unavailable');
             if (request.action === 'get') {
                 if (request.id !== this.model.content?.id) throw new Error('Content package changed');
                 const bytes = this.contentFiles.get(request.path!);
@@ -371,17 +403,20 @@ export class GameServer {
     }
     private startGame(peer: Peer): void {
         const players = this.model.clients.filter(c => c.slotIndex !== null);
-        if (this.upload || [...this.peers].some(p=>p.contentBusy) || !peer.client!.admin || players.length < (this.options.allowSinglePlayer === false ? 2 : 1) || this.model.clients.some(c => !c.mapReady || (this.model.content && c.contentReady !== this.model.content.id) || (!c.admin && !c.ready))) { this.fail(peer, 'All players must have the map and be ready'); return; }
+        if (this.upload || [...this.peers].some(p=>p.contentBusy && p.client?.role === 'player') || !peer.client!.admin || players.length < (this.options.allowSinglePlayer === false ? 2 : 1) || players.some(c => !c.mapReady || (this.model.content && c.contentReady !== this.model.content.id) || (!c.admin && !c.ready))) { this.fail(peer, 'All players must have the map and be ready'); return; }
         this.model.state = 'started';
         this.model.generation++;
         this.allLoaded = false; this.syncs.clear(); this.active.clear();
-        for (const member of this.peers) { member.lastOrderAt = this.now(); member.lastFrame = 0; member.lastSync = 0; member.takeover = undefined; if (member.client) member.client.loaded = 0; }
+        this.archive = new MatchArchive(this.options.observerArchiveMaxBytes, this.options.observerArchiveMaxFrames);
+        for (const member of this.peers) { member.lastOrderAt = this.now(); member.lastFrame = 0; member.lastSync = 0; member.takeover = undefined; member.observing = false; if (member.client) member.client.loaded = 0; }
         this.updatePlayers();
         for (const client of players) this.active.add(client.id);
         const timestamp = this.now();
         this.model.gameId = `network-${timestamp}-${this.model.generation}-${Math.floor((this.options.random ?? Math.random)() * 0x100000000).toString(16)}`;
-        this.broadcast({ type: 'startGame', gameId: this.model.gameId, generation: this.model.generation, timestamp, gameOpts: clone(this.model.gameOpts), humanAssignments: players.map(c => ({ clientId: c.id, slotIndex: c.slotIndex!, name: c.name })), clientIds: [...this.active], orderLatency: this.model.orderLatency, netFrameInterval: this.model.netFrameInterval });
-        for (let frame = 1; frame <= this.model.orderLatency; frame++) for (const id of this.active) this.broadcast(encodeOrderPacket(id, frame, new Uint8Array(), this.model.generation));
+        this.matchStart = { type: 'startGame', gameId: this.model.gameId, generation: this.model.generation, timestamp, gameOpts: clone(this.model.gameOpts), humanAssignments: players.map(c => ({ clientId: c.id, slotIndex: c.slotIndex!, name: c.name })), clientIds: [...this.active], orderLatency: this.model.orderLatency, netFrameInterval: this.model.netFrameInterval };
+        this.broadcastCombatants(this.matchStart);
+        for (const member of this.peers) if (member.client?.role === 'observer' && this.observerReady(member)) this.observe(member);
+        for (let frame = 1; frame <= this.model.orderLatency; frame++) for (const id of this.active) { this.archive.order(frame, id, new Uint8Array()); this.broadcastCombatants(encodeOrderPacket(id, frame, new Uint8Array(), this.model.generation)); }
         this.syncLobby();
     }
     private loaded(peer: Peer, percent: unknown): void {
@@ -407,26 +442,28 @@ export class GameServer {
             peer.lastFrame = packet.frame;
             peer.lastOrderAt = this.now();
             const frame = packet.frame + this.model.orderLatency;
-            this.broadcast(encodeOrderPacket(peer.client!.id, frame, packet.actions, this.model.generation));
+            this.archive?.order(frame, peer.client!.id, packet.actions);
+            this.broadcastCombatants(encodeOrderPacket(peer.client!.id, frame, packet.actions, this.model.generation));
             this.send(peer, { type: 'ack', generation: this.model.generation, frame, count: packet.actions.length });
         } else if (packet.kind === 'sync') {
             if (packet.frame !== peer.lastSync + 1 || packet.frame > peer.lastFrame + this.model.orderLatency || packet.frame > Math.min(...this.combatants().map(p => p.lastSync)) + 256) throw new Error('Invalid sync sequence');
             peer.lastSync = packet.frame;
-            this.broadcast(encodeRelayedSyncPacket(peer.client!.id, packet.frame, packet.hash, packet.defeatMask, this.model.generation));
+            this.broadcastCombatants(encodeRelayedSyncPacket(peer.client!.id, packet.frame, packet.hash, packet.defeatMask, this.model.generation));
             const reports = this.syncs.get(packet.frame) ?? new Map<number, string>();
             reports.set(peer.client!.id, `${packet.hash}:${packet.defeatMask}`);
             this.syncs.set(packet.frame, reports);
             if (new Set(reports.values()).size > 1) {
                 this.broadcast({ type: 'outOfSync', generation: this.model.generation, frame: packet.frame });
                 this.finishMatch('desync');
-            } else if ([...this.active].every(id => reports.has(id))) this.syncs.delete(packet.frame);
+            } else if ([...this.active].every(id => reports.has(id))) { this.archive?.agree(packet.frame, packet.hash, packet.defeatMask.toString()); this.syncs.delete(packet.frame); }
         } else throw new Error('Clients cannot relay sync packets');
     }
     private combatants(): Peer[] { return [...this.peers].filter(p => p.client && this.active.has(p.client.id)); }
     private isCurrentMatch(message: { gameId?: unknown; generation?: unknown }): boolean {
         return this.model.state === 'started' && message.gameId === this.model.gameId && message.generation === this.model.generation;
     }
-    private returnToLobby(peer: Peer, reason: unknown): void {
+    private returnToLobby(peer: Peer, reason: unknown, observationId?: number): void {
+        if (peer.client!.role === 'observer') { if (observationId === peer.observationId) { peer.observing = false; peer.historyCursor = undefined; } return; }
         if (reason !== 'finished' && reason !== 'forfeit') { this.fail(peer, 'Invalid match return reason'); return; }
         if (!this.active.has(peer.client!.id)) return;
         // A completion claim only releases this commander. Other commanders must
@@ -437,10 +474,10 @@ export class GameServer {
     private removeCombatant(peer: Peer, lastReason: 'finished' | 'abandoned' = 'abandoned'): void {
         if (!this.active.delete(peer.client!.id)) return;
         // Retain every already-stamped order, then remove the commander on the next frame.
-        this.broadcast({ type: 'disconnect', generation: this.model.generation, clientId: peer.client!.id,
-            frame: peer.lastFrame + this.model.orderLatency + 1,
-            ...(peer.takeover || this.model.gameOpts.disconnectAi ? { takeover: 'ai' as const } : {}) });
-        for (const [frame, reports] of this.syncs) if ([...this.active].every(id => reports.has(id))) this.syncs.delete(frame);
+        const drop = { clientId: peer.client!.id, frame: peer.lastFrame + this.model.orderLatency + 1, ...(peer.takeover || this.model.gameOpts.disconnectAi ? { takeover: 'ai' as const } : {}) };
+        this.archive?.drop(drop);
+        this.broadcastCombatants({ type: 'disconnect', generation: this.model.generation, ...drop });
+        for (const [frame, reports] of this.syncs) if (this.active.size && [...this.active].every(id => reports.has(id))) { const [hash, mask] = reports.get([...this.active][0])!.split(':'); this.archive?.agree(frame, Number(hash), mask); this.syncs.delete(frame); }
         if (!this.active.size) this.finishMatch(lastReason);
         else this.checkLoaded();
     }
@@ -448,7 +485,7 @@ export class GameServer {
         this.broadcast({ type: 'matchEnded', gameId: this.model.gameId!, generation: this.model.generation, reason });
         this.model.state = 'waiting';
         this.model.gameId = undefined;
-        this.active.clear(); this.syncs.clear(); this.allLoaded = false;
+        this.active.clear(); this.syncs.clear(); this.allLoaded = false; this.archive = undefined; this.matchStart = undefined;
         this.lastHealthBroadcast = -Infinity;
         for (const peer of this.peers) {
             peer.lastFrame = 0; peer.lastSync = 0; peer.lastOrderAt = undefined; peer.takeover = undefined;
@@ -456,10 +493,34 @@ export class GameServer {
         }
         this.syncLobby();
     }
+    private observerReady(peer: Peer): boolean { return Boolean(peer.client?.mapReady && (!this.model.content || peer.client.contentReady === this.model.content.id)); }
+    private observe(peer: Peer): void {
+        // A repeated click must not invalidate an already-loading subscription.
+        if (peer.observing) return;
+        if (this.model.state !== 'started' || peer.client!.role !== 'observer' || !this.model.allowSpectators || !this.observerReady(peer) || !this.archive?.available || !this.matchStart) { this.send(peer, { type: 'error', code: 'observerUnavailable', message: 'Observation requires a running match, its content, and available history.' }); return; }
+        peer.observing = true; peer.observationId = (peer.observationId ?? 0) + 1; peer.historyCursor = 1; peer.historyAt = undefined;
+        this.send(peer, { ...clone(this.matchStart), observer: true, observationId: peer.observationId, liveFrame: this.archive.liveFrame });
+    }
+    private history(peer: Peer, message: any): void {
+        if (!this.isCurrentMatch(message) || message.observationId !== peer.observationId) return;
+        const now = this.now();
+        if (peer.historyAt === undefined || now - peer.historyAt >= 1000) { peer.historyAt = now; peer.historyCount = 0; }
+        if ((peer.historyCount = (peer.historyCount ?? 0) + 1) > 128) { peer.observing = false; this.send(peer, { type: 'error', code: 'observerUnavailable', message: 'History request rate exceeded; retry observation.' }); return; }
+        if (peer.client!.role !== 'observer' || !peer.observing || !this.archive?.available) { this.send(peer, { type: 'error', code: 'observerUnavailable' }); return; }
+        if (!integer(message.fromFrame, 1, 0xffffffff) || message.fromFrame !== peer.historyCursor || (message.maxFrames !== undefined && !integer(message.maxFrames,1,32))) { this.fail(peer, 'Invalid history cursor'); return; }
+        // Pull is acknowledgement of the previous chunk: only one sequential chunk is in flight.
+        const frames = this.archive.read(message.fromFrame, message.maxFrames);
+        if (!this.archive.available) { this.send(peer, { type: 'error', code: 'observerUnavailable' }); return; }
+        peer.historyCursor += frames.length;
+        this.send(peer, { type: 'history', gameId: this.model.gameId!, generation: this.model.generation, observationId: peer.observationId!, fromFrame: message.fromFrame, frames, liveFrame: this.archive.liveFrame, allLoaded: this.allLoaded });
+    }
     private chat(peer: Peer, to: unknown, text: unknown): void {
-        if (!label(text, 512) || !(to === 'all' || to === 'team' || integer(to, 1, 0xffffffff))) { this.fail(peer, 'Invalid chat message'); return; }
+        if (!label(text, 512) || !(to === 'all' || to === 'team' || to === 'observers' || integer(to, 1, 0xffffffff))) { this.fail(peer, 'Invalid chat message'); return; }
         const sender = peer.client!;
-        for (const target of this.peers) if (target.client && (to === 'all' || target === peer || (to === 'team' ? sender.teamId >= 0 && target.client.teamId === sender.teamId : target.client.id === to))) this.send(target, { type: 'chat', clientId: sender.id, to, text: text.trim() });
+        const recipient = typeof to === 'number' ? this.model.clients.find(c => c.id === to) : undefined;
+        if ((sender.role === 'observer' && to !== 'observers' && !(recipient?.role === 'observer')) || (to === 'observers' && sender.role !== 'observer') || ((sender.role === 'waiting' || (this.model.state === 'started' && sender.role === 'player' && !this.active.has(sender.id))) && (to === 'team' || recipient && recipient.role !== 'waiting')) || (recipient?.role === 'observer' && sender.role !== 'observer') || (typeof to === 'number' && !recipient)) { this.fail(peer, 'That chat channel is unavailable for your role'); return; }
+        const identity = (c: SessionClient) => ({ name: c.name, colorId: c.colorId, teamId: c.teamId });
+        for (const target of this.peers) if (target.client && (target === peer || (to === 'all' ? true : to === 'observers' ? target.client.role === 'observer' : to === 'team' ? target.client.role === 'observer' || (target.client.role === 'player' && (this.model.state !== 'started' || this.active.has(target.client.id)) && sender.teamId >= 0 && target.client.teamId === sender.teamId) : target.client.id === to))) this.send(target, { type: 'chat', clientId: sender.id, to, text: text.trim(), sender: identity(sender), ...(recipient ? { recipient: identity(recipient) } : {}) });
     }
     private drop(peer: Peer): void {
         if (!this.peers.delete(peer) || !peer.client) return;

@@ -56,6 +56,7 @@ export interface LanRoomState {
 }
 
 export interface LanLaunchDescriptor {
+    observer?: boolean;
     kind: 'lan';
     roomId: string;
     gameId: string;
