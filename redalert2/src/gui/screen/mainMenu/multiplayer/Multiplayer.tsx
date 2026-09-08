@@ -22,6 +22,8 @@ export interface MultiplayerProps {
     addresses: string[];
     status?: string;
     ready?: boolean;
+    disconnectAi?: boolean;
+    onDisconnectAi?: (enabled: boolean) => void;
     canReady?: boolean;
     connectionHealth?: ConnectionHealth & {serverIdleMs:number};
     connectionPlayers?: {id:number; name:string}[];
@@ -55,6 +57,14 @@ export function Multiplayer(props: MultiplayerProps) {
         return <div className="multiplayer-lobby">
             <div className="mp-room-heading"><strong>{props.serverName}</strong><span>{props.status}</span></div>
             {props.addresses.length > 0 && <div className="mp-addresses">Join by address: {props.addresses.join(' · ')}</div>}
+            <label className="mp-field">When a player disconnects
+                <select aria-label="When a player disconnects" value={props.disconnectAi ? 'ai' : 'destroy'}
+                    disabled={!props.canManageContent || props.ready || props.contentBusy}
+                    onChange={event => props.onDisconnectAi?.(event.target.value === 'ai')}>
+                    <option value="destroy">Destroy their base and units</option>
+                    <option value="ai">Replace with AI (Normal)</option>
+                </select>
+            </label>
             <ConnectionStatus health={props.connectionHealth} players={props.connectionPlayers ?? []}/>
             {props.error && <div className="mp-error" role="alert">{props.error}</div>}
             <details className="mp-content" open={Boolean(props.contentStatus)}><summary>Maps and Custom Units</summary>

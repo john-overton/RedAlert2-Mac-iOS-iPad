@@ -399,3 +399,41 @@ test('servers may explicitly retain a two-human minimum', () => {
     host.command('startgame');
     expect(server.session.state).toBe('waiting');
 });
+
+test('only the host receives stall attribution and can kick a player into AI', () => {
+    const { start, advance } = setup(); const { a, b } = start();
+    a.receive(encodeOrderPacket(1, 1, new Uint8Array()));
+    advance(3000);
+    expect(a.all('matchHealth').at(-1).players.find((p: any) => p.clientId === 2).lagMs).toBe(3000);
+    expect(b.all('matchHealth')).toHaveLength(0);
+    b.command('kick_ai', { clientId: 1 });
+    expect(a.closed).toBeUndefined();
+    a.command('kick_ai', { clientId: 1 });
+    expect(a.closed).toBeUndefined();
+    a.command('kick_ai', { clientId: 2 });
+    expect(b.closed).toBe('kicked');
+    expect(a.all('disconnect').at(-1)).toEqual({ type: 'disconnect', clientId: 2, frame: 3, takeover: 'ai' });
+});
+
+for (const disconnectAi of [false, true]) test(`disconnect policy is server controlled: AI=${disconnectAi}`, () => {
+    const { server, join } = setup(); const host = join('Host'), guest = join('Guest');
+    guest.command('option', { key: 'disconnectAi', value: !disconnectAi });
+    expect(server.session.gameOpts.disconnectAi).toBeUndefined();
+    host.command('option', { key: 'disconnectAi', value: disconnectAi });
+    host.command('map_ready', { digest: 'digest' }); guest.command('state', { ready: true, mapDigest: 'digest' });
+    host.command('startgame');
+    expect(host.all('startGame')[0].gameOpts.disconnectAi).toBe(disconnectAi);
+    host.command('option', { key: 'disconnectAi', value: !disconnectAi });
+    expect(server.session.gameOpts.disconnectAi).toBe(disconnectAi);
+    guest.close('Quit');
+    expect(host.all('disconnect').at(-1).takeover).toBe(disconnectAi ? 'ai' : undefined);
+});
+
+test('player orders cannot inject server-only takeover or destruction actions', () => {
+    for (const actionId of [14, 15]) {
+        const {start} = setup(); const {a,b} = start();
+        b.receive(encodeOrderPacket(2,1,new Uint8Array([1,actionId,0,0])));
+        expect(b.closed).toBe('invalidPacket');
+        expect(a.packets().some(packet => packet.kind === 'orders' && packet.actions[1] === actionId)).toBe(false);
+    }
+});

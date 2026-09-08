@@ -52,7 +52,8 @@ export type ServerMessage = ContentResponse
     | { type: 'loaded'; clientId: number; percent: number }
     | { type: 'allLoaded' }
     | { type: 'ack'; frame: number; count: number }
-    | { type: 'disconnect'; clientId: number; frame: number }
+    | { type: 'disconnect'; clientId: number; frame: number; takeover?: 'ai' }
+    | { type: 'matchHealth'; players: { clientId: number; ping: number | null; lagMs: number }[] }
     | { type: 'outOfSync'; frame: number }
     | { type: 'ping' | 'pong'; t: number; queueLength?: number };
 

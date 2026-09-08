@@ -265,3 +265,31 @@ committing, then comparing with a friend's post-commit build, can trigger the
 misleading rules/mod mismatch even with identical source hashes. After final
 commits, both machines should pull/build the same revision and fully quit/relaunch
 the right app. Applications/Dock copies may still point at older binaries.
+
+## Additional completed side quest after this plan was committed
+
+The working tree now also contains an implemented connection-stall/AI-takeover
+patch (not yet committed at handoff). Preserve it; inspect `git status` and
+`docs/MULTIPLAYER_PROGRESS.md` before starting observer work. It adds:
+
+- `NetworkStallOverlay.tsx` and `networkStall.css`: centered, wall-clock stall UI;
+  host-only lagging-player details and kick-to-AI, generic messaging for guests.
+- `GameOpts.disconnectAi`: pre-game option for AI takeover versus asset destruction
+  on guest departure. Explicit host kick overrides the option. Direct Quit no
+  longer enqueues the legacy resign action before disconnecting.
+- Server `matchHealth` / `kick_ai` and optional `disconnect.takeover = 'ai'`.
+  Replacement executes at the authoritative disconnect frame, not upon receipt.
+- `ActionType.AiTakeover = 14`, `DestroyDisconnectedPlayer = 15`, action factories
+  and replay recording. `BotManager.takeOverPlayer()` adds a Normal AI without
+  rebuilding existing bots or reallocating the original commander's assets.
+- Server-only action validation; player input cannot trigger these control actions.
+- 142 passing unit tests; real three-client tests for natural recovery, host kick,
+  Quit-to-AI and Quit-to-destruction with 450 matching ticks on survivors. Typecheck
+  still has 42 baseline errors. Native helper hosting smoke and Mac builds passed.
+
+Observer catch-up MUST include these deterministic takeover/destruction actions,
+not only ordinary player commands. A waiting/observing connection must never
+appear as a lagging commander, be turned into AI, or trigger army destruction.
+Host Quit still stops embedded hosting; retaining the host's connection/process
+when its commander leaves remains part of the persistent-room work above.
+This patch does not provide reconnect/resume or replace the observer roadmap.

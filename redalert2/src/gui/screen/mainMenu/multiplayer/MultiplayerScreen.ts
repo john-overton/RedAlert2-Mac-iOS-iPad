@@ -475,6 +475,7 @@ export class MultiplayerScreen extends MainMenuScreen {
             canManageContent: self?.admin, hasContent: Boolean(session?.content?.files.length),
             onContentFiles: (files: File[]) => void this.importContent(files), onRemoveContent: () => void this.removeContent(),
             onRetryContent: () => session && void this.checkContent(session, true), onCancelContent: () => this.cancelContent(),
+            disconnectAi: session?.gameOpts.disconnectAi, onDisconnectAi: (value: boolean) => this.send('option', { key: 'disconnectAi', value }),
             ready: self?.ready, canReady, recent: this.recent(), onField: (key: keyof ConnectionFields, value: string) => { this.fields = { ...this.fields, [key]: value }; this.render(); },
             connectionHealth: this.client?.getConnectionHealth(), connectionPlayers: session?.clients.map(({id,name}) => ({id,name})),
             managedPlayers: self?.admin && !self.ready ? session?.clients.filter(member => member.id !== self.id) : [],

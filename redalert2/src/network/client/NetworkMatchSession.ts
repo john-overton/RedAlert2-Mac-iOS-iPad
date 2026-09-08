@@ -11,6 +11,9 @@ export class NetworkMatchSession {
     readonly onActionsReceived = new EventDispatcher<this, string>();
     readonly onFatalError = new EventDispatcher<this, { message: string; frame?: number }>();
     private readonly frames = new Map<number, Map<string, Uint8Array>>();
+    private readonly aiTakeovers = new Set<string>();
+    matchHealth: Extract<ServerMessage, { type: 'matchHealth' }>['players'] = [];
+    controlError?: string;
     private readonly drops = new Map<string, number>();
     private readonly loaded = new Map<string, number>();
     private readonly submitted = new Map<number, string>();
@@ -33,6 +36,12 @@ export class NetworkMatchSession {
 
     getLaunchDescriptor(): LanLaunchDescriptor { return this.descriptor; }
     getHumanAssignment(peerId: string) { return this.descriptor.humanAssignments.find(item => item.peerId === peerId); }
+    isHost(): boolean { return this.descriptor.localPeerId === this.descriptor.hostPeerId; }
+    kickToAi(clientId: number): void {
+        this.controlError = undefined;
+        if (this.isHost()) this.send(() => this.connection.sendImmediate({ type: 'command', name: 'kick_ai', args: { clientId } }));
+    }
+    takesOverWithAi(peerId: string): boolean { return this.aiTakeovers.has(peerId); }
     areAllPlayersLoaded(): boolean { return this.allLoaded; }
     sendChat(to: 'all' | 'team' | number, text: string): void {
         this.send(() => this.connection.sendImmediate({ type: 'chat', to, text }));
@@ -152,12 +161,15 @@ export class NetworkMatchSession {
                 packets.set(String(packet.clientId), packet.actions);
             } else {
                 const message: ServerMessage = JSON.parse(data);
+                if (message.type === 'matchHealth') { this.matchHealth = message.players; return; }
+                if (message.type === 'error' && message.code === 'invalidCommand') { this.controlError = message.message; return; }
                 if (message.type === 'chat') { this.onChat.dispatch(this, message); return; }
                 if (message.type === 'loaded') this.loaded.set(String(message.clientId), message.percent);
                 else if (message.type === 'allLoaded') this.allLoaded = true;
                 else if (message.type === 'disconnect') {
                     if (message.frame <= this.lastConsumedFrame) throw new Error('Server sent a late player disconnect.');
                     this.drops.set(String(message.clientId), message.frame);
+                    if (message.takeover === 'ai') this.aiTakeovers.add(String(message.clientId));
                     for (const [frame, reports] of this.syncs) this.checkSync(frame, reports);
                 } else if (message.type === 'outOfSync') this.fail(`Game out of sync at frame ${message.frame}.`, message.frame);
             }

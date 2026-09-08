@@ -253,3 +253,15 @@ the spy-plane targeting animation. Classic-only assets retain their normal
 cursor sheet with an aircraft fallback. The local player's spy-plane countdown
 is shown above the bottom command bar at the right, including its ready state;
 opponents' spy-plane timers remain hidden when their rules specify no timer.
+
+During a connection stall, a centered synchronization message appears after
+1.5 seconds. The host sees which commander's turn progress is behind and can
+keep waiting or choose **Kick & replace with AI**. Other players see only the
+waiting message. It clears automatically when play resumes.
+
+Before starting, the host can choose **When a player disconnects**:
+**Destroy their base and units** (default), or **Replace with AI (Normal)**.
+This applies to guest quits and connection timeouts; the explicit kick-to-AI
+button overrides it. Replacement preserves the player's assets, credits and
+alliances and starts at the same simulation tick on every remaining client.
+The host must keep the hosting application open; host migration is not supported.

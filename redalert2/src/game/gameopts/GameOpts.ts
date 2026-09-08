@@ -25,6 +25,7 @@ export interface AiPlayerInfo {
     teamId: number;
 }
 export interface GameOpts {
+    disconnectAi?: boolean;
     gameMode: number;
     gameSpeed: number;
     credits: number;

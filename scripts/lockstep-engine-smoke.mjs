@@ -8,7 +8,8 @@ import { GameServer } from '../redalert2/src/network/server/GameServer.ts';
 import { BunWsTransport } from '../redalert2/server/BunWsTransport.ts';
 
 const solo = process.env.RA2_SOLO_SMOKE === '1';
-const clientCount = solo ? 1 : 2;
+const takeover = process.env.RA2_TAKEOVER_SMOKE === '1';
+const clientCount = solo ? 1 : takeover ? 3 : 2;
 const targetTicks = Number(process.argv[2] ?? 150);
 if (!Number.isInteger(targetTicks) || targetTicks < 100) throw new Error('Use at least 100 ticks.');
 const base = process.env.RA2_DEV_URL || 'http://127.0.0.1:4000';
@@ -30,7 +31,7 @@ try {
     await page.waitForFunction(() => window.__ra2debug?.skirmishLobby?.gameOpts, undefined, { timeout: 120000 });
     console.log(`Client ${i + 1}: assets loaded and skirmish ready`);
   }
-  const gameOpts = await pages[0].evaluate(async (solo) => {
+  const gameOpts = await pages[0].evaluate(async ({solo,clientCount}) => {
     const screen = window.__ra2debug.mainMenuController.getCurrentScreen();
     const { Engine } = await import('/src/engine/Engine.ts');
     const entry = screen.mapList.getAll().filter(map => map.official && map.maxSlots >= 4 && Engine.vfs.fileExists(map.fileName)).sort((a, b) => a.fileName.localeCompare(b.fileName))[0];
@@ -38,10 +39,11 @@ try {
     screen.pregameController.applyMapSelection({ gameMode: screen.gameModes.getById(screen.pregameController.getGameOpts().gameMode), mapName: entry.fileName, changedMapFile: await Engine.vfs.openFileWithRfs(entry.fileName) });
     const opts = screen.pregameController.getGameOpts();
     const c = await import('/src/game/gameopts/constants.ts');
-    opts.aiPlayers = Array.from({ length: opts.maxSlots }, (_, index) => !solo && (index === 2 || index === 3) ? { difficulty: index === 2 ? 0 : 2, countryId: c.RANDOM_COUNTRY_ID, colorId: c.RANDOM_COLOR_ID, startPos: c.RANDOM_START_POS, teamId: c.NO_TEAM_ID } : undefined);
+    opts.aiPlayers = Array.from({ length: opts.maxSlots }, (_, index) => !solo && index >= clientCount ? { difficulty: index === 2 ? 0 : 2, countryId: c.RANDOM_COUNTRY_ID, colorId: c.RANDOM_COLOR_ID, startPos: c.RANDOM_START_POS, teamId: c.NO_TEAM_ID } : undefined);
     return opts;
-  }, solo);
-  core = new GameServer({ identity, gameOpts, slotsInfo: Array.from({ length: gameOpts.maxSlots }, (_, i) => ({ type: !solo && (i === 2 || i === 3) ? 4 : i < clientCount ? 1 : 0 })), orderLatency: 2, now: Date.now, random: () => 0.125 }, transport);
+  }, {solo,clientCount});
+  gameOpts.disconnectAi = process.env.RA2_DROP_POLICY === 'ai';
+  core = new GameServer({ identity, gameOpts, slotsInfo: Array.from({ length: gameOpts.maxSlots }, (_, i) => ({ type: !solo && i >= clientCount ? 4 : i < clientCount ? 1 : 0 })), orderLatency: 2, now: Date.now, random: () => 0.125 }, transport);
   await core.start();
   timer = setInterval(() => core.tick(), 1000);
   for (let i = 0; i < clientCount; i++) {
@@ -67,7 +69,7 @@ try {
       });
       await client.connect(address, { ...identity, type: 'hello', name: `Smoke ${index + 1}` });
       client.command('map_ready', { digest: client.session.gameOpts.mapDigest });
-      if (index === 1 || solo) client.command('state', { ready: true, mapDigest: client.session.gameOpts.mapDigest });
+      if (index >= 1 || solo) client.command('state', { ready: true, mapDigest: client.session.gameOpts.mapDigest });
     }, { address: `127.0.0.1:${transport.port}`, identity, index: i, targetTicks, solo });
   }
   await pages[0].waitForFunction(count => window.__networkSmoke.client.session.clients.length === count && window.__networkSmoke.client.session.clients.every(client => client.mapReady && (client.admin || client.ready)), clientCount);
@@ -87,6 +89,8 @@ try {
   if (solo) {
     if (matching[0].errors.length || matching[0].bots !== 0) throw new Error('Solo match has errors or unexpected bots');
     console.log(`Solo host loaded and advanced ${targetTicks} ticks without an opponent or premature victory`);
+  } else if (takeover) {
+    await (await import('./network-takeover-smoke.mjs')).checkTakeover(pages, targetTicks, process.env.RA2_DROP_POLICY);
   } else {
   if (JSON.stringify(matching[0].hashes) !== JSON.stringify(matching[1].hashes)) throw new Error('Real engine hashes diverged before fault injection.');
   console.log(`Both clients match every frame through ${targetTicks} ticks, bots=${matching[0].bots}, objects=${matching[0].objects}`);

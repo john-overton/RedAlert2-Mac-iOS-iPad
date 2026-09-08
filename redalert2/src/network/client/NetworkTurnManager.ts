@@ -16,6 +16,8 @@ export class NetworkTurnManager {
     private errorState = false;
     private passiveMode = false;
     private lagState = false;
+    private waitingSince?: number;
+    getStallDuration(): number { return this.errorState || !this.waitingSince ? 0 : Date.now() - this.waitingSince; }
     private matchDisposed = false;
 
     public readonly onActionsSent = new EventDispatcher<this, string>();
@@ -161,6 +163,7 @@ export class NetworkTurnManager {
             const player = this.game.getPlayerByName(assignment.name);
             const actionRecords = batch.actionData.length ? this.parser.parsePlayerActions(batch.actionData) : [];
             actionRecords.forEach((record) => {
+                if (record.id === ActionType.AiTakeover || record.id === ActionType.DestroyDisconnectedPlayer) throw new Error('AI takeover must come from the server.');
                 const action = this.actionFactory.create(record.id);
                 action.unserialize?.(record.params);
                 action.player = player;
@@ -181,7 +184,7 @@ export class NetworkTurnManager {
             }
 
             const player = this.game.getPlayerByName(assignment.name);
-            const action = this.actionFactory.create(ActionType.DropPlayer);
+            const action = this.actionFactory.create(this.matchSession.takesOverWithAi(peerId) ? ActionType.AiTakeover : ActionType.DestroyDisconnectedPlayer);
             action.unserialize?.(new Uint8Array());
             action.player = player;
             action.process();
@@ -197,6 +200,7 @@ export class NetworkTurnManager {
             return;
         }
         this.lagState = nextLagState;
+        this.waitingSince = nextLagState ? Date.now() : undefined;
         this.onLagStateChange.dispatch(this, nextLagState);
         if (nextLagState) {
             this.lockstepLogger?.warn?.(`[network] waiting for turn ${tick}${this.passiveMode ? ' (passive)' : ''}`);

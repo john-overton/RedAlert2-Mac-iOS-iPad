@@ -1,3 +1,5 @@
+import { Parser } from '../gameopt/Parser';
+import { ActionType } from '../../game/action/ActionType';
 import { HEARTBEAT_INTERVAL_MS, CONNECTION_WARNING_MS, CONNECTION_TIMEOUT_MS, HANDSHAKE_TIMEOUT_MS } from '../ConnectionHealth';
 import { CONTENT_CHUNK_BYTES, decodeContentBytes, encodeContentBytes, validateContentManifest, verifyContentFiles } from '../content/ContentPackage';
 import type { ContentManifest } from '../content/ContentPackage';
@@ -34,6 +36,8 @@ interface Peer {
     pendingPings: Set<number>;
     lastPong?: number;
     lastFrame: number;
+    lastOrderAt?: number;
+    takeover?: 'ai';
     lastSync: number;
     floodAt: number;
     floodCount: number;
@@ -46,7 +50,7 @@ const integer = (value: unknown, min: number, max: number): value is number => N
 const selection = (value: unknown, max: number): value is number => value === -2 || integer(value, 0, max);
 const label = (value: unknown, limit = 32): value is string => typeof value === 'string' && value.trim().length > 0 && value.length <= limit && !/[\u0000-\u001f\u007f]/.test(value);
 const scalarOptions: Record<string, [number, number] | 'boolean'> = {
-    gameSpeed: [0, 6], credits: [0, 100000], unitCount: [0, 100], shortGame: 'boolean', superWeapons: 'boolean', buildOffAlly: 'boolean', mcvRepacks: 'boolean', cratesAppear: 'boolean', hostTeams: 'boolean', destroyableBridges: 'boolean', multiEngineer: 'boolean', noDogEngiKills: 'boolean',
+    disconnectAi: 'boolean', gameSpeed: [0, 6], credits: [0, 100000], unitCount: [0, 100], shortGame: 'boolean', superWeapons: 'boolean', buildOffAlly: 'boolean', mcvRepacks: 'boolean', cratesAppear: 'boolean', hostTeams: 'boolean', destroyableBridges: 'boolean', multiEngineer: 'boolean', noDogEngiKills: 'boolean',
 };
 
 /** Authoritative, runtime independent lobby and frame relay. Call tick every second. */
@@ -117,6 +121,15 @@ export class GameServer {
                 peer.pendingPings.add(now);
                 this.send(peer, { type: 'ping', t: now });
             }
+        }
+        if (this.model.state === 'started' && this.allLoaded && now - this.lastHealthBroadcast >= 1000) {
+            this.lastHealthBroadcast = now;
+            const peers = [...this.peers].filter(p => p.client);
+            const maxFrame = Math.max(...peers.map(p => p.lastFrame));
+            const maxSync = Math.max(...peers.map(p => p.lastSync));
+            const players = peers.map(p => ({ clientId: p.client!.id, ping: p.lastPong === undefined ? null : p.client!.ping,
+                lagMs: p.lastFrame < maxFrame || p.lastSync < maxSync ? Math.max(0, now - (p.lastOrderAt ?? now)) : 0 }));
+            for (const host of peers.filter(p => p.client!.admin)) this.send(host, { type: 'matchHealth', players });
         }
         if (this.model.state === 'waiting' && now - this.lastHealthBroadcast >= 1000) {
             this.lastHealthBroadcast = now;
@@ -219,6 +232,15 @@ export class GameServer {
     private resetReady(): void { for (const client of this.model.clients) client.ready = false; }
     private command(peer: Peer, name: unknown, args: Record<string, unknown>): void {
         const client = peer.client!;
+        if (name === 'kick_ai' && this.model.state === 'started') {
+            const target = [...this.peers].find(p => p.client?.id === args.clientId);
+            if (!client.admin || !this.allLoaded || !target || target === peer || target.client?.slotIndex === null) {
+                this.fail(peer, 'Only the host can replace another active player with AI.'); return;
+            }
+            target.takeover = 'ai';
+            this.reject(target, 'kicked', 'The host replaced your connection with AI.');
+            return;
+        }
         if (this.model.state !== 'waiting') { this.fail(peer, 'The game has already started'); return; }
         if (!args || typeof args !== 'object' || Array.isArray(args)) { this.fail(peer, 'Invalid arguments'); return; }
         if (name === 'sync_lobby') { this.send(peer, { type: 'session', session: this.session }); return; }
@@ -348,6 +370,7 @@ export class GameServer {
         const players = this.model.clients.filter(c => c.slotIndex !== null);
         if (this.upload || [...this.peers].some(p=>p.contentBusy) || !peer.client!.admin || players.length < (this.options.allowSinglePlayer === false ? 2 : 1) || this.model.clients.some(c => !c.mapReady || (this.model.content && c.contentReady !== this.model.content.id) || (!c.admin && !c.ready))) { this.fail(peer, 'All players must have the map and be ready'); return; }
         this.model.state = 'started';
+        for (const member of this.peers) member.lastOrderAt = this.now();
         this.updatePlayers();
         for (const client of this.model.clients) this.active.add(client.id);
         const timestamp = this.now();
@@ -367,9 +390,15 @@ export class GameServer {
     private receivePacket(peer: Peer, data: Uint8Array): void {
         const packet = decodePacket(data);
         if (packet.kind === 'orders') {
+            // The relay otherwise treats action payloads as opaque; reserve these
+            // replay actions for server-scheduled disconnects, never player input.
+            let actions: { id: number }[] = [];
+            try { if (packet.actions.length) actions = new Parser().parsePlayerActions(packet.actions); } catch { /* Clients validate malformed game actions. */ }
+            if (actions.some(action => action.id === ActionType.AiTakeover || action.id === ActionType.DestroyDisconnectedPlayer)) throw new Error('Server-only action');
             const minFrame = Math.min(...[...this.peers].filter(p => p.client).map(p => p.lastFrame));
             if (packet.clientId !== peer.client!.id || packet.frame !== peer.lastFrame + 1 || packet.frame > minFrame + 256 || packet.frame > 0xffffffff - this.model.orderLatency) throw new Error('Invalid order sequence');
             peer.lastFrame = packet.frame;
+            peer.lastOrderAt = this.now();
             const frame = packet.frame + this.model.orderLatency;
             this.broadcast(encodeOrderPacket(peer.client!.id, frame, packet.actions));
             this.send(peer, { type: 'ack', frame, count: packet.actions.length });
@@ -400,7 +429,7 @@ export class GameServer {
         if (client.id === this.embeddedHostId) { this.stop(); return; }
         if (this.model.state === 'started') {
             // The peer's last stamped order remains authoritative; remove it only on the following frame.
-            this.broadcast({ type: 'disconnect', clientId: client.id, frame: peer.lastFrame + this.model.orderLatency + 1 });
+            this.broadcast({ type: 'disconnect', clientId: client.id, frame: peer.lastFrame + this.model.orderLatency + 1, ...(peer.takeover || this.model.gameOpts.disconnectAi ? { takeover: 'ai' as const } : {}) });
             this.active.delete(client.id);
             for (const [frame, reports] of this.syncs) if ([...this.active].every(id => reports.has(id))) this.syncs.delete(frame);
             this.checkLoaded();

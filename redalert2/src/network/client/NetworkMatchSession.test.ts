@@ -210,3 +210,16 @@ describe('match shutdown and transport failures', () => {
         expect(match.fatalError?.message).toContain('out of sync at frame 1');
     });
 });
+
+test('AI replacement is applied only with the authoritative drop turn', () => {
+    const {match, receive, frame, outgoing} = fixture();
+    match.kickToAi(2);
+    expect(JSON.parse(outgoing[0] as string)).toEqual({ type: 'command', name: 'kick_ai', args: {clientId:2} });
+    receive({type:'allLoaded'});
+    receive({type:'disconnect',clientId:2,frame:2,takeover:'ai'});
+    frame(1,1);frame(2,1);
+    expect(match.tryConsumeTurn(0)?.dropPeerIds).toEqual([]);
+    frame(1,2);
+    expect(match.tryConsumeTurn(1)?.dropPeerIds).toEqual(['2']);
+    expect(match.takesOverWithAi('2')).toBe(true);
+});

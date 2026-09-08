@@ -258,3 +258,34 @@ Mac/Linux session with the user's friend remains the next manual check.
   smoke with one client and no opponents: it loaded and advanced 150 ticks without
   premature victory. Entry typecheck retains 42 baseline errors. Both Mac variants
   rebuilt and signatures verified.
+
+### In-game connection stalls and AI takeover
+
+- Add a centered synchronization overlay after 1.5 seconds of stalled turns.
+  Only the host receives per-player progress/ping attribution and sees Keep
+  waiting / Kick & replace with AI. Ordinary players see a generic wait message.
+  The wall-clock UI continues updating while simulation ticks are blocked and
+  disappears automatically when the connection recovers.
+- Add the pre-game `disconnectAi` option: destroy a departed commander's assets
+  (default) or replace them with Normal AI. Guests cannot change it, and it is
+  locked once play starts. Explicit host kick-to-AI overrides the option.
+- Schedule replacement/destruction on the first frame without an order from the
+  departed peer. Surviving clients preserve already accepted orders and execute
+  the same control action on the same tick. AI retains army, structures, credits,
+  country and alliances. Destruction does not redistribute assets to allies.
+- Record control actions in replays; reject player-injected control actions.
+  Direct multiplayer Quit bypasses the legacy resign action, which previously
+  destroyed/transferred assets before the selected disconnect policy could run.
+- Validation: 142 unit tests pass; entry typecheck retains 42 baseline errors.
+  Three-client engine smokes passed for host kick, natural recovery, Quit-to-AI
+  and Quit-to-destruction: both survivors matched all 450 ticks. Takeover retained
+  assets/credits, started Normal AI, and recorded its control action for replay.
+  Native helper hosting/content/cleanup smoke passed. Both Mac variants rebuilt.
+- This does not implement reconnect/resume, observers, persistent rooms or host
+  migration. Quitting the embedded host still stops the server. Guest connection
+  timeouts retain the existing 120-second deadline and follow the chosen policy.
+- Browser scenarios: `RA2_TAKEOVER_SMOKE=1` on `scripts/lockstep-engine-smoke.mjs`;
+  add `RA2_DROP_POLICY=ai` or `RA2_DROP_POLICY=destroy` for real Quit handlers.
+  Do not combine this mode with the solo or two-client HUD mode. Logs/screenshots
+  are ignored under `build/macos/stall-*`, `quit-*-engine-smoke.log`, and
+  `network-stall-{host,guest}.png`.

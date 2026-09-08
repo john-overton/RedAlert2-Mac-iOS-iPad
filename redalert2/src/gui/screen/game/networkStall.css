@@ -1,0 +1,24 @@
+.network-stall-layer {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 1000;
+}
+.network-stall-panel {
+    pointer-events: auto;
+    width: min(480px, 85%);
+    padding: 20px;
+    color: #f1f3da;
+    background: rgba(8, 14, 12, .95);
+    border: 1px solid #bec45c;
+    box-shadow: 0 4px 20px #0009;
+    text-align: center;
+    font-size: 15px;
+}
+.network-stall-panel strong { font-size: 20px; color: #ffff60; }
+.network-stall-player { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin: 12px 0; }
+.network-stall-panel button { padding: 8px; cursor: pointer; color: #ffff70; background: #25362d; border: 1px solid #8a996c; }
+.network-stall-panel button:hover:not(:disabled) { background: #354c3e; }
+.network-stall-panel button:disabled { opacity: .5; cursor: default; }

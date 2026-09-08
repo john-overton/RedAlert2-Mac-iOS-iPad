@@ -1,3 +1,5 @@
+import { DestroyDisconnectedPlayerAction } from './DestroyDisconnectedPlayerAction';
+import { AiTakeoverAction } from './AiTakeoverAction';
 import { OrderActionContext } from './OrderActionContext';
 import { ActionType } from './ActionType';
 import { NoActionFactory } from './factories/NoActionFactory';
@@ -16,6 +18,8 @@ import { ResignGameActionFactory } from './factories/ResignGameActionFactory';
 import { DebugActionFactory } from './factories/DebugActionFactory';
 export class ActionFactoryReg {
     register(actionRegistry: any, gameContext: any, playerContext: any): void {
+        actionRegistry.registerFactory(ActionType.DestroyDisconnectedPlayer, { create: () => new DestroyDisconnectedPlayerAction(gameContext) });
+        actionRegistry.registerFactory(ActionType.AiTakeover, { create: () => new AiTakeoverAction(gameContext) });
         const orderActionContext = new OrderActionContext();
         actionRegistry.registerFactory(ActionType.NoAction, new NoActionFactory());
         actionRegistry.registerFactory(ActionType.PlaceBuilding, new PlaceBuildingActionFactory(gameContext));

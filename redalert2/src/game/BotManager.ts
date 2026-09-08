@@ -1,3 +1,4 @@
+import { AiDifficulty } from './gameopts/GameOpts';
 import { CompositeDisposable } from '../util/disposable/CompositeDisposable';
 import { AppLogger } from '@/util/logger';
 import { ActionQueue } from './action/ActionQueue';
@@ -81,6 +82,19 @@ export class BotManager {
             }
         }
         logger.info(`[BotManager] Initialization complete. ${this.bots.size} bot(s) active.`);
+    }
+    takeOverPlayer(player: any, game: any): void {
+        if (player.defeated || this.bots.has(player)) return;
+        player.isAi = true;
+        player.aiDifficulty = AiDifficulty.Normal; // Normal, identical on every peer and replay.
+        player.customBotId = undefined;
+        const bot = this.botFactory.create(player);
+        bot.setGameApi(this.gameApi);
+        bot.setActionsApi(new ActionsApi(game, this.actionFactory, this.actionQueue, bot));
+        bot.setProductionApi(new ProductionApi(player.production));
+        bot.setLogger(new LoggerApi(AppLogger.get(bot.name) as any, this.gameApi));
+        this.bots.set(player, bot);
+        bot.onGameStart(this.gameApi);
     }
     update(gameState: any): void {
         for (const action of this.actionQueue.dequeueAll()) {

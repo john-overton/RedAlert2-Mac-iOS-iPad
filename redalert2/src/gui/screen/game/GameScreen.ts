@@ -1,3 +1,4 @@
+import { NetworkStallOverlay } from './NetworkStallOverlay';
 import { recordCampaignProgress } from '@/data/campaign/CampaignProgress';
 import { controllableObjects } from '@/game/campaign/CampaignControl';
 import { campaignMissions, campaignMissionForMap } from '@/data/campaign/CampaignMissions';
@@ -727,6 +728,7 @@ export class GameScreen extends RootScreen {
             ? new NetworkTurnManager(game, localPlayer, actionQueue, actionFactory, lanMatchSession, this.actionLogger, this.lockstepLogger, replayRecorder)
             : new LanLockstepTurnManager(game, localPlayer, actionQueue, actionFactory, lanMatchSession, this.actionLogger, this.lockstepLogger, replayRecorder);
         if (lockstepManager instanceof NetworkTurnManager) {
+            this.disposables.add(new NetworkStallOverlay(lanMatchSession as NetworkMatchSession, lockstepManager, () => this.activeWorldScene?.viewport ?? this.viewport.value));
             const onFatalError = (error: { message: string }) => this.handleError(new Error(error.message), error.message);
             lockstepManager.onFatalError.subscribe(onFatalError);
             this.disposables.add(() => lockstepManager.onFatalError.unsubscribe(onFatalError));
@@ -1273,7 +1275,7 @@ export class GameScreen extends RootScreen {
             this.pointer.lock();
             this.pointer.setVisible(false);
             this.playerUi.dispose();
-            if (!localPlayer.isObserver && !this.isSinglePlayer && !this.lagState) {
+            if (!localPlayer.isObserver && !this.isSinglePlayer && !this.lagState && !(this.lanMatchSession instanceof NetworkMatchSession)) {
                 actionQueue.push(actionFactory.create(ActionType.ResignGame));
                 await new Promise<void>((resolve) => {
                     this.gameTurnMgr.onActionsSent.subscribeOnce(() => resolve());
