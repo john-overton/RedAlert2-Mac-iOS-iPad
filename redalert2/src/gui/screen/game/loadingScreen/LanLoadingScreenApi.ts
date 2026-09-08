@@ -2,6 +2,7 @@ import { jsx } from '@/gui/jsx/jsx';
 import { OBS_COUNTRY_ID, NO_TEAM_ID } from '@/game/gameopts/constants';
 import { PlayerConnectionStatus } from '@/network/gamestate/PlayerConnectionStatus';
 import { LanMatchSession } from '@/network/lan/LanMatchSession';
+import { NetworkMatchSession } from '@/network/client/NetworkMatchSession';
 import { CompositeDisposable } from '@/util/disposable/CompositeDisposable';
 import { LoadingScreenWrapper } from './LoadingScreenWrapper';
 import { LoadingScreenApi } from './LoadingScreenApi';
@@ -75,7 +76,7 @@ export class LanLoadingScreenApi implements LoadingScreenApi {
     };
 
     constructor(
-        private readonly lanMatchSession: LanMatchSession,
+        private readonly lanMatchSession: LanMatchSession | NetworkMatchSession,
         private readonly rules: Rules,
         private readonly strings: Strings,
         private readonly uiScene: UiScene,

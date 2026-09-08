@@ -1,5 +1,6 @@
 import { LoadInfoParser } from '@/network/gameopt/LoadInfoParser';
 import { LanMatchSession } from '@/network/lan/LanMatchSession';
+import { NetworkMatchSession } from '@/network/client/NetworkMatchSession';
 import { LanLoadingScreenApi } from './LanLoadingScreenApi';
 import { MpLoadingScreenApi } from './MpLoadingScreenApi';
 import { ReplayLoadingScreenApi } from './ReplayLoadingScreenApi';
@@ -42,7 +43,7 @@ interface GservCon {
 }
 export class LoadingScreenApiFactory {
     constructor(private rules: Rules, private strings: Strings, private uiScene: UiScene, private jsxRenderer: JsxRenderer, private gameResConfig: GameResConfig, private gservCon: GservCon) { }
-    create(type: LoadingScreenType, lanMatchSession?: LanMatchSession): LoadingScreenApi {
+    create(type: LoadingScreenType, lanMatchSession?: LanMatchSession | NetworkMatchSession): LoadingScreenApi {
         const { rules, strings, uiScene, jsxRenderer, gameResConfig, gservCon, } = this;
         switch (type) {
             case LoadingScreenType.SinglePlayer:

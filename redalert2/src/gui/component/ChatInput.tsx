@@ -94,7 +94,8 @@ export const ChatInput = forwardRef<{
         T(e);
     }
     useEffect(() => {
-        p.current?.focus();
+        // Focus the composer without scrolling a containing lobby past its header.
+        p.current?.focus({ preventScroll: true });
     }, []);
     useEffect(() => {
         if (!A(y)) {

@@ -302,6 +302,7 @@ cd redalert2 && RA2_HTTP=1 bun run dev
 | `scripts/build-macos.sh` | ARM64 macOS build, bundled assets, local signing |
 | `scripts/build-macos-icon.py` | Convert the user's retail ICO artwork to an app ICNS |
 | [`docs/LINUX.md`](docs/LINUX.md) | Linux (Omarchy/Arch) build guide, Hyprland rules, controls, limitations |
+| [`docs/MULTIPLAYER.md`](docs/MULTIPLAYER.md) | Direct-IP multiplayer setup, implementation status, and socket/engine/UI smokes |
 | `linux/main.js` | Electron shell: `ra2app://` protocol handler, window, fullscreen, error dialogs |
 | `scripts/build-linux.sh` | Linux build: web build, staged assets, launcher and desktop entry |
 | `scripts/install-linux.sh` | Install a built variant under `~/.local/share/ra2` with a desktop entry |

@@ -59,6 +59,9 @@ if [[ "$VARIANT" == ra2 ]]; then APP_NAME="Red Alert 2"; else APP_NAME="Yuri's R
 
 echo "==> Staging shell"
 cp "$ROOT/linux/main.js" "$ROOT/linux/preload.js" "$OUT/app/"
+(cd "$ROOT/redalert2" && bun run build:server)
+cp "$ROOT/redalert2/dist-server/multiplayer.cjs" "$OUT/app/"
+cp "$ROOT/redalert2/node_modules/ws/LICENSE" "$OUT/app/ws-LICENSE"
 # Hyprland floats the game at its native window size with this rule (see the
 # file for how to install it); harmless elsewhere.
 cp "$ROOT/linux/hyprland-windowrules.lua" "$OUT/"

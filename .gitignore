@@ -22,6 +22,7 @@ redalert2/node_modules/
 
 # --- Build output ---
 redalert2/dist/
+redalert2/dist-server/
 build/
 DerivedData/
 *.xcodeproj/xcuserdata/

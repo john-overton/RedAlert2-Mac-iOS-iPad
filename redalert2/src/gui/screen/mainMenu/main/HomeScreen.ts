@@ -137,12 +137,12 @@ export class HomeScreen implements Screen {
                 }
             },
             {
-                label: 'LAN Multiplayer',
-                tooltip: 'Exchange SDP manually to establish a LAN P2P data channel',
+                label: 'Multiplayer',
+                tooltip: 'Create a game or join a host by address',
                 onClick: () => {
-                    console.log('[HomeScreen] LAN Setup clicked');
+                    console.log('[HomeScreen] Multiplayer clicked');
                     if (this.controller) {
-                        this.controller.pushScreen(MainMenuScreenType.LanSetup);
+                        this.controller.pushScreen(MainMenuScreenType.Multiplayer);
                     }
                 }
             },

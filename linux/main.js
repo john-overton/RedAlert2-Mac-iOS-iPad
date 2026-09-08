@@ -94,6 +94,33 @@ protocol.registerSchemesAsPrivileged([{
 app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations');
 
 let win;
+let hostedGame;
+let hostingPending = false;
+function stopHosting() {
+    hostedGame?.stop();
+    hostedGame = undefined;
+}
+function assertAppFrame(event) {
+    const frame = event.senderFrame;
+    if (!frame || frame !== frame.top || !frame.url.startsWith(`${SCHEME}://app/`)) {
+        throw new Error('Only the game window can manage a multiplayer server.');
+    }
+}
+ipcMain.handle('ra2:host-game', async (event, options) => {
+    assertAppFrame(event);
+    if (hostedGame?.isStopped) stopHosting();
+    if (hostingPending || hostedGame) throw new Error('A game is already being hosted. Leave it first.');
+    hostingPending = true;
+    try {
+        const { hostGame } = require('./multiplayer.cjs');
+        hostedGame = await hostGame(options);
+        if (event.sender.isDestroyed()) { stopHosting(); throw new Error('Game window closed.'); }
+        return { port: hostedGame.port, addresses: hostedGame.addresses };
+    }
+    finally { hostingPending = false; }
+});
+ipcMain.handle('ra2:stop-hosting', (event) => { assertAppFrame(event); stopHosting(); });
+app.on('before-quit', stopHosting);
 
 // Windowed by default like the Mac app. Tiling compositors (Hyprland) will
 // otherwise squeeze the window below the engine's 800x600 minimum, so the
@@ -130,6 +157,7 @@ function createWindow() {
         if (!url.startsWith(`${SCHEME}://`)) e.preventDefault();
     });
     win.webContents.on('render-process-gone', (_e, details) => {
+        stopHosting();
         dialog.showMessageBox(win, {
             type: 'error',
             title: `${appInfo.name} could not continue`,

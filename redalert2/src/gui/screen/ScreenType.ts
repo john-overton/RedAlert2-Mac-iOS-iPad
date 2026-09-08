@@ -27,5 +27,6 @@ export enum MainMenuScreenType {
     TestEntry = 20,
     LanSetup = 21,
     LoadGame = 22,
-    Campaign = 23
+    Campaign = 23,
+    Multiplayer = 24
 }

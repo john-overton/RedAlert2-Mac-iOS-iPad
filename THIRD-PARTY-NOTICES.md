@@ -83,3 +83,14 @@ Command & Conquer, Red Alert and Yuri's Revenge are trademarks of Electronic
 Arts Inc. This project is unaffiliated.
 
 *EA has not endorsed and does not support this product.*
+
+## WebSocket transport — `ws`
+
+The Electron multiplayer listener bundles `ws` (8.x), licensed under **MIT**.
+Copyright © 2011 Einar Otto Stangvik <einaros@gmail.com>; copyright © 2013
+Arnout Kazemier and contributors; copyright © 2016 Luigi Pinca and contributors. Source and licence are distributed in the
+`ws` dependency (`redalert2/node_modules/ws/LICENSE`); the complete MIT licence
+is also staged beside the Electron server bundle as `ws-LICENSE`.
+
+The multiplayer implementation is original TypeScript based on the design
+recorded in `docs/MULTIPLAYER_PLAN.md`; no OpenRA source has been copied.

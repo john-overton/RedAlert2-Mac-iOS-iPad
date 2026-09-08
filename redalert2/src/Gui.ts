@@ -323,6 +323,8 @@ export class Gui {
         const { TestEntryScreen } = await import('./gui/screen/mainMenu/main/TestEntryScreen.js');
         subScreens.set(MainMenuScreenType.TestEntry, TestEntryScreen);
         subScreens.set(MainMenuScreenType.LanSetup, LanSetupScreen);
+        const { MultiplayerScreen } = await import('./gui/screen/mainMenu/multiplayer/MultiplayerScreen.js');
+        subScreens.set(MainMenuScreenType.Multiplayer, MultiplayerScreen);
         const { InfoAndCreditsScreen } = await import('./gui/screen/mainMenu/infoAndCredits/InfoAndCreditsScreen.js');
         const { CreditsScreen } = await import('./gui/screen/mainMenu/credits/CreditsScreen.js');
         subScreens.set(MainMenuScreenType.InfoAndCredits, InfoAndCreditsScreen);

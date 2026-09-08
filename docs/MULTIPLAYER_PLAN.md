@@ -1,6 +1,12 @@
 # Multiplayer lobby system plan
 
-**Status:** Proposed. Nothing below is implemented. This is the design for
+**Status:** Phase 1 implementation in progress. The direct-IP Electron host,
+authoritative server, client lockstep, and RA2-style lobby are implemented;
+automated socket, UI, and two-engine smokes pass. Physical two-machine/full-match
+acceptance remains open. See [implementation and testing](MULTIPLAYER.md).
+Work has resumed; [the handoff](MULTIPLAYER_PROGRESS.md) records current
+validation, client sync cross-checking and the remaining acceptance work.
+The remaining sections describe the target design for
 replacing the QR-code WebRTC LAN prototype with an OpenRA-style lobby: one
 server per game, a server browser backed by a master server, password-protected
 rooms, version and mod checks in the handshake, host-to-client map delivery,
@@ -399,9 +405,42 @@ S1 On the Mac: does `new WebSocket('ws://<lan-ip>:port')` from
 `ra2app://app` in WKWebView connect, and does `fetch` to it? S2 A 100-line
 Swift `NWListener` WebSocket relay that echoes into the page. S3 Cost of
 `game.getHash()` per tick on iPad mini and on the Linux box, and confirm
-`getHash()` is identical across V8 and JavaScriptCore for the same replay
+`getHash()` is identical across V8 and JavaScriptCore for the same game
 (the first real cross-engine determinism test this engine has had). S4 Build-time
 version stamping.
+
+**S3 result (7 Sep 2026): the simulation is deterministic across V8 and
+JavaScriptCore.** `scripts/determinism-cross-engine-smoke.mjs` runs the same
+seeded skirmish headlessly (Stormy Weather, idle human, Brutal/Normal/Easy
+bots, seed `spike-s3/1757000000000`) and records `game.getHash()` every 100
+ticks. Chromium 151 (V8) and Playwright WebKit 26 (JavaScriptCore, WPE) agree
+on all 61 checkpoints through tick 6000, about 6.7 minutes of game time with
+combat under way, and two Chromium passes agree with each other. Three
+findings explain why and bound the cost:
+
+- Raw `Math.sin/cos/atan2/asin/acos/hypot/exp/log` differ between V8 and
+  JavaScriptCore on 2 to 36 % of inputs (1 ulp, 2 ulp for `hypot`; only
+  `sqrt` matches). The sim never calls them: everything routes through
+  `game/math/GameMath.ts` (sine lookup table, Newton `sqrt`, polynomial
+  `atan2`, integer-scaled `pow`), which is pure IEEE add/multiply. Keep it that
+  way: the remaining raw calls on the sim side are `Math.hypot` in
+  `game/campaign/CampaignTeams.ts` (campaign only, but it orders a sort) and a
+  `Math.random` fallback in `GameApi` that bots do not use.
+- `game.getHash()` costs 1.1 ms on the desktop (V8) and 1.8 ms (JSC) with
+  about 2,100 objects; the sim itself runs at 0.4 to 0.6 ms per tick headless.
+  Hashing every net frame is affordable on desktop; measure on iPad mini
+  before deciding the cadence.
+- Running WebKit on Arch needs Playwright's Ubuntu build plus Ubuntu's
+  `libicu74`, `libxml2` (2.9) and `libflite1` shared objects dropped into
+  `minibrowser-wpe/sys/lib`, an in-page shim for `navigator.storage.getDirectory`
+  (that build has no OPFS; the smoke uses the repo's `file-system-access`
+  ponyfill over IndexedDB), and the menu video stubbed out, because its
+  MediaSource fallback aborts WPE's GStreamer web process. The smoke does all
+  of this for `webkit`; see its header for the commands.
+
+Still open from S3: the same run on a real Mac/iPad (WKWebView's JSC on
+Apple's libm) — the desktop WebKit result makes a difference there unlikely
+but not impossible, and `getHash()` cost on the iPad is unmeasured.
 
 **1. Core protocol, host-embedded on Electron, direct IP.**
 `network/server/` core with unit tests; `NodeWsTransport` in Electron main;
@@ -443,12 +482,11 @@ digests, and player identity if ever wanted.
 
 ## 5. Risks and open questions
 
-- **Cross-engine determinism.** Linux runs V8, Apple runs JavaScriptCore.
-  `Math.sin`, `Math.pow`, `Math.atan2` and friends are not required to agree
-  across engines to the last bit. Spike S3 answers whether the sim ever calls
-  them on the hot path; if a replay hashes differently on the two engines, the
-  fix is a deterministic math shim before any of this ships. This is the one
-  risk that could reorder the phases.
+- **Cross-engine determinism.** Resolved by spike S3 (see phase S): V8 and
+  JavaScriptCore hash identically through 6000 ticks because the sim only uses
+  `GameMath`. The residual risk is a future change that calls `Math.*`
+  directly on the sim side; the smoke script is the regression test for that,
+  and a Mac/iPad run of it is still owed.
 - **WKWebView networking from a custom scheme** (S1). If `ws://` to a LAN
   address is blocked there, Apple *clients* also go through the native bridge
   and the relay transport becomes the Apple default in both directions.
