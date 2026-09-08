@@ -1,6 +1,23 @@
 # Multiplayer observers and persistent lobbies — implementation handoff
 
-Status: planned, not implemented. Updated 2026-09-08.
+Status: persistent-room foundation implemented locally; observer milestones remain planned. Updated 2026-09-08.
+
+## Current implementation checkpoint
+
+The first implementation slice adds protocol v3 match generations, per-match
+return/disposal without closing the socket, combatant-only loading/order/sync
+barriers, and reusable waiting-room state. The multiplayer room owner survives
+game and score views. Return to Lobby retains hosting; Leave Server closes it.
+A commander returning while others play is removed by the existing deterministic
+departure policy. Each remaining commander must independently leave its round
+before another can start; an individual completion claim cannot reset a match
+that still has other commanders. Desync is reported separately from completion.
+
+This is the persistent-room foundation, **not observer support**. Observer role
+selection, spectator chat routing/badges, running-room admission, bounded match
+history and catch-up remain unimplemented. Keep observer controls disabled until
+those paths and their isolation tests exist. See the latest validation entry in
+[MULTIPLAYER_PROGRESS.md](MULTIPLAYER_PROGRESS.md) for checks actually run.
 
 ## Start here
 

@@ -4,6 +4,7 @@ export interface Screen {
     musicType?: any;
     onEnter(params?: any): void | Promise<void>;
     onLeave(): void | Promise<void>;
+    onViewportChange?(): void;
     onStack?(): void | Promise<void>;
     onUnstack?(params?: any): void | Promise<void>;
     update?(deltaTime: number): void;

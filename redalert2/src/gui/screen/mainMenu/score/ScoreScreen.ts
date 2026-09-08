@@ -61,7 +61,7 @@ export class ScoreScreen extends MainMenuScreen {
             : this.strings.get("GUI:MultiplayerScore");
         this.controller.toggleMainVideo(false);
         this.initView(params);
-        if (!params.singlePlayer) {
+        if (!params.singlePlayer && this.wolService) {
             this.loadGameReport(params.game);
         }
     }

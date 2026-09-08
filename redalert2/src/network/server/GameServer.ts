@@ -78,7 +78,7 @@ export class GameServer {
         const orderLatency = options.orderLatency ?? 2;
         const netFrameInterval = options.netFrameInterval ?? 1;
         if (!integer(orderLatency, 1, 12) || netFrameInterval !== 1) throw new Error('Invalid network timing');
-        this.model = { state: 'waiting', serverName: options.serverName?.trim() || 'Red Alert 2', clients: [], slots: Array.from({ length: gameOpts.maxSlots }, (_, i) => {
+        this.model = { generation: 0, state: 'waiting', serverName: options.serverName?.trim() || 'Red Alert 2', clients: [], slots: Array.from({ length: gameOpts.maxSlots }, (_, i) => {
             const slot = options.slotsInfo?.[i];
             // The host connects as an ordinary client, so saved human slots begin open.
             return slot?.type === 4 ? clone(slot) : { type: slot?.type === 0 ? 0 : 1 };
@@ -124,12 +124,12 @@ export class GameServer {
         }
         if (this.model.state === 'started' && this.allLoaded && now - this.lastHealthBroadcast >= 1000) {
             this.lastHealthBroadcast = now;
-            const peers = [...this.peers].filter(p => p.client);
+            const peers = this.combatants();
             const maxFrame = Math.max(...peers.map(p => p.lastFrame));
             const maxSync = Math.max(...peers.map(p => p.lastSync));
             const players = peers.map(p => ({ clientId: p.client!.id, ping: p.lastPong === undefined ? null : p.client!.ping,
                 lagMs: p.lastFrame < maxFrame || p.lastSync < maxSync ? Math.max(0, now - (p.lastOrderAt ?? now)) : 0 }));
-            for (const host of peers.filter(p => p.client!.admin)) this.send(host, { type: 'matchHealth', players });
+            for (const host of peers.filter(p => p.client!.admin)) this.send(host, { type: 'matchHealth', generation: this.model.generation, players });
         }
         if (this.model.state === 'waiting' && now - this.lastHealthBroadcast >= 1000) {
             this.lastHealthBroadcast = now;
@@ -158,7 +158,8 @@ export class GameServer {
             if (typeof data !== 'string') {
                 // Buffered frames may arrive after the first mismatch. Preserve that
                 // diagnosis instead of turning normal in-flight traffic into a drop.
-                if (peer.client && this.model.state === 'ended') return;
+                if (peer.client && (this.model.state !== 'started' || !this.active.has(peer.client.id))) return;
+                if (decodePacket(data).generation !== this.model.generation) return;
                 if (!peer.client || this.model.state !== 'started' || !this.allLoaded) throw new Error('Unexpected orders');
                 this.receivePacket(peer, data);
             } else {
@@ -194,7 +195,8 @@ export class GameServer {
                     peer.contentBusy = true;
                     void this.contentRequest(peer, message).finally(() => { peer.contentBusy = false; });
                 }
-                else if (message.type === 'loaded') this.loaded(peer, message.percent);
+                else if (message.type === 'loaded') { if (this.isCurrentMatch(message)) this.loaded(peer, message.percent); }
+                else if (message.type === 'returnToLobby') { if (this.isCurrentMatch(message)) this.returnToLobby(peer, message.reason); }
                 else {
                     const now = this.now();
                     if (now - peer.floodAt >= 1000) { peer.floodAt = now; peer.floodCount = 0; }
@@ -232,9 +234,12 @@ export class GameServer {
     private resetReady(): void { for (const client of this.model.clients) client.ready = false; }
     private command(peer: Peer, name: unknown, args: Record<string, unknown>): void {
         const client = peer.client!;
+        if (!args || typeof args !== 'object' || Array.isArray(args)) { this.fail(peer, 'Invalid arguments'); return; }
+        if (name === 'sync_lobby') { this.send(peer, { type: 'session', session: this.session }); return; }
         if (name === 'kick_ai' && this.model.state === 'started') {
+            if (args.generation !== this.model.generation || args.gameId !== this.model.gameId) return;
             const target = [...this.peers].find(p => p.client?.id === args.clientId);
-            if (!client.admin || !this.allLoaded || !target || target === peer || target.client?.slotIndex === null) {
+            if (!client.admin || !this.allLoaded || !target || target === peer || !this.active.has(target.client!.id)) {
                 this.fail(peer, 'Only the host can replace another active player with AI.'); return;
             }
             target.takeover = 'ai';
@@ -242,8 +247,6 @@ export class GameServer {
             return;
         }
         if (this.model.state !== 'waiting') { this.fail(peer, 'The game has already started'); return; }
-        if (!args || typeof args !== 'object' || Array.isArray(args)) { this.fail(peer, 'Invalid arguments'); return; }
-        if (name === 'sync_lobby') { this.send(peer, { type: 'session', session: this.session }); return; }
         if (client.ready && name !== 'state' && name !== 'ready' && name !== 'startgame') { this.fail(peer, 'Unready before changing the lobby'); return; }
         if (name === 'state' || name === 'ready') {
             if (args.mapDigest === this.model.gameOpts.mapDigest) client.mapReady = true;
@@ -370,22 +373,26 @@ export class GameServer {
         const players = this.model.clients.filter(c => c.slotIndex !== null);
         if (this.upload || [...this.peers].some(p=>p.contentBusy) || !peer.client!.admin || players.length < (this.options.allowSinglePlayer === false ? 2 : 1) || this.model.clients.some(c => !c.mapReady || (this.model.content && c.contentReady !== this.model.content.id) || (!c.admin && !c.ready))) { this.fail(peer, 'All players must have the map and be ready'); return; }
         this.model.state = 'started';
-        for (const member of this.peers) member.lastOrderAt = this.now();
+        this.model.generation++;
+        this.allLoaded = false; this.syncs.clear(); this.active.clear();
+        for (const member of this.peers) { member.lastOrderAt = this.now(); member.lastFrame = 0; member.lastSync = 0; member.takeover = undefined; if (member.client) member.client.loaded = 0; }
         this.updatePlayers();
-        for (const client of this.model.clients) this.active.add(client.id);
+        for (const client of players) this.active.add(client.id);
         const timestamp = this.now();
-        this.broadcast({ type: 'startGame', gameId: `network-${timestamp}-${Math.floor((this.options.random ?? Math.random)() * 0x100000000).toString(16)}`, timestamp, gameOpts: clone(this.model.gameOpts), humanAssignments: players.map(c => ({ clientId: c.id, slotIndex: c.slotIndex!, name: c.name })), clientIds: [...this.active], orderLatency: this.model.orderLatency, netFrameInterval: this.model.netFrameInterval });
-        for (let frame = 1; frame <= this.model.orderLatency; frame++) for (const id of this.active) this.broadcast(encodeOrderPacket(id, frame, new Uint8Array()));
+        this.model.gameId = `network-${timestamp}-${this.model.generation}-${Math.floor((this.options.random ?? Math.random)() * 0x100000000).toString(16)}`;
+        this.broadcast({ type: 'startGame', gameId: this.model.gameId, generation: this.model.generation, timestamp, gameOpts: clone(this.model.gameOpts), humanAssignments: players.map(c => ({ clientId: c.id, slotIndex: c.slotIndex!, name: c.name })), clientIds: [...this.active], orderLatency: this.model.orderLatency, netFrameInterval: this.model.netFrameInterval });
+        for (let frame = 1; frame <= this.model.orderLatency; frame++) for (const id of this.active) this.broadcast(encodeOrderPacket(id, frame, new Uint8Array(), this.model.generation));
         this.syncLobby();
     }
     private loaded(peer: Peer, percent: unknown): void {
+        if (!this.active.has(peer.client!.id)) return;
         if (this.model.state !== 'started' || !integer(percent, 0, 100) || percent < peer.client!.loaded) throw new Error('Invalid loading progress');
         peer.client!.loaded = percent;
-        this.broadcast({ type: 'loaded', clientId: peer.client!.id, percent });
+        this.broadcast({ type: 'loaded', generation: this.model.generation, clientId: peer.client!.id, percent });
         this.checkLoaded();
     }
     private checkLoaded(): void {
-        if (!this.allLoaded && this.model.state === 'started' && this.model.clients.length && this.model.clients.every(c => c.loaded === 100)) { this.allLoaded = true; this.broadcast({ type: 'allLoaded' }); }
+        if (!this.allLoaded && this.model.state === 'started' && this.active.size && this.combatants().every(p => p.client!.loaded === 100)) { this.allLoaded = true; this.broadcast({ type: 'allLoaded', generation: this.model.generation }); }
     }
     private receivePacket(peer: Peer, data: Uint8Array): void {
         const packet = decodePacket(data);
@@ -395,26 +402,59 @@ export class GameServer {
             let actions: { id: number }[] = [];
             try { if (packet.actions.length) actions = new Parser().parsePlayerActions(packet.actions); } catch { /* Clients validate malformed game actions. */ }
             if (actions.some(action => action.id === ActionType.AiTakeover || action.id === ActionType.DestroyDisconnectedPlayer)) throw new Error('Server-only action');
-            const minFrame = Math.min(...[...this.peers].filter(p => p.client).map(p => p.lastFrame));
+            const minFrame = Math.min(...this.combatants().map(p => p.lastFrame));
             if (packet.clientId !== peer.client!.id || packet.frame !== peer.lastFrame + 1 || packet.frame > minFrame + 256 || packet.frame > 0xffffffff - this.model.orderLatency) throw new Error('Invalid order sequence');
             peer.lastFrame = packet.frame;
             peer.lastOrderAt = this.now();
             const frame = packet.frame + this.model.orderLatency;
-            this.broadcast(encodeOrderPacket(peer.client!.id, frame, packet.actions));
-            this.send(peer, { type: 'ack', frame, count: packet.actions.length });
+            this.broadcast(encodeOrderPacket(peer.client!.id, frame, packet.actions, this.model.generation));
+            this.send(peer, { type: 'ack', generation: this.model.generation, frame, count: packet.actions.length });
         } else if (packet.kind === 'sync') {
-            if (packet.frame !== peer.lastSync + 1 || packet.frame > peer.lastFrame + this.model.orderLatency || packet.frame > Math.min(...[...this.peers].filter(p => p.client).map(p => p.lastSync)) + 256) throw new Error('Invalid sync sequence');
+            if (packet.frame !== peer.lastSync + 1 || packet.frame > peer.lastFrame + this.model.orderLatency || packet.frame > Math.min(...this.combatants().map(p => p.lastSync)) + 256) throw new Error('Invalid sync sequence');
             peer.lastSync = packet.frame;
-            this.broadcast(encodeRelayedSyncPacket(peer.client!.id, packet.frame, packet.hash, packet.defeatMask));
+            this.broadcast(encodeRelayedSyncPacket(peer.client!.id, packet.frame, packet.hash, packet.defeatMask, this.model.generation));
             const reports = this.syncs.get(packet.frame) ?? new Map<number, string>();
             reports.set(peer.client!.id, `${packet.hash}:${packet.defeatMask}`);
             this.syncs.set(packet.frame, reports);
             if (new Set(reports.values()).size > 1) {
-                this.model.state = 'ended';
-                this.broadcast({ type: 'outOfSync', frame: packet.frame });
-                this.syncs.clear();
+                this.broadcast({ type: 'outOfSync', generation: this.model.generation, frame: packet.frame });
+                this.finishMatch('desync');
             } else if ([...this.active].every(id => reports.has(id))) this.syncs.delete(packet.frame);
         } else throw new Error('Clients cannot relay sync packets');
+    }
+    private combatants(): Peer[] { return [...this.peers].filter(p => p.client && this.active.has(p.client.id)); }
+    private isCurrentMatch(message: { gameId?: unknown; generation?: unknown }): boolean {
+        return this.model.state === 'started' && message.gameId === this.model.gameId && message.generation === this.model.generation;
+    }
+    private returnToLobby(peer: Peer, reason: unknown): void {
+        if (reason !== 'finished' && reason !== 'forfeit') { this.fail(peer, 'Invalid match return reason'); return; }
+        if (!this.active.has(peer.client!.id)) return;
+        // A completion claim only releases this commander. Other commanders must
+        // independently return before the room can start another match.
+        this.removeCombatant(peer, reason === 'finished' ? 'finished' : 'abandoned');
+        this.syncLobby();
+    }
+    private removeCombatant(peer: Peer, lastReason: 'finished' | 'abandoned' = 'abandoned'): void {
+        if (!this.active.delete(peer.client!.id)) return;
+        // Retain every already-stamped order, then remove the commander on the next frame.
+        this.broadcast({ type: 'disconnect', generation: this.model.generation, clientId: peer.client!.id,
+            frame: peer.lastFrame + this.model.orderLatency + 1,
+            ...(peer.takeover || this.model.gameOpts.disconnectAi ? { takeover: 'ai' as const } : {}) });
+        for (const [frame, reports] of this.syncs) if ([...this.active].every(id => reports.has(id))) this.syncs.delete(frame);
+        if (!this.active.size) this.finishMatch(lastReason);
+        else this.checkLoaded();
+    }
+    private finishMatch(reason: 'finished' | 'abandoned' | 'desync'): void {
+        this.broadcast({ type: 'matchEnded', gameId: this.model.gameId!, generation: this.model.generation, reason });
+        this.model.state = 'waiting';
+        this.model.gameId = undefined;
+        this.active.clear(); this.syncs.clear(); this.allLoaded = false;
+        this.lastHealthBroadcast = -Infinity;
+        for (const peer of this.peers) {
+            peer.lastFrame = 0; peer.lastSync = 0; peer.lastOrderAt = undefined; peer.takeover = undefined;
+            if (peer.client) { peer.client.ready = false; peer.client.loaded = 0; }
+        }
+        this.syncLobby();
     }
     private chat(peer: Peer, to: unknown, text: unknown): void {
         if (!label(text, 512) || !(to === 'all' || to === 'team' || integer(to, 1, 0xffffffff))) { this.fail(peer, 'Invalid chat message'); return; }
@@ -427,17 +467,10 @@ export class GameServer {
         if (this.upload?.owner === peer) this.upload = undefined;
         this.model.clients = this.model.clients.filter(c => c.id !== client.id);
         if (client.id === this.embeddedHostId) { this.stop(); return; }
-        if (this.model.state === 'started') {
-            // The peer's last stamped order remains authoritative; remove it only on the following frame.
-            this.broadcast({ type: 'disconnect', clientId: client.id, frame: peer.lastFrame + this.model.orderLatency + 1, ...(peer.takeover || this.model.gameOpts.disconnectAi ? { takeover: 'ai' as const } : {}) });
-            this.active.delete(client.id);
-            for (const [frame, reports] of this.syncs) if ([...this.active].every(id => reports.has(id))) this.syncs.delete(frame);
-            this.checkLoaded();
-        } else if (this.model.state === 'waiting') {
-            if (client.slotIndex !== null) this.model.slots[client.slotIndex] = { type: 1 };
-            if (client.admin && this.model.clients.length) this.model.clients[0].admin = true;
-            this.resetReady();
-        }
+        if (client.slotIndex !== null) this.model.slots[client.slotIndex] = { type: 1 };
+        if (client.admin && this.model.clients.length) this.model.clients[0].admin = true;
+        if (this.model.state === 'started') this.removeCombatant(peer);
+        else this.resetReady();
         this.syncLobby();
     }
 }

@@ -6,6 +6,7 @@ import { WebSocketConnection } from './WebSocketConnection';
 
 /** Server-authoritative frame buffer. Wire frame 1 corresponds to simulation tick 0. */
 export class NetworkMatchSession {
+    readonly onReturnToLobby = new EventDispatcher<this, 'finished' | 'forfeit'>();
     readonly onChat = new EventDispatcher<this, Extract<ServerMessage, { type: 'chat' }>>();
     readonly onSnapshotChange = new EventDispatcher<this, LanMatchSnapshotState>();
     readonly onActionsReceived = new EventDispatcher<this, string>();
@@ -25,6 +26,7 @@ export class NetworkMatchSession {
     private allLoaded = false;
     private disposed = false;
     private leftRoom = false;
+    private returnedToLobby = false;
     fatalError?: { message: string; frame?: number };
 
     constructor(readonly connection: WebSocketConnection, readonly start: StartGameMessage, readonly descriptor: LanLaunchDescriptor) {
@@ -39,7 +41,7 @@ export class NetworkMatchSession {
     isHost(): boolean { return this.descriptor.localPeerId === this.descriptor.hostPeerId; }
     kickToAi(clientId: number): void {
         this.controlError = undefined;
-        if (this.isHost()) this.send(() => this.connection.sendImmediate({ type: 'command', name: 'kick_ai', args: { clientId } }));
+        if (this.isHost()) this.send(() => this.connection.sendImmediate({ type: 'command', name: 'kick_ai', args: { clientId, gameId: this.start.gameId, generation: this.start.generation } }));
     }
     takesOverWithAi(peerId: string): boolean { return this.aiTakeovers.has(peerId); }
     areAllPlayersLoaded(): boolean { return this.allLoaded; }
@@ -47,23 +49,23 @@ export class NetworkMatchSession {
         this.send(() => this.connection.sendImmediate({ type: 'chat', to, text }));
     }
     reportLoadProgress(percent: number): void {
-        this.send(() => this.connection.sendImmediate({ type: 'loaded', percent: Math.max(0, Math.min(100, Math.floor(percent))) }));
+        this.send(() => this.connection.sendImmediate({ type: 'loaded', gameId: this.start.gameId, generation: this.start.generation, percent: Math.max(0, Math.min(100, Math.floor(percent))) }));
     }
     submitLocalTurn(tick: number, actions: Uint8Array): string | undefined {
-        if (this.fatalError || this.disposed || this.leftRoom) return;
+        if (this.fatalError || this.disposed || this.leftRoom || this.returnedToLobby) return;
         const frame = tick + 1;
         const existing = this.submitted.get(frame);
         if (existing) return existing;
         const id = `${this.descriptor.localPeerId}:${frame}`;
-        const packet = encodeOrderPacket(Number(this.descriptor.localPeerId), frame, actions);
+        const packet = encodeOrderPacket(Number(this.descriptor.localPeerId), frame, actions, this.start.generation);
         if (!this.send(() => this.connection.sendRaw(packet))) return;
         this.submitted.set(frame, id);
         return id;
     }
     sendSync(tick: number, hash: number, defeatMask = 0n): void {
-        if (this.fatalError || this.disposed || this.leftRoom) return;
+        if (this.fatalError || this.disposed || this.leftRoom || this.returnedToLobby) return;
         const frame = tick + 1;
-        const packet = encodeSyncPacket(frame, hash, defeatMask);
+        const packet = encodeSyncPacket(frame, hash, defeatMask, this.start.generation);
         // Compare the wire-normalized local value, independently of the server's echo.
         const value = `${hash >>> 0}:${BigInt.asUintN(64, defeatMask)}`;
         if (frame !== this.lastLocalSync + 1) { this.fail('Invalid local sync sequence.', frame); return; }
@@ -75,7 +77,7 @@ export class NetworkMatchSession {
         if (this.send(() => this.connection.sendRaw(packet))) this.checkSync(frame, reports);
     }
     tryConsumeTurn(tick: number): LanResolvedTurn | undefined {
-        if (!this.allLoaded || this.fatalError || this.disposed || this.leftRoom) return;
+        if (!this.allLoaded || this.fatalError || this.disposed || this.leftRoom || this.returnedToLobby) return;
         const frame = tick + 1;
         const drops = [...this.drops].filter(([id, at]) => at <= frame && this.active.has(id)).map(([id]) => id);
         const expected = this.descriptor.humanAssignments.map(item => item.peerId).filter(id => this.active.has(id) && !drops.includes(id));
@@ -136,7 +138,7 @@ export class NetworkMatchSession {
         this.checkSync(packet.frame, reports);
     }
     private send(write: () => void): boolean {
-        if (this.fatalError || this.disposed || this.leftRoom) return false;
+        if (this.fatalError || this.disposed || this.leftRoom || this.returnedToLobby) return false;
         try { write(); return true; }
         catch (error) {
             this.fail(`Connection to the game server was lost. ${error instanceof Error ? error.message : String(error)}`);
@@ -144,13 +146,14 @@ export class NetworkMatchSession {
         }
     }
     private readonly closed = (reason: string) => {
-        if (!this.leftRoom && !this.disposed) this.fail(reason);
+        if (!this.leftRoom && !this.disposed && !this.returnedToLobby) this.fail(reason);
     };
     private readonly receive = (data: string | Uint8Array) => {
-        if (this.fatalError || this.disposed || this.leftRoom) return;
+        if (this.fatalError || this.disposed || this.leftRoom || this.returnedToLobby) return;
         try {
             if (typeof data !== 'string') {
                 const packet = decodePacket(data);
+                if (packet.generation !== this.start.generation) return;
                 if (packet.kind === 'syncRelay') { this.receiveSync(packet); return; }
                 if (packet.kind !== 'orders') throw new Error('Server sent an unstamped sync packet.');
                 if (!this.active.has(String(packet.clientId)) || packet.frame <= this.lastConsumedFrame) return;
@@ -161,6 +164,8 @@ export class NetworkMatchSession {
                 packets.set(String(packet.clientId), packet.actions);
             } else {
                 const message: ServerMessage = JSON.parse(data);
+                if (['loaded', 'allLoaded', 'ack', 'disconnect', 'matchHealth', 'outOfSync', 'matchEnded'].includes(message.type)
+                    && (!('generation' in message) || message.generation !== this.start.generation)) return;
                 if (message.type === 'matchHealth') { this.matchHealth = message.players; return; }
                 if (message.type === 'error' && message.code === 'invalidCommand') { this.controlError = message.message; return; }
                 if (message.type === 'chat') { this.onChat.dispatch(this, message); return; }
@@ -176,6 +181,18 @@ export class NetworkMatchSession {
             this.onSnapshotChange.dispatch(this, this.getSnapshot());
         } catch (error) { this.fail(error instanceof Error ? error.message : String(error)); }
     };
+    /** Stop this commander without closing the room connection, including during game.update(). */
+    returnToLobby(reason: 'finished' | 'forfeit'): void {
+        if (this.returnedToLobby || this.leftRoom) return;
+        // Disposal may precede the screen's return callback. This room control must still be sent.
+        this.returnedToLobby = true;
+        try {
+            this.connection.sendImmediate({ type: 'returnToLobby', gameId: this.start.gameId, generation: this.start.generation, reason });
+        } catch (error) {
+            this.fail(`Connection to the game server was lost. ${error instanceof Error ? error.message : String(error)}`);
+        }
+        this.onReturnToLobby.dispatch(this, reason);
+    }
     leaveRoom(): void { this.leftRoom = true; this.connection.close(); }
     dispose(): void {
         if (this.disposed) return;

@@ -1,3 +1,4 @@
+import { HANDSHAKE_PROTOCOL, ORDERS_PROTOCOL } from '../redalert2/src/network/server/Protocol.ts';
 // Run with: bun scripts/lockstep-engine-smoke.mjs [ticks=150]
 // Requires the asset-seeded dev server at http://127.0.0.1:4000 (?shell=1).
 // Uses two actual Chromium engine instances, two deterministic bots, production
@@ -9,21 +10,39 @@ import { BunWsTransport } from '../redalert2/server/BunWsTransport.ts';
 
 const solo = process.env.RA2_SOLO_SMOKE === '1';
 const takeover = process.env.RA2_TAKEOVER_SMOKE === '1';
-const clientCount = solo ? 1 : takeover ? 3 : 2;
+const persistentUi = process.env.RA2_PERSISTENT_UI_SMOKE === '1';
+const persistent = persistentUi || process.env.RA2_PERSISTENT_SMOKE === '1';
+if (persistent && (solo || takeover)) throw new Error('Persistent smoke requires its own three-client run.');
+const clientCount = solo ? 1 : takeover || persistent ? 3 : 2;
 const targetTicks = Number(process.argv[2] ?? 150);
 if (!Number.isInteger(targetTicks) || targetTicks < 100) throw new Error('Use at least 100 ticks.');
 const base = process.env.RA2_DEV_URL || 'http://127.0.0.1:4000';
-const identity = { protocol: 2, ordersProtocol: 2, engine: 'ra2', mod: 'smoke', version: 'engine-smoke', modHash: 'same-rules', assetFingerprint: 'same-seeded-vfs' };
+const identity = { protocol: HANDSHAKE_PROTOCOL, ordersProtocol: ORDERS_PROTOCOL, engine: 'ra2', mod: 'smoke', version: 'engine-smoke', modHash: 'same-rules', assetFingerprint: 'same-seeded-vfs' };
 let core;
 const transport = new BunWsTransport(0, '127.0.0.1');
 const browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || '/usr/bin/chromium', args: ['--disable-dev-shm-usage'] });
 const errors = [];
 let timer;
+let progressTimer;
+const pages = [];
+const browserConsole = [];
+async function diagnostics() {
+  return Promise.all(pages.map(async (page, index) => ({ client: index + 1, ...await page.evaluate(() => {
+    const probe = window.__networkSmoke, debug = window.__ra2debug;
+    return { phase: probe?.phase, launches: probe?.launches, room: probe?.client?.session?.state,
+      generation: probe?.client?.session?.generation, tick: debug?.game?.currentTick,
+      screen: debug?.mainMenuController?.getCurrentScreen()?.constructor.name,
+      hasTurnManager: Boolean(debug?.gameScreen?.gameTurnMgr), fatal: probe?.match?.fatalError,
+      roomError: probe?.roomScreen?.error, errors: probe?.errors,
+      clients: probe?.client?.session?.clients.map(({name,ready,mapReady,loaded}) => ({name,ready,mapReady,loaded})) };
+  }).catch(error => ({ diagnosticError: error.message })) })));
+}
 try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
-  const pages = [];
+  progressTimer = setInterval(async () => console.log('[smoke progress]', JSON.stringify(await diagnostics())), 30000);
   for (let i = 0; i < clientCount; i++) {
     const page = await context.newPage(); pages.push(page);
+    page.on('console', message => { if (['error', 'warning'].includes(message.type())) { browserConsole.push({ client: i, type: message.type(), message: message.text() }); if (browserConsole.length > 30) browserConsole.shift(); } });
     page.on('pageerror', error => { errors.push({ client: i, message: error.message }); console.error(`[client ${i}]`, error.message); });
     await page.goto(`${base}/?shell=1`);
     await page.waitForFunction(() => window.__ra2debug?.keyBinds, undefined, { timeout: 300000 });
@@ -43,15 +62,24 @@ try {
     return opts;
   }, {solo,clientCount});
   gameOpts.disconnectAi = process.env.RA2_DROP_POLICY === 'ai';
+  if (!persistentUi) {
   core = new GameServer({ identity, gameOpts, slotsInfo: Array.from({ length: gameOpts.maxSlots }, (_, i) => ({ type: !solo && i >= clientCount ? 4 : i < clientCount ? 1 : 0 })), orderLatency: 2, now: Date.now, random: () => 0.125 }, transport);
   await core.start();
-  timer = setInterval(() => core.tick(), 1000);
+  } else {
+    await pages[0].exposeFunction('__persistentHostGame', async options => {
+      core = new GameServer({ ...options, orderLatency: 2, now: Date.now, random: () => 0.125 }, transport);
+      await core.start();
+      return { port: transport.port, addresses: ['127.0.0.1'] };
+    });
+    await pages[0].exposeFunction('__persistentStopHosting', () => core?.stop());
+  }
+  timer = setInterval(() => core?.tick(), 1000);
   for (let i = 0; i < clientCount; i++) {
-    await pages[i].evaluate(async ({ address, identity, index, targetTicks, solo }) => {
+    await pages[i].evaluate(async ({ address, identity, index, targetTicks, solo, persistentUi }) => {
       const { LobbyClient } = await import('/src/network/client/LobbyClient.ts');
       const { NetworkTurnManager } = await import('/src/network/client/NetworkTurnManager.ts');
       const original = NetworkTurnManager.prototype.doGameTurn;
-      window.__networkSmoke = { hashes: [], cap: targetTicks, errors: [], inject: false };
+      window.__networkSmoke = { hashes: [], cap: targetTicks, errors: [], inject: false, launches: 0 };
       NetworkTurnManager.prototype.doGameTurn = function (timestamp) {
         const probe = window.__networkSmoke;
         if (this.game.currentTick >= probe.cap) return false;
@@ -60,20 +88,32 @@ try {
         if (advanced) probe.hashes.push({ tick: this.game.currentTick, hash: this.game.getHash() });
         return advanced;
       };
+      if (persistentUi) return;
+      const rootController = window.__ra2debug.mainMenuController.getCurrentScreen().rootController;
       const client = window.__networkSmoke.client = new LobbyClient();
       client.onError.subscribe(error => window.__networkSmoke.errors.push({ code: error.code, message: error.message }));
       client.onStartGame.subscribe(() => {
-        const screen = window.__ra2debug.mainMenuController.getCurrentScreen();
-        const match = client.getMatchSession();
-        screen.rootController.goToScreen(1, { create: true, lanLaunch: match.getLaunchDescriptor(), lanMatchSession: match });
+        window.__networkSmoke.launches++;
+        const match = window.__networkSmoke.match = client.getMatchSession();
+        rootController.goToScreen(1, { create: true, lanLaunch: match.getLaunchDescriptor(), lanMatchSession: match });
       });
       await client.connect(address, { ...identity, type: 'hello', name: `Smoke ${index + 1}` });
       client.command('map_ready', { digest: client.session.gameOpts.mapDigest });
       if (index >= 1 || solo) client.command('state', { ready: true, mapDigest: client.session.gameOpts.mapDigest });
-    }, { address: `127.0.0.1:${transport.port}`, identity, index: i, targetTicks, solo });
+    }, { address: `127.0.0.1:${transport.port}`, identity, index: i, targetTicks, solo, persistentUi });
+    if (persistentUi) await (await import('./network-persistent-ui-smoke.mjs')).connectPersistentUi(pages[i], i, gameOpts, transport.port);
+  }
+  if (persistentUi) {
+    if (process.env.RA2_PERSISTENT_CONTENT === '1') await (await import('./network-persistent-ui-smoke.mjs')).preparePersistentContent(pages);
+    await pages[0].evaluate(count => {
+      const client = window.__networkSmoke.client;
+      for (let i = count; i < client.session.gameOpts.maxSlots; i++) client.command('slot_bot', { slotIndex: i, difficulty: 2 });
+    }, clientCount);
+    await Promise.all(pages.map(page => page.locator('.multiplayer-lobby button').filter({ hasText: /^Ready$/ }).click()));
   }
   await pages[0].waitForFunction(count => window.__networkSmoke.client.session.clients.length === count && window.__networkSmoke.client.session.clients.every(client => client.mapReady && (client.admin || client.ready)), clientCount);
-  await pages[0].evaluate(() => window.__networkSmoke.client.command('startgame'));
+  if (persistentUi) await pages[0].getByText('Start Game', { exact: true }).click();
+  else await pages[0].evaluate(() => window.__networkSmoke.client.command('startgame'));
   await Promise.all(pages.map(page => page.waitForFunction(() => window.__ra2debug?.game && window.__ra2debug?.gameScreen?.gameTurnMgr, undefined, { timeout: 180000 })));
   if (process.env.RA2_GAME_UI_SMOKE) await (await import('./game-hud-smoke.mjs')).checkGameHud(pages);
   await Promise.all(pages.map(page => page.evaluate(() => {
@@ -89,6 +129,9 @@ try {
   if (solo) {
     if (matching[0].errors.length || matching[0].bots !== 0) throw new Error('Solo match has errors or unexpected bots');
     console.log(`Solo host loaded and advanced ${targetTicks} ticks without an opponent or premature victory`);
+  } else if (persistent) {
+    await (await import('./network-persistent-smoke.mjs')).checkPersistentRoom(pages, targetTicks, persistentUi);
+    if (errors.length) throw new Error(`Browser errors: ${JSON.stringify(errors)}`);
   } else if (takeover) {
     await (await import('./network-takeover-smoke.mjs')).checkTakeover(pages, targetTicks, process.env.RA2_DROP_POLICY);
   } else {
@@ -99,7 +142,7 @@ try {
   try {
     await Promise.all(pages.map(page => page.waitForFunction(() => window.__RA2_NETWORK_SYNC_REPORT__, undefined, { timeout: 30000 })));
   } catch (error) {
-    console.error('Mismatch diagnostics', await Promise.all(pages.map(page => page.evaluate(() => ({ tick: window.__ra2debug.game.currentTick, fatal: window.__networkSmoke.client.getMatchSession().fatalError, errorState: window.__ra2debug.gameScreen.gameTurnMgr.getErrorState(), report: window.__RA2_NETWORK_SYNC_REPORT__?.message, errors: window.__networkSmoke.errors })))));
+    console.error('Mismatch diagnostics', await Promise.all(pages.map(page => page.evaluate(() => ({ tick: window.__ra2debug.game.currentTick, fatal: window.__networkSmoke.match.fatalError, errorState: window.__ra2debug.gameScreen.gameTurnMgr.getErrorState(), report: window.__RA2_NETWORK_SYNC_REPORT__?.message, errors: window.__networkSmoke.errors })))));
     throw error;
   }
   const reports = await Promise.all(pages.map(page => page.evaluate(() => { const report = window.__RA2_NETWORK_SYNC_REPORT__; return { frame: report.frame, tick: report.tick, stateTick: report.state.currentTick, errors: window.__networkSmoke.errors }; })));
@@ -112,7 +155,7 @@ try {
     const { NetworkMatchSession } = await import('/src/network/client/NetworkMatchSession.ts');
     const { EventDispatcher } = await import('/src/util/event.ts');
     const { encodeOrderPacket } = await import('/src/network/server/Protocol.ts');
-    const original = window.__networkSmoke.client.getMatchSession();
+    const original = window.__networkSmoke.match;
     let closed = false;
     let sent = 0;
     const connection = {
@@ -121,8 +164,8 @@ try {
       close() { closed = true; },
     };
     const match = new NetworkMatchSession(connection, original.start, original.descriptor);
-    connection.onMessage.dispatch(connection, JSON.stringify({ type: 'allLoaded' }));
-    for (const id of original.start.clientIds) connection.onMessage.dispatch(connection, encodeOrderPacket(id, 1, new Uint8Array()));
+    connection.onMessage.dispatch(connection, JSON.stringify({ type: 'allLoaded', gameId: original.start.gameId, generation: original.start.generation }));
+    for (const id of original.start.clientIds) connection.onMessage.dispatch(connection, encodeOrderPacket(id, 1, new Uint8Array(), original.start.generation));
     const game = { currentTick: 0, speed: { value: 1 }, getHash: () => 123, getPlayerByName: name => ({ name }),
       update() { manager.setErrorState(); match.leaveRoom(); },
       debugGetState() { throw new Error('Deliberately failed diagnostic snapshot'); },
@@ -141,6 +184,11 @@ try {
   writeFileSync('build/lockstep-engine-smoke.json', JSON.stringify({ targetTicks, map: gameOpts.mapName, orderLatency: 2, clients: matching, divergence: reports }, null, 2));
   console.log(`Injected PRNG divergence stopped both clients; mismatch frame=${reports[0].frame}, stopped ticks=${reports.map(report => report.tick).join('/')}. Report: build/lockstep-engine-smoke.json`);
   }
+} catch (error) {
+  console.error('[smoke failure]', JSON.stringify(await diagnostics()));
+  console.error('[recent browser console]', JSON.stringify(browserConsole));
+  throw error;
 } finally {
+  clearInterval(progressTimer);
   clearInterval(timer); core?.stop(); transport.close(); await browser.close();
 }

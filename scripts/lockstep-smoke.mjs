@@ -1,3 +1,4 @@
+import { HANDSHAKE_PROTOCOL, ORDERS_PROTOCOL } from '../redalert2/src/network/server/Protocol.ts';
 // bun scripts/lockstep-smoke.mjs [bun|node]
 // Real sockets, delayed ordered delivery with deterministic retransmission stalls.
 // WebSocket is reliable: simulate 2% packet loss as 200ms retransmission delay,
@@ -14,7 +15,7 @@ async function until(condition, label) {
     const deadline = Date.now() + 15000;
     while (!condition()) { if (Date.now() > deadline) throw new Error(`Timed out: ${label}`); await sleep(5); }
 }
-const identity = { protocol: 2, ordersProtocol: 2, engine: 'ra2', mod: 'base', version: 'socket-smoke', modHash: 'rules', assetFingerprint: 'retail-crc' };
+const identity = { protocol: HANDSHAKE_PROTOCOL, ordersProtocol: ORDERS_PROTOCOL, engine: 'ra2', mod: 'base', version: 'socket-smoke', modHash: 'rules', assetFingerprint: 'retail-crc' };
 const gameOpts = { gameMode: 0, gameSpeed: 3, credits: 10000, unitCount: 0, shortGame: true, superWeapons: true, buildOffAlly: true, mcvRepacks: true, cratesAppear: true, destroyableBridges: true, multiEngineer: false, noDogEngiKills: false, mapName: 'test.map', mapTitle: 'Protocol Smoke', mapDigest: 'digest', mapSizeBytes: 100, maxSlots: 4, mapOfficial: true, humanPlayers: [], aiPlayers: [] };
 const transport = process.argv[2] === 'node' ? new NodeWsTransport(0, '127.0.0.1') : new BunWsTransport(0, '127.0.0.1');
 const server = new GameServer({ identity, gameOpts, password: 'secret', dedicated: true }, transport);

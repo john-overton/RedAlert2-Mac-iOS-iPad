@@ -45,6 +45,8 @@ export class MainMenuRootScreen extends RootScreen {
     private keyBinds?: any;
     private rootController?: any;
     private config: Config;
+    // The room outlives each menu view/controller, including the score screen.
+    private multiplayerScreen?: any;
     private mainMenu?: MainMenu;
     private mainMenuCtrl?: MainMenuController;
     constructor(subScreens: Map<MainMenuScreenType, any>, uiScene: UiScene, strings: Strings, images: LazyResourceCollection<ShpFile>, jsxRenderer: JsxRenderer, messageBoxApi: MessageBoxApi, appVersion: string, config: Config, videoSrc?: string | File, sound?: any, music?: any, generalOptions?: any, localPrefs?: any, fullScreen?: any, mixer?: any, keyBinds?: any, rootController?: any) {
@@ -129,6 +131,9 @@ export class MainMenuRootScreen extends RootScreen {
         }, 0);
     }
     private async createScreen(screenType: MainMenuScreenType, screenClass: any, _controller: any): Promise<any> {
+        if (screenType === MainMenuScreenType.Multiplayer && this.multiplayerScreen) {
+            return this.multiplayerScreen;
+        }
         let screen: any;
         if (screenType === MainMenuScreenType.InfoAndCredits) {
             screen = new screenClass(this.strings, this.messageBoxApi);
@@ -240,6 +245,7 @@ export class MainMenuRootScreen extends RootScreen {
         else {
             screen = new screenClass(this.strings, this.messageBoxApi, this.appVersion, false, false);
         }
+        if (screenType === MainMenuScreenType.Multiplayer) this.multiplayerScreen = screen;
         return screen;
     }
     async onLeave(): Promise<void> {

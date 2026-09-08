@@ -289,3 +289,74 @@ Mac/Linux session with the user's friend remains the next manual check.
   Do not combine this mode with the solo or two-client HUD mode. Logs/screenshots
   are ignored under `build/macos/stall-*`, `quit-*-engine-smoke.log`, and
   `network-stall-{host,guest}.png`.
+
+### Persistent-room foundation for observers (September 8, 2026)
+
+Implemented the first slice of [the observer plan](MULTIPLAYER_OBSERVERS_PLAN.md)
+on `allied-campaign`. Observer role selection, spectator chat, running-room
+admission and bounded history/catch-up are still pending; their controls remain
+unavailable. These local changes are not committed or pushed.
+
+- Handshake and orders protocols are now **3**. Binary orders/syncs and match
+  controls carry a generation; loading and return requests also identify the
+  match. Old match traffic cannot enter a later round. Rebuild clients together.
+- **Return to Lobby** releases the commander using the existing authoritative
+  departure frame and configured AI/destruction policy, preserving the socket
+  and embedded host. A returning commander's loading/orders/syncs no longer
+  enter active-player barriers or lag minima. The original slots/settings/content
+  remain available for the next round.
+- Completion reports release only their authenticated sender. Another round
+  cannot start while any combatant remains. The server resets readiness, loading
+  and frame counters when all commanders return; desync emits its own diagnosis
+  and end reason. This is client-reported completion, not a server simulation
+  independently validating a winner.
+- The room owner survives game/score menu recreation. **Continue** returns to
+  that owner; **Leave Server** still closes the connection and native helper.
+  Viewport changes refresh the lobby without invoking disconnect. Session
+  content is restored for score/menu construction and verified/remounted from
+  the existing bounded cache when returning to the waiting room.
+
+Validation on the final implementation:
+
+- `bun test --cwd redalert2`: **148 passed, 0 failed, 2,020 assertions**.
+- Entry typecheck: the same **42 baseline errors**, no newly introduced errors.
+- Production web and Node server bundles pass. The missing local `ws` and
+  `@types/ws` dependencies were installed from the existing frozen lockfile;
+  dependency manifests and lockfiles did not change.
+- Node adapter socket smoke: 100 matching frames, four simulated retransmission
+  stalls, six rejected handshakes, expected mismatch frame 101.
+- Fresh Chromium engine smoke: two clients/two bots matched all 150 ticks;
+  injected divergence reported frame 151 (actual stopped ticks 152/153).
+  Trailing game-end sends and failed diagnostic-export regressions pass.
+  Solo host also advanced 150 ticks without an opponent or premature victory.
+- Production lobby UI smoke: three engines, original MultiplayerScreen owners
+  and sockets, actual Ready/Start/score Continue, viewport resizing, one native
+  host request and no stop request during returns. Host forfeit preserved the
+  match; survivors matched through tick 250. All returned, readiness reset,
+  and a second round matched 150 ticks on the original connections.
+- Extended production UI run: deterministic destruction defeated the host on all
+  engines; the defeated host returned while survivors continued. A shared
+  `rules.ini` MTNK-strength fixture applied in both rounds. Score entry restored
+  the exact baseline rules object/value before room content remounted. Natural
+  victory in round two completed at tick 156 with matching hashes and `finished`
+  reports, then returned everyone to the same waiting room.
+- Fresh standalone macOS Bun helper: host forfeit preserves the helper/guest;
+  another round reuses the original sockets and relays orders. Explicit host
+  leave stops hosting. Content, password rejection, occupied/invalid ports,
+  EOF/SIGTERM cleanup and port reuse also pass.
+- `git diff --check` and changed JavaScript smoke-script syntax checks pass.
+
+Browser UI hosting used a bridge replacement that starts the real Bun server;
+this is not a native WKWebView or physical Mac/Linux interoperability claim.
+The standalone helper was rebuilt under ignored `build/multiplayer-observers/`.
+The packaged YR/RA2 applications were **not rebuilt** in this slice.
+
+Logs are under `build/multiplayer-observers/`. Reports:
+`build/network-persistent-smoke.json` (stock),
+`build/network-persistent-defeat-content-smoke.json` (extended), and
+`build/lockstep-engine-smoke.json` (desync regression). Reproduce the extended run
+with a fresh HTTP Vite server on port 4001:
+
+```sh
+RA2_PERSISTENT_UI_SMOKE=1 RA2_PERSISTENT_HOST_DEFEAT=1 RA2_PERSISTENT_CONTENT=1 RA2_DEV_URL=http://127.0.0.1:4001 PLAYWRIGHT_CHROMIUM_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' ~/.bun/bin/bun scripts/lockstep-engine-smoke.mjs
+```

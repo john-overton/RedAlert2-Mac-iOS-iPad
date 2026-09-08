@@ -1,11 +1,14 @@
 import { CONNECTION_TIMEOUT_MS, HANDSHAKE_TIMEOUT_MS } from '../ConnectionHealth';
 import { expect, test } from 'bun:test';
 import { GameServer } from './GameServer';
-import { decodePacket, encodeOrderPacket, encodeSyncPacket, encodeRelayedSyncPacket } from './Protocol';
+import { decodePacket, encodeOrderPacket as encodeOrders, encodeSyncPacket as encodeSync, encodeRelayedSyncPacket as encodeRelay, HANDSHAKE_PROTOCOL, ORDERS_PROTOCOL } from './Protocol';
 import type { HelloMessage, ServerMessage } from './Protocol';
 import type { GameOpts } from '../../game/gameopts/GameOpts';
 import type { ServerConnection, WireData } from './ServerTransport';
 
+const encodeOrderPacket = (id: number, frame: number, actions: Uint8Array, generation = 1) => encodeOrders(id, frame, actions, generation);
+const encodeSyncPacket = (frame: number, hash: number, mask = 0n, generation = 1) => encodeSync(frame, hash, mask, generation);
+const encodeRelayedSyncPacket = (id: number, frame: number, hash: number, mask = 0n, generation = 1) => encodeRelay(id, frame, hash, mask, generation);
 class Connection implements ServerConnection {
     remoteAddress = '127.0.0.1';
     messages: WireData[] = [];
@@ -16,12 +19,21 @@ class Connection implements ServerConnection {
     close(reason: string) { this.closed = reason; this.closeHandler(); }
     onMessage(handler: (data: WireData) => void) { this.receive = handler; }
     onClose(handler: () => void) { this.closeHandler = handler; }
-    json(message: unknown) { this.receive(JSON.stringify(message)); }
+    json(message: any) {
+        if (message.type === 'loaded' || message.type === 'returnToLobby' || (message.type === 'command' && message.name === 'kick_ai')) {
+            const match = this.all('startGame').at(-1);
+            if (match) {
+                if (message.type === 'command') message = { ...message, args: { gameId: match.gameId, generation: match.generation, ...message.args } };
+                else message = { gameId: match.gameId, generation: match.generation, ...message };
+            }
+        }
+        this.receive(JSON.stringify(message));
+    }
     command(name: string, args: Record<string, unknown> = {}) { this.json({ type: 'command', name, args }); }
     all(type: string): any[] { return this.messages.filter(m => typeof m === 'string').map(m => JSON.parse(m as string)).filter(m => m.type === type); }
     packets() { return this.messages.filter(m => m instanceof Uint8Array).map(m => decodePacket(m as Uint8Array)); }
 }
-const identity = { protocol: 2, ordersProtocol: 2, engine: 'ra2' as const, mod: 'base', version: 'test', modHash: 'rules', assetFingerprint: 'retail' };
+const identity = { protocol: HANDSHAKE_PROTOCOL, ordersProtocol: ORDERS_PROTOCOL, engine: 'ra2' as const, mod: 'base', version: 'test', modHash: 'rules', assetFingerprint: 'retail' };
 const gameOpts: GameOpts = { gameMode: 0, gameSpeed: 3, credits: 10000, unitCount: 0, shortGame: true, superWeapons: true, buildOffAlly: true, mcvRepacks: true, cratesAppear: true, destroyableBridges: true, multiEngineer: false, noDogEngiKills: false, mapName: 'test.map', mapTitle: 'Test Map', mapDigest: 'digest', mapSizeBytes: 100, maxSlots: 4, mapOfficial: true, humanPlayers: [], aiPlayers: [] };
 function setup(extra: Record<string, unknown> = {}) {
     let time = 1000;
@@ -76,7 +88,7 @@ test('latency preseed, all-loaded gate and order echo preserve exact payloads', 
     a.json({ type: 'loaded', percent: 100 }); expect(a.all('allLoaded')).toHaveLength(0);
     b.json({ type: 'loaded', percent: 100 }); expect(a.all('allLoaded')).toHaveLength(1);
     a.receive(encodeOrderPacket(1, 1, new Uint8Array([10, 20, 30])));
-    expect(a.packets().at(-1)).toEqual({ kind: 'orders', clientId: 1, frame: 3, actions: new Uint8Array([10, 20, 30]) });
+    expect(a.packets().at(-1)).toEqual({ kind: 'orders', generation: 1, clientId: 1, frame: 3, actions: new Uint8Array([10, 20, 30]) });
     expect(b.packets().at(-1)).toEqual(a.packets().at(-1));
     expect(server.session.state).toBe('started');
 });
@@ -86,14 +98,14 @@ test('frame impersonation and future frames disconnect offender at identical fut
     b.receive(encodeOrderPacket(2, 1, new Uint8Array()));
     b.receive(encodeOrderPacket(1, 2, new Uint8Array()));
     expect(b.closed).toBe('invalidPacket');
-    expect(a.all('disconnect')).toEqual([{ type: 'disconnect', clientId: 2, frame: 4 }]);
+    expect(a.all('disconnect')).toEqual([{ type: 'disconnect', generation: 1, clientId: 2, frame: 4 }]);
 });
 
 test('sync mismatch including defeat mask ends relay for every client', () => {
     const { server, start } = setup(); const { a, b } = start();
     a.receive(encodeSyncPacket(1, 123, 0n)); b.receive(encodeSyncPacket(1, 123, 1n));
-    expect(server.session.state).toBe('ended');
-    expect(a.all('outOfSync')).toEqual([{ type: 'outOfSync', frame: 1 }]);
+    expect(server.session.state).toBe('waiting');
+    expect(a.all('outOfSync')).toEqual([{ type: 'outOfSync', generation: 1, frame: 1 }]);
     expect(b.all('outOfSync')).toEqual(a.all('outOfSync'));
     const packets = a.packets().length;
     b.receive(encodeOrderPacket(2, 1, new Uint8Array())); expect(a.packets()).toHaveLength(packets);
@@ -124,7 +136,7 @@ test('embedded host departure closes room; dedicated room remains joinable', () 
 test('protocol binary decode respects offsets and rejects truncated sync packets', () => {
     const original = encodeSyncPacket(10, 0xffffffff, 0xffffffffffffffffn);
     const padded = new Uint8Array(30); padded.set(original, 4);
-    expect(decodePacket(padded.subarray(4, 21))).toEqual({ kind: 'sync', frame: 10, hash: 0xffffffff, defeatMask: 0xffffffffffffffffn });
+    expect(decodePacket(padded.subarray(4, 25))).toEqual({ kind: 'sync', generation: 1, frame: 10, hash: 0xffffffff, defeatMask: 0xffffffffffffffffn });
     expect(() => decodePacket(original.subarray(0, 16))).toThrow();
 });
 
@@ -160,7 +172,7 @@ test('sync hash windows remain valid across a deterministic guest drop', () => {
     const { server, start } = setup(); const { a, b } = start();
     a.receive(encodeSyncPacket(1, 10)); b.receive(encodeSyncPacket(1, 10));
     b.close('cable pulled');
-    expect(a.all('disconnect')[0]).toEqual({ type: 'disconnect', clientId: 2, frame: 3 });
+    expect(a.all('disconnect')[0]).toEqual({ type: 'disconnect', generation: 1, clientId: 2, frame: 3 });
     a.receive(encodeSyncPacket(2, 20));
     expect(server.session.state).toBe('started'); expect(a.closed).toBeUndefined();
 });
@@ -210,10 +222,10 @@ test('in-flight binary traffic after desync preserves the original report and ho
     const { server, start } = setup({ dedicated: false }); const { a, b } = start();
     a.receive(encodeSyncPacket(1, 123)); b.receive(encodeSyncPacket(1, 456));
     a.receive(encodeOrderPacket(1, 1, new Uint8Array())); b.receive(encodeSyncPacket(2, 789));
-    expect(server.session.state).toBe('ended'); expect(server.isStopped).toBe(false);
+    expect(server.session.state).toBe('waiting'); expect(server.isStopped).toBe(false);
     expect(a.closed).toBeUndefined(); expect(b.closed).toBeUndefined();
     expect(a.all('error')).toEqual([]); expect(b.all('error')).toEqual([]);
-    expect(a.all('outOfSync')).toEqual([{ type: 'outOfSync', frame: 1 }]);
+    expect(a.all('outOfSync')).toEqual([{ type: 'outOfSync', generation: 1, frame: 1 }]);
     expect(b.all('outOfSync')).toEqual(a.all('outOfSync'));
     expect(a.all('disconnect')).toEqual([]);
 });
@@ -223,13 +235,14 @@ test('sync relay stamps the actual sender and reaches everyone before a mismatch
     const { start } = setup(); const { a, b } = start();
     a.receive(encodeSyncPacket(1, 123, 1n)); b.receive(encodeSyncPacket(1, 123, 2n));
     const expected = [
-        { kind: 'syncRelay', clientId: 1, frame: 1, hash: 123, defeatMask: 1n },
-        { kind: 'syncRelay', clientId: 2, frame: 1, hash: 123, defeatMask: 2n },
+        { kind: 'syncRelay', generation: 1, clientId: 1, frame: 1, hash: 123, defeatMask: 1n },
+        { kind: 'syncRelay', generation: 1, clientId: 2, frame: 1, hash: 123, defeatMask: 2n },
     ];
     expect(a.packets().slice(-2)).toEqual(expected); expect(b.packets().slice(-2)).toEqual(expected);
     for (const peer of [a, b]) {
-        expect(decodePacket(peer.messages.at(-2) as Uint8Array)).toEqual(expected[1]);
-        expect(JSON.parse(peer.messages.at(-1) as string)).toEqual({ type: 'outOfSync', frame: 1 });
+        const mismatch = peer.messages.findIndex(m => typeof m === 'string' && JSON.parse(m).type === 'outOfSync');
+        expect(decodePacket(peer.messages[mismatch - 1] as Uint8Array)).toEqual(expected[1]);
+        expect(peer.all('outOfSync')).toEqual([{ type: 'outOfSync', generation: 1, frame: 1 }]);
     }
 });
 
@@ -243,9 +256,9 @@ test('clients cannot impersonate a relayed sync sender', () => {
 test('relayed sync decoding respects offsets and requires the exact payload size', () => {
     const original = encodeRelayedSyncPacket(42, 10, 0xffffffff, 0xffffffffffffffffn);
     const padded = new Uint8Array(30); padded.set(original, 4);
-    expect(decodePacket(padded.subarray(4, 25))).toEqual({ kind: 'syncRelay', clientId: 42, frame: 10, hash: 0xffffffff, defeatMask: 0xffffffffffffffffn });
+    expect(decodePacket(padded.subarray(4, 29))).toEqual({ kind: 'syncRelay', generation: 1, clientId: 42, frame: 10, hash: 0xffffffff, defeatMask: 0xffffffffffffffffn });
     expect(() => decodePacket(original.subarray(0, 20))).toThrow();
-    expect(() => decodePacket(padded.subarray(4, 26))).toThrow();
+    expect(() => decodePacket(padded.subarray(4, 30))).toThrow();
 });
 
 import { createContentManifest, encodeContentBytes, decodeContentBytes, CONTENT_CHUNK_BYTES } from '../content/ContentPackage';
@@ -373,7 +386,7 @@ test('solo host starts, loads and receives orders without waiting for another cl
     host.json({ type: 'loaded', percent: 100 });
     expect(host.all('allLoaded')).toHaveLength(1);
     host.receive(encodeOrderPacket(1, 1, new Uint8Array([10])));
-    expect(host.packets().at(-1)).toEqual({ kind: 'orders', clientId: 1, frame: 3, actions: new Uint8Array([10]) });
+    expect(host.packets().at(-1)).toEqual({ kind: 'orders', generation: 1, clientId: 1, frame: 3, actions: new Uint8Array([10]) });
 });
 
 test('solo host can start against bots while an unready guest still blocks start', () => {
@@ -412,7 +425,7 @@ test('only the host receives stall attribution and can kick a player into AI', (
     expect(a.closed).toBeUndefined();
     a.command('kick_ai', { clientId: 2 });
     expect(b.closed).toBe('kicked');
-    expect(a.all('disconnect').at(-1)).toEqual({ type: 'disconnect', clientId: 2, frame: 3, takeover: 'ai' });
+    expect(a.all('disconnect').at(-1)).toEqual({ type: 'disconnect', generation: 1, clientId: 2, frame: 3, takeover: 'ai' });
 });
 
 for (const disconnectAi of [false, true]) test(`disconnect policy is server controlled: AI=${disconnectAi}`, () => {
@@ -436,4 +449,73 @@ test('player orders cannot inject server-only takeover or destruction actions', 
         expect(b.closed).toBe('invalidPacket');
         expect(a.packets().some(packet => packet.kind === 'orders' && packet.actions[1] === actionId)).toBe(false);
     }
+});
+
+
+test('embedded host returns without closing room, remaining commander progresses and both play a second round', () => {
+    const { server, start } = setup({ dedicated: false }); const { a, b } = start();
+    const original = server.session;
+    a.json({ type: 'returnToLobby', reason: 'forfeit' });
+    expect(server.session.state).toBe('started'); expect(server.isStopped).toBe(false);
+    expect(a.closed).toBeUndefined(); expect(b.closed).toBeUndefined();
+    expect(b.all('disconnect').at(-1)).toEqual({ type: 'disconnect', generation: 1, clientId: 1, frame: 3 });
+    // The waiting host is excluded from both bounded sequence minima.
+    for (let frame = 1; frame <= 300; frame++) {
+        b.receive(encodeOrderPacket(2, frame, new Uint8Array()));
+        b.receive(encodeSyncPacket(frame, frame));
+    }
+    expect(b.closed).toBeUndefined();
+    a.command('kick_ai', { clientId: 2, generation: 0 }); expect(b.closed).toBeUndefined();
+    b.json({ type: 'returnToLobby', reason: 'finished' });
+    expect(server.session.state).toBe('waiting');
+    expect(server.session.slots).toEqual(original.slots);
+    expect(server.session.gameOpts).toEqual(original.gameOpts);
+    expect(server.session.clients.every(c => !c.ready && c.loaded === 0)).toBe(true);
+    b.command('state', { ready: true }); a.command('startgame');
+    expect(server.session.generation).toBe(2);
+    expect(a.all('startGame')).toHaveLength(2);
+    a.json({ type: 'loaded', percent: 100 }); b.json({ type: 'loaded', percent: 100 });
+    a.receive(encodeOrderPacket(1, 1, new Uint8Array(), 2));
+    b.receive(encodeOrderPacket(2, 1, new Uint8Array(), 2));
+    expect(b.packets().at(-1)).toMatchObject({ generation: 2, frame: 3, clientId: 2 });
+    expect(a.closed).toBeUndefined(); expect(b.closed).toBeUndefined();
+});
+
+test('one completion claim releases only its sender and stale traffic cannot enter the next match', () => {
+    const { server, start } = setup(); const { a, b } = start();
+    const first = a.all('startGame')[0];
+    a.json({ type: 'returnToLobby', reason: 'finished' });
+    expect(server.session.state).toBe('started'); expect(a.all('matchEnded')).toHaveLength(0);
+    // Duplicate reports and commands from the returned member have no authority.
+    a.json({ type: 'returnToLobby', reason: 'finished' });
+    a.receive(encodeSyncPacket(1, 999));
+    b.receive(encodeSyncPacket(1, 10));
+    expect(server.session.state).toBe('started');
+    b.json({ type: 'returnToLobby', reason: 'finished' });
+    expect(a.all('matchEnded').at(-1).reason).toBe('finished');
+    a.receive(encodeOrderPacket(1, 1, new Uint8Array()));
+    b.command('state', { ready: true }); a.command('startgame');
+    a.json({ type: 'loaded', gameId: first.gameId, generation: 1, percent: 100 });
+    expect(server.session.clients[0].loaded).toBe(0);
+    a.json({ type: 'returnToLobby', gameId: first.gameId, generation: 1, reason: 'finished' });
+    a.receive(encodeOrderPacket(1, 1, new Uint8Array()));
+    expect(server.session.state).toBe('started'); expect(a.closed).toBeUndefined();
+    a.json({ type: 'loaded', percent: 100 }); b.json({ type: 'loaded', percent: 100 });
+    a.receive(encodeOrderPacket(1, 1, new Uint8Array(), 2));
+    expect(a.packets().at(-1)).toMatchObject({ generation: 2, frame: 3 });
+});
+
+test('return during loading releases the loading barrier while physical departure frees the reserved slot', () => {
+    const { server, join } = setup(); const a = join('Host'), b = join('Guest');
+    a.command('map_ready', { digest: 'digest' }); b.command('state', { ready: true, mapDigest: 'digest' }); a.command('startgame');
+    a.json({ type: 'loaded', percent: 100 });
+    b.json({ type: 'returnToLobby', reason: 'forfeit' });
+    expect(a.all('allLoaded')).toHaveLength(1);
+    expect(server.session.slots[1].type).toBe(3);
+    b.close('Leave server');
+    expect(server.session.slots[1].type).toBe(1);
+    expect(a.all('disconnect')).toHaveLength(1);
+    a.json({ type: 'returnToLobby', reason: 'forfeit' });
+    expect(server.session.state).toBe('waiting');
+    expect(join('Replacement').closed).toBeUndefined();
 });

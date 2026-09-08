@@ -33,8 +33,8 @@ same build, engine variant, imported retail archives, active mod, and map.
 2. Give the other player the address displayed above the lobby. The guest
    selects **Multiplayer**, enters that address and password, then **Join Game**.
 3. Select the map, game options, factions, colours, positions, teams, and bots.
-   Each player clicks **Ready**; the host clicks **Start Game**. Two humans are
-   required; bots can occupy the remaining map slots.
+   Each player clicks **Ready**; the host clicks **Start Game**. One human can
+   start solo practice or play against bots in the remaining map slots.
 
 The macOS and Linux shells host through the menu. Browser development clients
 and iPhone/iPad builds can join by address; physical cross-device full-match
@@ -43,8 +43,12 @@ and explicit WebSocket URLs. Passwords are entered separately and never saved
 in recent addresses. IPv6-capable external listeners can be joined; the embedded
 Mac and Linux listeners currently bind IPv4. The host's TCP port must be reachable.
 
-Leaving as the physical host ends the server, even after transferring lobby
-administration. Guests cannot keep a host-embedded match alive independently.
+Use **Return to Lobby** in the game menu, then **Continue** on the score screen,
+to stay connected to the same hosted room. Other commanders keep playing when
+you return early. After everyone finishes or returns, settings and slots remain
+and Ready resets for another round. A defeated host can return without stopping
+the server. **Leave Server**, closing the host app, or losing the physical host's
+connection still stops embedded hosting, even after transferring administration.
 
 ## Implemented
 
@@ -55,7 +59,7 @@ administration. Guests cannot keep a host-embedded match alive independently.
 - Binary order relay with two frames of latency by default, pre-seeded empty
   frames, ordered bounded buffering, server-stamped disconnect frames, and sync
   hash/defeat-mask comparison on both server and clients. Server-stamped sync
-  relays use orders protocol 2; older protocol clients are rejected. Packet sizes, future-frame windows, client count,
+  relays and handshake use protocol 3 with per-match generations; older protocol clients are rejected. Packet sizes, future-frame windows, client count,
   command rate, and socket backpressure are bounded.
 - `src/network/client/`: direct address parsing, WebSocket lifecycle/retry,
   lobby client, frame buffer, and `NetworkTurnManager`. GameScreen selects it
@@ -163,7 +167,8 @@ Limits are 256 files, 32 MiB per file and 64 MiB per package. Verified files are
 cached in memory up to 64 MiB and reused by digest, including across package
 changes; restarting the app clears this cache. Changing content clears Ready.
 Leaving the lobby or match restores prior rules, art, strings, sound definitions
-and resource caches. Retail imports are not overwritten or transferred.
+and resource caches. Returning to the same waiting room verifies and remounts
+its content from the bounded cache before Ready. Retail imports are not overwritten or transferred.
 
 The transfer manifest uses SHA-256 while existing map-list/replay CRC keys remain
 compatible. This implementation uses chunked WebSocket transfer on the same port,

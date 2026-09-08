@@ -162,6 +162,10 @@ export class MainMenuController extends Controller {
                     return;
                 }
                 const rerender = async () => {
+                    if (currentScreen.onViewportChange) {
+                        currentScreen.onViewportChange();
+                        return;
+                    }
                     await currentScreen.onLeave();
                     await currentScreen.onEnter();
                 };

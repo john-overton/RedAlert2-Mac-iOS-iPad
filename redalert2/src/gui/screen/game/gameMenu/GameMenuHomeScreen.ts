@@ -7,6 +7,7 @@ interface Strings {
 }
 interface GameMenuHomeParams {
     onCancel: () => void;
+    quitLabel?: string;
     onQuit?: () => void;
     onObserve?: () => void;
     onSave?: () => void;
@@ -64,7 +65,7 @@ export class GameMenuHomeScreen extends GameMenuScreen {
                 onClick: () => this.fullScreen.toggle(),
             },
             {
-                label: strings.get("GUI:AbortMission"),
+                label: params.quitLabel ?? strings.get("GUI:AbortMission"),
                 onClick: () => {
                     this.controller?.pushScreen?.(ScreenType.QuitConfirm, this.params);
                 },

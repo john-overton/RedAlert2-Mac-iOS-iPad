@@ -5,6 +5,7 @@ interface Strings {
 interface QuitConfirmParams {
     onQuit: () => void;
     onCancel: () => void;
+    quitLabel?: string;
     onObserve?: () => void;
     observeAllowed?: boolean;
 }
@@ -31,7 +32,7 @@ export class QuitConfirmScreen extends GameMenuScreen {
     private initView(params: QuitConfirmParams): void {
         const strings = this.strings;
         const buttons: SidebarButton[] = [
-            { label: strings.get("GUI:Quit"), onClick: params.onQuit },
+            { label: params.quitLabel ?? strings.get("GUI:Quit"), onClick: params.onQuit },
             ...(params.observeAllowed
                 ? [{ label: strings.get("GUI:Observe"), onClick: params.onObserve! }]
                 : []),

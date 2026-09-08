@@ -2,8 +2,8 @@ import type { ConnectionHealth } from '../ConnectionHealth';
 import type { GameOpts } from '../../game/gameopts/GameOpts';
 import type { Session } from './Session';
 
-export const HANDSHAKE_PROTOCOL = 2;
-export const ORDERS_PROTOCOL = 2;
+export const HANDSHAKE_PROTOCOL = 3;
+export const ORDERS_PROTOCOL = 3;
 export const MAX_PACKET_BYTES = 128 * 1024;
 export const DEFAULT_PORT = 1620;
 
@@ -27,6 +27,7 @@ export interface HumanAssignment { clientId: number; slotIndex: number; name: st
 export interface StartGameMessage {
     type: 'startGame';
     gameId: string;
+    generation: number;
     timestamp: number;
     gameOpts: GameOpts;
     humanAssignments: HumanAssignment[];
@@ -37,7 +38,8 @@ export interface StartGameMessage {
 export type ClientMessage = ContentRequest | HelloMessage
     | { type: 'command'; name: string; args?: Record<string, unknown> }
     | { type: 'chat'; to: 'all' | 'team' | number; text: string }
-    | { type: 'loaded'; percent: number }
+    | { type: 'loaded'; gameId: string; generation: number; percent: number }
+    | { type: 'returnToLobby'; gameId: string; generation: number; reason: 'finished' | 'forfeit' }
     | { type: 'ping' | 'pong'; t: number; queueLength?: number };
 export type ContentRequest = { type: 'content'; requestId: number; action: 'begin' | 'put' | 'commit' | 'get' | 'cancel'; manifest?: import('../content/ContentPackage').ContentManifest; id?: string; path?: string; offset?: number; data?: string };
 export type ContentResponse = { type: 'contentResult'; requestId: number; error?: string; data?: string };
@@ -48,53 +50,58 @@ export type ServerMessage = ContentResponse
     | { type: 'error'; code: string; message?: string }
     | { type: 'chat'; clientId: number; to: 'all' | 'team' | number; text: string }
     | { type: 'message'; key: string; args?: Record<string, unknown> }
+    | { type: 'matchEnded'; gameId: string; generation: number; reason: 'finished' | 'abandoned' | 'desync' }
     | StartGameMessage
-    | { type: 'loaded'; clientId: number; percent: number }
-    | { type: 'allLoaded' }
-    | { type: 'ack'; frame: number; count: number }
-    | { type: 'disconnect'; clientId: number; frame: number; takeover?: 'ai' }
-    | { type: 'matchHealth'; players: { clientId: number; ping: number | null; lagMs: number }[] }
-    | { type: 'outOfSync'; frame: number }
+    | { type: 'loaded'; generation: number; clientId: number; percent: number }
+    | { type: 'allLoaded'; generation: number }
+    | { type: 'ack'; generation: number; frame: number; count: number }
+    | { type: 'disconnect'; generation: number; clientId: number; frame: number; takeover?: 'ai' }
+    | { type: 'matchHealth'; generation: number; players: { clientId: number; ping: number | null; lagMs: number }[] }
+    | { type: 'outOfSync'; generation: number; frame: number }
     | { type: 'ping' | 'pong'; t: number; queueLength?: number };
 
-export interface OrderPacket { kind: 'orders'; clientId: number; frame: number; actions: Uint8Array }
-export interface SyncPacket { kind: 'sync'; frame: number; hash: number; defeatMask: bigint }
+export interface OrderPacket { kind: 'orders'; generation: number; clientId: number; frame: number; actions: Uint8Array }
+export interface SyncPacket { kind: 'sync'; generation: number; frame: number; hash: number; defeatMask: bigint }
+/** Only the server may send this packet; the sender id comes from its connection. */
+export interface RelayedSyncPacket { kind: 'syncRelay'; generation: number; clientId: number; frame: number; hash: number; defeatMask: bigint }
 
-export function encodeOrderPacket(clientId: number, frame: number, actions: Uint8Array): Uint8Array {
-    if (actions.length + 9 > MAX_PACKET_BYTES) throw new Error('Order packet is too large');
-    const bytes = new Uint8Array(9 + actions.length);
+export function encodeOrderPacket(clientId: number, frame: number, actions: Uint8Array, generation = 0): Uint8Array {
+    if (actions.length + 13 > MAX_PACKET_BYTES) throw new Error('Order packet is too large');
+    const bytes = new Uint8Array(13 + actions.length);
     const view = new DataView(bytes.buffer);
     bytes[0] = 1;
-    view.setUint32(1, clientId, true);
-    view.setUint32(5, frame, true);
-    bytes.set(actions, 9);
+    view.setUint32(1, generation, true);
+    view.setUint32(5, clientId, true);
+    view.setUint32(9, frame, true);
+    bytes.set(actions, 13);
     return bytes;
 }
-export function encodeSyncPacket(frame: number, hash: number, defeatMask = 0n): Uint8Array {
-    const bytes = new Uint8Array(17);
-    const view = new DataView(bytes.buffer);
-    bytes[0] = 2;
-    view.setUint32(1, frame, true);
-    view.setUint32(5, hash, true);
-    view.setBigUint64(9, defeatMask, true);
-    return bytes;
-}
-/** Only the server may send this packet; the sender id comes from its connection. */
-export interface RelayedSyncPacket { kind: 'syncRelay'; clientId: number; frame: number; hash: number; defeatMask: bigint }
-export function encodeRelayedSyncPacket(clientId: number, frame: number, hash: number, defeatMask = 0n): Uint8Array {
+export function encodeSyncPacket(frame: number, hash: number, defeatMask = 0n, generation = 0): Uint8Array {
     const bytes = new Uint8Array(21);
     const view = new DataView(bytes.buffer);
+    bytes[0] = 2;
+    view.setUint32(1, generation, true);
+    view.setUint32(5, frame, true);
+    view.setUint32(9, hash, true);
+    view.setBigUint64(13, defeatMask, true);
+    return bytes;
+}
+export function encodeRelayedSyncPacket(clientId: number, frame: number, hash: number, defeatMask = 0n, generation = 0): Uint8Array {
+    const bytes = new Uint8Array(25);
+    const view = new DataView(bytes.buffer);
     bytes[0] = 3;
-    view.setUint32(1, clientId, true);
-    bytes.set(encodeSyncPacket(frame, hash, defeatMask).subarray(1), 5);
+    view.setUint32(1, generation, true);
+    view.setUint32(5, clientId, true);
+    bytes.set(encodeSyncPacket(frame, hash, defeatMask, generation).subarray(5), 9);
     return bytes;
 }
 export function decodePacket(bytes: Uint8Array): OrderPacket | SyncPacket | RelayedSyncPacket {
-    if (bytes.length > MAX_PACKET_BYTES || bytes.length < 9) throw new Error('Invalid packet size');
+    if (bytes.length > MAX_PACKET_BYTES || bytes.length < 13) throw new Error('Invalid packet size');
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    if (bytes[0] === 1) return { kind: 'orders', clientId: view.getUint32(1, true), frame: view.getUint32(5, true), actions: bytes.slice(9) };
-    if (bytes[0] === 2 && bytes.length === 17) return { kind: 'sync', frame: view.getUint32(1, true), hash: view.getUint32(5, true), defeatMask: view.getBigUint64(9, true) };
-    if (bytes[0] === 3 && bytes.length === 21) return { kind: 'syncRelay', clientId: view.getUint32(1, true), frame: view.getUint32(5, true), hash: view.getUint32(9, true), defeatMask: view.getBigUint64(13, true) };
+    const generation = view.getUint32(1, true);
+    if (bytes[0] === 1) return { kind: 'orders', generation, clientId: view.getUint32(5, true), frame: view.getUint32(9, true), actions: bytes.slice(13) };
+    if (bytes[0] === 2 && bytes.length === 21) return { kind: 'sync', generation, frame: view.getUint32(5, true), hash: view.getUint32(9, true), defeatMask: view.getBigUint64(13, true) };
+    if (bytes[0] === 3 && bytes.length === 25) return { kind: 'syncRelay', generation, clientId: view.getUint32(5, true), frame: view.getUint32(9, true), hash: view.getUint32(13, true), defeatMask: view.getBigUint64(17, true) };
     throw new Error('Unknown packet kind');
 }
 

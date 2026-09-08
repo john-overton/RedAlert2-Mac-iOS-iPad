@@ -109,6 +109,7 @@ export class GameScreen extends RootScreen {
     private lanMatchSession?: LanMatchSession | NetworkMatchSession;
     private isSinglePlayer = false;
     private isLanGame = false;
+    private persistentRoom = false;
     private isTournament = false;
     private playerName = '';
     private returnTo?: any;
@@ -155,6 +156,7 @@ export class GameScreen extends RootScreen {
         let gameOpts: any;
         const lanLaunch = params.lanLaunch;
         this.lanMatchSession = params.lanMatchSession;
+        this.persistentRoom = Boolean(params.persistentRoom);
         const gameId = lanLaunch?.gameId ?? params.gameId;
         const timestamp = lanLaunch?.timestamp ?? params.timestamp;
         this.returnTo = params.returnTo ?? lanLaunch?.returnRoute;
@@ -409,9 +411,9 @@ export class GameScreen extends RootScreen {
             this.hud.destroy();
             this.hud = undefined;
         }
+        this.returnToRoom('forfeit');
         this.gameTurnMgr?.dispose();
         this.gameTurnMgr = undefined;
-        this.lanMatchSession?.leaveRoom();
         this.lanMatchSession?.dispose();
         this.lanMatchSession = undefined;
         this.disposables.dispose();
@@ -429,6 +431,10 @@ export class GameScreen extends RootScreen {
             this.gservCon.onClose.unsubscribe(this.onGservClose);
             this.gservCon.close();
         }
+    }
+    private returnToRoom(reason: 'finished' | 'forfeit'): void {
+        if (this.lanMatchSession instanceof NetworkMatchSession) this.lanMatchSession.returnToLobby(reason);
+        else this.lanMatchSession?.leaveRoom();
     }
     private restoreRendererToUiOnly(): void {
         if (!this.renderer) {
@@ -537,7 +543,7 @@ export class GameScreen extends RootScreen {
             // Screens are registered by numeric ScreenType — the old string
             // argument threw "Screen not found" AFTER teardown, leaving a
             // black screen instead of the menu.
-            this.controller?.goToScreen(ScreenType.MainMenuRoot);
+            this.controller?.goToScreen(ScreenType.MainMenuRoot, this.persistentRoom ? { route: this.returnTo } : undefined);
         });
         if (skipGoToMenu) {
             cleanup();
@@ -1208,7 +1214,7 @@ export class GameScreen extends RootScreen {
         soundHandler.init?.();
         this.disposables.add(soundHandler);
         this.uiScene.add(hud);
-        const menu = this.menu = new GameMenu(this.gameMenuSubScreens, game, localPlayer, chatHistory, this.gservCon, this.isSinglePlayer, this.isTournament);
+        const menu = this.menu = new GameMenu(this.gameMenuSubScreens, game, localPlayer, chatHistory, this.gservCon, this.isSinglePlayer, this.isTournament, this.lanMatchSession instanceof NetworkMatchSession);
         menu.init(hud);
         this.initGameMenuEvents(menu, eva, game, localPlayer, actionQueue, actionFactory);
         this.disposables.add(menu, () => this.menu = undefined);
@@ -1282,7 +1288,7 @@ export class GameScreen extends RootScreen {
                 });
             }
             if (this.isLanGame) {
-                this.lanMatchSession?.leaveRoom();
+                this.returnToRoom('forfeit');
             }
             if (this.usesServerConnection()) {
                 try {
@@ -1408,7 +1414,7 @@ export class GameScreen extends RootScreen {
             this.gameTurnMgr?.setErrorState?.();
             this.gameAnimationLoop?.stop?.();
             if (this.isLanGame) {
-                this.lanMatchSession?.leaveRoom();
+                this.returnToRoom(game.alliances.getHostilePlayers().length ? 'forfeit' : 'finished');
             }
 
             if (this.usesServerConnection() && this.gservCon) {

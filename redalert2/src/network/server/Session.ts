@@ -18,6 +18,8 @@ export interface SessionClient {
 }
 
 export interface Session {
+    generation: number;
+    gameId?: string;
     content?: import('../content/ContentPackage').ContentManifest;
     state: 'waiting' | 'started' | 'ended';
     serverName: string;

@@ -22,6 +22,7 @@ export interface MultiplayerProps {
     addresses: string[];
     status?: string;
     ready?: boolean;
+    matchRunning?: boolean;
     disconnectAi?: boolean;
     onDisconnectAi?: (enabled: boolean) => void;
     canReady?: boolean;
@@ -75,12 +76,12 @@ export function Multiplayer(props: MultiplayerProps) {
                     }}/></label>}
                 <div role="status">{props.contentStatus || 'Select a custom map and its unit rules, art and resources.'}</div>
                 {props.contentBusy ? <button className="dialog-button" onClick={props.onCancelContent}>Cancel Transfer</button> : <>
-                    {props.hasContent && <button className="dialog-button" onClick={props.onRetryContent} disabled={props.ready}>Verify Content</button>}
+                    {props.hasContent && <button className="dialog-button" onClick={props.onRetryContent} disabled={props.ready || props.matchRunning}>Verify Content</button>}
                     {props.canManageContent && props.hasContent && <button className="dialog-button" onClick={props.onRemoveContent} disabled={props.ready}>Remove Content</button>}
                 </>}
             </details>
             <LobbyForm {...props.lobbyProps} beforeChatContent={<><div className="mp-ready-bar">
-                <span>{props.ready ? 'Ready for battle' : !props.canReady ? 'Waiting for map and content verification.' : 'Choose your side, color and team, then click Ready.'}</span>
+                <span>{props.matchRunning ? 'The match is still running. You can ready up when everyone has returned.' : props.ready ? 'Ready for battle' : !props.canReady ? 'Waiting for map and content verification.' : 'Choose your side, color and team, then click Ready.'}</span>
                 <button className="dialog-button" type="button" disabled={!props.canReady} onClick={props.onReady}>{props.ready ? 'Cancel Ready' : 'Ready'}</button>
             </div>
                 {Boolean(props.managedPlayers?.length) && <details className="mp-host-controls"><summary>Manage Players</summary>

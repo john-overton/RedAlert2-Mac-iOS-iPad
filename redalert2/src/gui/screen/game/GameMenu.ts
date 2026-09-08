@@ -33,7 +33,7 @@ export class GameMenu {
     get onSendMessage() {
         return this._onSendMessage.asEvent();
     }
-    constructor(private screens: Map<number, any>, private game: any, private localPlayer: any, private chatHistory: any, private gservCon?: any, private isSinglePlayer: boolean = false, private isTournament: boolean = false) { }
+    constructor(private screens: Map<number, any>, private game: any, private localPlayer: any, private chatHistory: any, private gservCon?: any, private isSinglePlayer: boolean = false, private isTournament: boolean = false, private persistentRoom: boolean = false) { }
     init(hud: any): void {
         const controller = this.controller = new GameMenuController(hud);
         for (const [screenType, screen] of this.screens) {
@@ -48,6 +48,7 @@ export class GameMenu {
             return;
         this._onOpen.dispatch(this);
         this.controller.goToScreen(ScreenType.Home, {
+            quitLabel: this.persistentRoom ? 'Return to Lobby' : undefined,
             observeAllowed: !(this.isTournament ||
                 this.isSinglePlayer ||
                 this.localPlayer === undefined ||

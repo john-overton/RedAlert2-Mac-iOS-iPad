@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { LobbyClient } from './LobbyClient';
 import { WebSocketConnection } from './WebSocketConnection';
-import type { HelloMessage } from '@/network/server/Protocol';
+import { HANDSHAKE_PROTOCOL, ORDERS_PROTOCOL, type HelloMessage } from '@/network/server/Protocol';
 
 class FakeSocket {
     readyState = 0;
@@ -16,7 +16,7 @@ class FakeSocket {
     open() { this.readyState = 1; this.onopen?.(); }
     receive(message: unknown) { this.onmessage?.({ data: JSON.stringify(message) }); }
 }
-const hello: HelloMessage = { type: 'hello', protocol: 2, ordersProtocol: 2, name: 'Alice', engine: 'ra2', version: 'test', mod: 'ra2', modHash: 'rules', assetFingerprint: 'retail' };
+const hello: HelloMessage = { type: 'hello', protocol: HANDSHAKE_PROTOCOL, ordersProtocol: ORDERS_PROTOCOL, name: 'Alice', engine: 'ra2', version: 'test', mod: 'ra2', modHash: 'rules', assetFingerprint: 'retail' };
 
 test('password rejection is specific and the same lobby client can retry', async () => {
     const sockets: FakeSocket[] = [];
@@ -152,7 +152,7 @@ test('match receives the original disconnect before lobby cleanup disposes it', 
     socket.open(); await Promise.resolve();
     socket.receive({ type: 'welcome', clientId: 1, session: { state: 'waiting', clients: [{ id: 1, admin: true }] } });
     await connecting;
-    socket.receive({ type: 'startGame', gameId: 'test', timestamp: 1, gameOpts: {}, clientIds: [1],
+    socket.receive({ type: 'startGame', gameId: 'test', generation: 1, timestamp: 1, gameOpts: {}, clientIds: [1],
         humanAssignments: [{ clientId: 1, slotIndex: 0, name: 'Alice' }], orderLatency: 2, netFrameInterval: 1 });
     const match = lobby.getMatchSession();
     const errors: string[] = [];
@@ -161,4 +161,48 @@ test('match receives the original disconnect before lobby cleanup disposes it', 
     socket.close();
     expect(errors).toEqual(['closed']);
     expect(match.fatalError?.message).toBe('closed');
+});
+
+test('two rounds reuse a connection, with stale round traffic isolated and lobby ping retained', async () => {
+    const socket = new FakeSocket();
+    const lobby = new LobbyClient(new WebSocketConnection(() => socket as any));
+    const connecting = lobby.connect('host', hello);
+    socket.open(); await Promise.resolve();
+    const waiting = { state: 'waiting', generation: 0, clients: [{ id: 1, admin: true }] };
+    socket.receive({ type: 'welcome', clientId: 1, session: waiting });
+    await connecting;
+    const errors: string[] = [];
+    lobby.onError.subscribe(error => errors.push(error.message));
+    const start = (generation: number) => ({
+        type: 'startGame', gameId: `round-${generation}`, generation, timestamp: 1, gameOpts: {},
+        humanAssignments: [{ clientId: 1, slotIndex: 0, name: 'Alice' }], clientIds: [1], orderLatency: 2, netFrameInterval: 1,
+    });
+    try {
+        socket.receive(start(1));
+        const first = lobby.getMatchSession();
+        first.returnToLobby('finished');
+        expect(socket.readyState).toBe(1);
+        expect(() => lobby.getMatchSession()).toThrow('not started');
+        socket.receive({ type: 'matchEnded', gameId: 'round-1', generation: 1, reason: 'finished' });
+        socket.receive({ type: 'session', session: { ...waiting, generation: 1 } });
+        socket.receive({ type: 'ping', t: 42 });
+        expect(JSON.parse(socket.sent.at(-1)!)).toEqual({ type: 'pong', t: 42 });
+        socket.receive(start(2));
+        const second = lobby.getMatchSession();
+        expect(second).not.toBe(first);
+        socket.receive(start(1));
+        socket.receive({ type: 'matchEnded', gameId: 'round-1', generation: 1, reason: 'finished' });
+        socket.receive({ type: 'outOfSync', generation: 1, frame: 9 });
+        socket.receive({ type: 'allLoaded', generation: 1 });
+        expect(lobby.getMatchSession()).toBe(second);
+        expect(second.areAllPlayersLoaded()).toBe(false);
+        expect(second.fatalError).toBeUndefined();
+        socket.receive({ type: 'allLoaded', generation: 2 });
+        expect(second.areAllPlayersLoaded()).toBe(true);
+        const before = socket.sent.length;
+        first.submitLocalTurn(0, new Uint8Array());
+        first.reportLoadProgress(100);
+        expect(socket.sent).toHaveLength(before);
+        expect(errors).toEqual([]);
+    } finally { lobby.close(); }
 });

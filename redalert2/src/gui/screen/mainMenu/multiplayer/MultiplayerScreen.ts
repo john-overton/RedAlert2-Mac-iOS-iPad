@@ -7,7 +7,7 @@ import { MusicType } from '@/engine/sound/Music';
 import { MapDigest } from '@/engine/MapDigest';
 import { VirtualFile } from '@/data/vfs/VirtualFile';
 import { MAX_CONTENT_BYTES, MAX_CONTENT_FILE_BYTES, type ContentFile } from '@/network/content/ContentPackage';
-import { mountSessionContent, restoreSessionContent } from '@/network/content/SessionContentResources';
+import { hasSessionContent, mountSessionContent, restoreSessionContent } from '@/network/content/SessionContentResources';
 import { MapFile } from '@/data/MapFile';
 import { MapPreviewRenderer } from '@/gui/screen/mainMenu/lobby/MapPreviewRenderer';
 import { PregameController, PregameMapSelectionResult } from '@/gui/screen/mainMenu/lobby/PregameController';
@@ -63,10 +63,35 @@ export class MultiplayerScreen extends MainMenuScreen {
     }
 
     onEnter(): void {
+        this.launching = false;
         this.active = true;
         this.controller.toggleMainVideo(false);
+        // Game teardown restores base resources before sibling menu screens are
+        // constructed. Remount this room's verified content only when re-entering.
+        if (this.mountedContent && !hasSessionContent()) {
+            this.mountedContent = undefined;
+            this.checkingContent = undefined;
+            this.checkedMap = undefined;
+            this.validatedMap = undefined;
+            this.validatedMapFile = undefined;
+        }
+        if (this.client?.session) this.onSession(this.client.session);
         this.render();
         this.controller.showSidebarButtons();
+        this.refreshPreview();
+    }
+
+    onViewportChange(): void {
+        this.form = undefined;
+        this.render();
+        this.refreshPreview();
+    }
+
+    private refreshPreview(): void {
+        if (!this.active || !this.validatedMapFile) return;
+        const preview = new MapPreviewRenderer(this.strings).render(new MapFile(this.validatedMapFile), LobbyType.MultiplayerHost, this.controller.getSidebarPreviewSize());
+        this.controller.toggleSidebarPreview(true);
+        this.controller.setSidebarPreview(preview);
     }
 
     async onLeave(): Promise<void> {
@@ -166,7 +191,7 @@ export class MultiplayerScreen extends MainMenuScreen {
                 const match = client.getMatchSession();
                 this.launching = true;
                 this.rootController.goToScreen(ScreenType.Game, { create: true, lanLaunch: match.getLaunchDescriptor(),
-                    lanMatchSession: match, returnTo: new MainMenuRoute(MainMenuScreenType.Multiplayer, {}) });
+                    lanMatchSession: match, persistentRoom: true, returnTo: new MainMenuRoute(MainMenuScreenType.Multiplayer, {}) });
             });
             await client.connect(address, { ...identity, type: 'hello', name: this.fields.playerName.trim(), password: this.fields.password });
             if (generation !== this.generation || client !== this.client) { client.close(); return; }
@@ -191,7 +216,7 @@ export class MultiplayerScreen extends MainMenuScreen {
     private onSession = (session: Session): void => {
         this.hydrateSession(session);
         this.render();
-        void this.checkContent(session);
+        if (this.active && session.state === 'waiting') void this.checkContent(session);
     };
 
     private async publishSelectedMap(snapshot: any): Promise<void> {
@@ -399,13 +424,15 @@ export class MultiplayerScreen extends MainMenuScreen {
             this.mapList, this.gameModes, this.localPrefs, this.fields.playerName);
         this.launching = false;
         this.chatHistory.reset();
-        this.controller.setSidebarPreview();
-        this.controller.toggleSidebarPreview(false);
+        if (this.active) {
+            this.controller.setSidebarPreview();
+            this.controller.toggleSidebarPreview(false);
+        }
     }
 
     private lobbyProps(session: Session): any {
         const self = session.clients.find(member => member.id === this.client?.clientId);
-        const props = this.pregame.createLobbyFormProps({ lobbyType: self?.admin && !self.ready ? LobbyType.MultiplayerHost : LobbyType.MultiplayerGuest,
+        const props = this.pregame.createLobbyFormProps({ lobbyType: session.state === 'waiting' && self?.admin && !self.ready ? LobbyType.MultiplayerHost : LobbyType.MultiplayerGuest,
             activeSlotIndex: self?.slotIndex ?? -1, messages: this.messages, localUsername: self?.name,
             chatHistory: this.chatHistory, channels: [RECIPIENT_ALL, RECIPIENT_TEAM], onSendMessage: (message: any) => {
                 const text = typeof message === 'string' ? message : message?.value;
@@ -466,19 +493,20 @@ export class MultiplayerScreen extends MainMenuScreen {
         if (!this.active) return;
         const session = this.client?.session;
         const self = session?.clients.find(member => member.id === this.client?.clientId);
-        const canReady = Boolean(self?.mapReady && !this.contentBusy && (!session?.content || self.contentReady === session.content.id));
+        const canReady = Boolean(session?.state === 'waiting' && self?.mapReady && !this.contentBusy && (!session?.content || self.contentReady === session.content.id));
         const ready = () => { if (canReady) this.send('state', { ready: !self?.ready }); };
         const props = { fields: this.fields, busy: this.busy, error: this.error, canHost: Boolean((window as any).__RA2_SHELL__?.hostGame),
             lobbyProps: session ? this.lobbyProps(session) : undefined, serverName: session?.serverName, addresses: this.addresses,
-            status: session ? `${session.clients.filter(member => member.ready).length}/${session.clients.length} ready` : undefined,
+            status: session?.state === 'started' ? 'Match in progress — waiting for the next round' : session?.state === 'ended' ? 'Match stopped — waiting for commanders to return' : session ? `${session.clients.filter(member => member.ready).length}/${session.clients.length} ready` : undefined,
+            matchRunning: Boolean(session && session.state !== 'waiting'),
             contentStatus: this.contentStatus, contentBusy: this.contentBusy,
-            canManageContent: self?.admin, hasContent: Boolean(session?.content?.files.length),
+            canManageContent: session?.state === 'waiting' && self?.admin, hasContent: Boolean(session?.content?.files.length),
             onContentFiles: (files: File[]) => void this.importContent(files), onRemoveContent: () => void this.removeContent(),
             onRetryContent: () => session && void this.checkContent(session, true), onCancelContent: () => this.cancelContent(),
             disconnectAi: session?.gameOpts.disconnectAi, onDisconnectAi: (value: boolean) => this.send('option', { key: 'disconnectAi', value }),
             ready: self?.ready, canReady, recent: this.recent(), onField: (key: keyof ConnectionFields, value: string) => { this.fields = { ...this.fields, [key]: value }; this.render(); },
             connectionHealth: this.client?.getConnectionHealth(), connectionPlayers: session?.clients.map(({id,name}) => ({id,name})),
-            managedPlayers: self?.admin && !self.ready ? session?.clients.filter(member => member.id !== self.id) : [],
+            managedPlayers: session?.state === 'waiting' && self?.admin && !self.ready ? session?.clients.filter(member => member.id !== self.id) : [],
             onKick: (clientId: number) => this.send('kick', { clientId }), onMakeAdmin: (clientId: number) => this.send('make_admin', { clientId }),
             onHost: () => void this.connect(true), onJoin: () => void this.connect(false), onReady: ready };
         if (this.form) this.form.applyOptions((options: any) => Object.assign(options, props));
@@ -487,11 +515,11 @@ export class MultiplayerScreen extends MainMenuScreen {
             this.controller.setMainComponent(component);
         }
         const buttons: any[] = session ? [
-            ...(self?.admin ? [{ label: 'Start Game', disabled: !session.clients.every(member => member.ready && member.mapReady && (!session.content || member.contentReady === session.content.id)) || !session.clients.some(member => member.slotIndex !== null),
-                onClick: () => this.send('startgame') }, { label: 'Change Map', disabled: self.ready || this.contentBusy, onClick: () => this.controller.pushScreen(MainMenuScreenType.MapSelection,
+            ...(self?.admin ? [{ label: 'Start Game', disabled: session.state !== 'waiting' || !session.clients.every(member => member.ready && member.mapReady && (!session.content || member.contentReady === session.content.id)) || !session.clients.some(member => member.slotIndex !== null),
+                onClick: () => this.send('startgame') }, { label: 'Change Map', disabled: session.state !== 'waiting' || self.ready || this.contentBusy, onClick: () => this.controller.pushScreen(MainMenuScreenType.MapSelection,
                     { lobbyType: LobbyType.MultiplayerHost, gameOpts: this.pregame.getGameOpts(), usedSlots: () => this.pregame.getUsedSlots() }) }] : []),
             { label: self?.ready ? 'Cancel Ready' : 'Ready', disabled: !canReady, onClick: ready },
-            { label: 'Leave Game', isBottom: true, onClick: async () => { await this.disconnect(); this.error = undefined; this.render(); } },
+            { label: 'Leave Server', isBottom: true, onClick: async () => { await this.disconnect(); this.error = undefined; this.render(); } },
         ] : [
             { label: 'Create Game', disabled: this.busy || !props.canHost, onClick: props.onHost },
             { label: 'Join Game', disabled: this.busy, onClick: props.onJoin },
