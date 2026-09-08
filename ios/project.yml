@@ -33,6 +33,8 @@ targets:
           NSAllowsLocalNetworking: true
         NSLocalNetworkUsageDescription: Forwards diagnostic logs to a development machine during testing.
         UILaunchStoryboardName: ""
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
         UIRequiresFullScreen: true
         UIStatusBarHidden: true
         UIViewControllerBasedStatusBarAppearance: false

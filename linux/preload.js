@@ -21,4 +21,5 @@ contextBridge.exposeInMainWorld('__RA2_SHELL__', Object.freeze({
     exitApp: () => ipcRenderer.send('ra2:exit'),
     hostGame: (options) => ipcRenderer.invoke('ra2:host-game', options),
     stopHosting: () => ipcRenderer.invoke('ra2:stop-hosting'),
+    savePerformanceReport: (payload) => ipcRenderer.invoke('ra2:save-performance-report', payload),
 }));

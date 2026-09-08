@@ -151,7 +151,7 @@ A second real lockstep test with a Chrome commander, WebKit commander and late
 WebKit observer also matched every hash through 10,000 ticks with 67 orders.
 [Mixed-engine lockstep validation](reports/mass-unit-observer-mixed-validation.json).
 
-The test suite passes 242 tests, including formation/bridge behavior, search
+The test suite passes 244 tests, including formation/bridge behavior, search
 callback and cleanup behavior, oversized selection validation, telemetry bounds,
 and targeting predicate characterization. The production build succeeds.
 Typechecking reports the same 42 errors as baseline commit
@@ -203,4 +203,25 @@ collection and an intentional 150 ms CPU hitch. Chrome captured long tasks and
 GPU times; WebKit explicitly reported both APIs unsupported while retaining the
 frame gap and CPU phases. Both had no JavaScript errors. This functional fixture
 was single player; network instrumentation has separate protocol-equivalence tests.
-Native WKWebView/device report export has not been exercised in this pass.
+That browser test did not exercise native app export; see the subsequent native-save follow-up below.
+
+
+## Native report saving follow-up
+
+Native reports now use a shell bridge: macOS saves beside the app bundle, Windows
+beside the executable, and Linux beside the game launcher, each in
+`performance_logs`. iOS/iPadOS uses the app's Documents folder. The Options screen
+shows the confirmed location or a write error. No automatic browser-download
+fallback is attempted in older native shells. See the
+[native location details](MASS_UNIT_BENCHMARK.md#native-app-report-locations).
+
+
+Native validation passed: a real macOS WKWebView saved a 427,923-byte exported
+report byte-for-byte, returned its path, rejected untrusted main frames/iframes,
+and surfaced filesystem errors. Repeat with
+`scripts/macos-performance-log-smoke.sh`. Focused Swift writer tests, macOS shell
+compilation, iOS simulator source typechecking and plist validation also passed.
+The five Electron shell-layout fixtures perform real temporary file writes and
+check write failures, unique names, collisions, and cleanup; Windows/Linux native
+runtime execution and iOS device Files access remain untested here. The web suite
+passes 244 tests and the production build succeeds.

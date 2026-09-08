@@ -213,3 +213,24 @@ This is attribution to measured engine phases, not a universal CPU stack profile
 or a guarantee of identifying every slowdown. Unexplained gaps require a browser
 or native profiler to separate GPU scheduling, compositor, GC and operating-system
 work. Diagnostics themselves add overhead; compare normal play with them off.
+
+### Native app report locations
+
+**Save slowdown report** writes through the native shell and displays the confirmed
+file path. It does not navigate the game away to a browser download URL.
+
+| Platform | Destination |
+| --- | --- |
+| macOS | `performance_logs` beside the `.app` bundle |
+| Windows | `performance_logs` beside `Red Alert 2.exe` |
+| Linux | `performance_logs` beside the game's `run.sh` launcher, not beside the system Electron binary |
+| iOS / iPadOS | The app's `Documents/performance_logs`, exposed through Files/file sharing |
+| Web browser | The browser's normal download destination |
+
+For example, `/Users/me/Games/Red Alert 2.app` saves reports in
+`/Users/me/Games/performance_logs/`. Desktop folders must be writable. A read-only
+installation location produces an error in Options; no silent alternate folder
+is used. The in-memory capture remains available to retry. Each successful save
+creates a unique JSON file. Enabling diagnostics alone does not write continuously:
+use **Save slowdown report** before closing the app. Native app binaries must be
+rebuilt to include the saving bridge; older shells display an update/rebuild error.

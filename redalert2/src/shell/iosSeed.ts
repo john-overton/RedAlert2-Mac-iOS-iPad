@@ -8,6 +8,7 @@ declare global {
             version: string;
             hostGame?: (options: import('../network/server/GameServer').GameServerOptions & { port: number }) => Promise<{ port: number; addresses: string[] }>;
             stopHosting?: () => Promise<void>;
+            savePerformanceReport?: (json: string) => Promise<{ path: string }>;
         };
     }
 }

@@ -76,6 +76,9 @@ const performanceOptionItems = [
     },
 ] as const;
 export const GeneralOpts: React.FC<GeneralOptsProps> = ({ strings, options, fullScreen, inGame, localPrefs, }) => {
+    const [savingReport, setSavingReport] = useState(false);
+    const [reportStatus, setReportStatus] = useState('');
+    const [reportError, setReportError] = useState(false);
     const [mobileLayout, setMobileLayout] = useState(() => isCoarsePointer());
     const [mobileJoystickEnabled, setMobileJoystickEnabled] = useState(() => getJoystickPreference(localPrefs));
     useEffect(() => {
@@ -215,9 +218,19 @@ export const GeneralOpts: React.FC<GeneralOptsProps> = ({ strings, options, full
         in multiplayer or single player. Only affects this device and can add overhead.
       </p>
       <div className="item">
-        <button type="button" onClick={() => downloadPerformanceReport()}>Save slowdown report</button>
+        <button type="button" disabled={savingReport} onClick={async () => {
+            setSavingReport(true);
+            setReportStatus('');
+            setReportError(false);
+            try { setReportStatus(await downloadPerformanceReport()); }
+            catch (error) {
+                setReportError(true);
+                setReportStatus(`Could not save report: ${error instanceof Error ? error.message : String(error)}`);
+            } finally { setSavingReport(false); }
+        }}>{savingReport ? 'Saving…' : 'Save slowdown report'}</button>
         <button type="button" onClick={() => resetPerformanceTelemetry()}>Clear recorded samples</button>
       </div>
+      {reportStatus && <p role={reportError ? "alert" : "status"} style={{ overflowWrap: "anywhere" }}>{reportStatus}</p>}
       {performanceOptionItems.map((item) => (<div className="item" key={item.key}>
           <label>
             <span className="label">{item.label}</span>

@@ -33,7 +33,9 @@ async function checkShell({ name, platform, layout, variant = 'yr', override = f
         fs.writeFileSync(path.join(resourceDir, 'GameRes', 'test.mix'), 'streamed game content');
     }
 
-    let windowOptions, loadedUrl, protocolHandler, ready;
+    let windowOptions, loadedUrl, protocolHandler, ready, webContents;
+    let writeFailure, failAfterCreate = false, forceCollision = false, collisionPath;
+    const handlers = new Map();
     const settings = {}, switches = [], streamedFiles = [], sent = [];
     const electron = {
         app: {
@@ -47,13 +49,14 @@ async function checkShell({ name, platform, layout, variant = 'yr', override = f
             },
             setAppUserModelId: (value) => { settings.appId = value; },
         },
-        ipcMain: { handle() {}, on() {} },
+        ipcMain: { handle: (name, handler) => handlers.set(name, handler), on() {} },
         protocol: { registerSchemesAsPrivileged() {}, handle: (_scheme, handler) => { protocolHandler = handler; } },
         Menu: { buildFromTemplate: (template) => template, setApplicationMenu() {} },
         BrowserWindow: class {
             constructor(options) {
                 windowOptions = options;
-                this.webContents = { setWindowOpenHandler() {}, on() {} };
+                const mainFrame = { url: 'ra2app://app/index.html' }; mainFrame.top = mainFrame;
+                this.webContents = webContents = { mainFrame, setWindowOpenHandler() {}, on() {} };
             }
             setTitle() {}
             on() {}
@@ -62,6 +65,23 @@ async function checkShell({ name, platform, layout, variant = 'yr', override = f
     };
     const fsProxy = {
         ...fs,
+        promises: {
+            ...fs.promises,
+            async open(...args) {
+                if (writeFailure) throw Object.assign(new Error('Read-only filesystem'), { code: writeFailure });
+                if (forceCollision) {
+                    collisionPath = args[0];
+                    await fs.promises.writeFile(collisionPath, 'existing report', { flag: 'wx' });
+                }
+                const handle = await fs.promises.open(...args);
+                if (!failAfterCreate) return handle;
+                return {
+                    async writeFile() { throw Object.assign(new Error('Disk full'), { code: 'ENOSPC' }); },
+                    sync: () => handle.sync(), close: () => handle.close(),
+                };
+            },
+            async link() { throw new Error('Hard links must not be required for portable filesystems'); },
+        },
         readFileSync(file, ...args) {
             assert.equal(path.basename(file), 'app.json', 'Game assets must stream rather than buffer in main');
             return fs.readFileSync(file, ...args);
@@ -71,8 +91,8 @@ async function checkShell({ name, platform, layout, variant = 'yr', override = f
     const context = vm.createContext({
         require: (id) => id === 'electron' ? electron : id === 'fs' ? fsProxy : require(id),
         __dirname: appDir,
-        process: { platform, resourcesPath: runtimeResources, env: override ? { RA2_RESOURCES: resources } : {}, argv: [] },
-        URL, Response,
+        process: { platform, execPath: path.join(fixture, platform === 'win32' ? 'game.exe' : 'system-electron'), resourcesPath: runtimeResources, env: override ? { RA2_RESOURCES: resources } : {}, argv: [] },
+        URL, Response, Buffer,
     });
     vm.runInContext(mainSource, context, { filename: 'linux/main.js' });
     ready();
@@ -115,11 +135,57 @@ async function checkShell({ name, platform, layout, variant = 'yr', override = f
     assert.equal(protocolHandler({ url: 'ra2app://app/gameres/' }).status, 404);
     assert.equal(streamedFiles.length, 2, 'Rejected URLs must not open streams');
 
+    const logDirectory = path.join(platform === 'win32' ? fixture : path.dirname(appDir), 'performance_logs');
+    assert.equal(fs.existsSync(logDirectory), false, 'Normal shell startup must not create logs');
+    const saveReport = handlers.get('ra2:save-performance-report');
+    assert.equal(typeof saveReport, 'function');
+    const event = { sender: webContents, senderFrame: webContents.mainFrame };
+    for (const payload of [undefined, 42, 'bad JSON', 'null', '[]', '"text"', '1', 'x'.repeat(16 * 1024 * 1024 + 1)]) {
+        await assert.rejects(saveReport(event, payload), /Performance report/);
+    }
+    // UTF-8 byte bound must also reject a string under the character bound.
+    await assert.rejects(saveReport(event, JSON.stringify({ data: 'é'.repeat(8 * 1024 * 1024) })), /16 MiB/);
+    const iframe = { top: webContents.mainFrame, url: 'ra2app://app/index.html' };
+    for (const untrusted of [
+        { sender: webContents, senderFrame: iframe },
+        { sender: {}, senderFrame: webContents.mainFrame },
+        { sender: webContents, senderFrame: { top: {}, url: 'https://example.com/' } },
+    ]) await assert.rejects(saveReport(untrusted, '{}'), /main frame/);
+    const oldUrl = webContents.mainFrame.url;
+    webContents.mainFrame.url = 'https://example.com/';
+    await assert.rejects(saveReport(event, '{}'), /main frame/);
+    webContents.mainFrame.url = oldUrl;
+    assert.equal(fs.existsSync(logDirectory), false, 'Rejected requests must not create logs');
+
+    const payload = JSON.stringify({ schemaVersion: 1, message: 'diagnostic ✓', ticks: [1, 2] });
+    const saved = await Promise.all([saveReport(event, payload), saveReport(event, payload)]);
+    assert.notEqual(saved[0].path, saved[1].path, 'Each report needs a unique name');
+    for (const report of saved) {
+        assert.equal(path.dirname(report.path), logDirectory);
+        assert.match(path.basename(report.path), /^performance-.*\.json$/);
+        assert.equal(fs.readFileSync(report.path, 'utf8'), payload);
+    }
+    assert.equal(fs.readdirSync(logDirectory).length, 2, 'Temporary files must be cleaned');
+    writeFailure = 'EROFS';
+    await assert.rejects(saveReport(event, payload), /Could not save performance report.*EROFS.*writable/);
+    writeFailure = undefined;
+    assert.equal(fs.readdirSync(logDirectory).length, 2);
+    failAfterCreate = true;
+    await assert.rejects(saveReport(event, payload), /ENOSPC/);
+    failAfterCreate = false;
+    assert.equal(fs.readdirSync(logDirectory).length, 2, 'Failed incomplete reports must be cleaned');
+    forceCollision = true;
+    await assert.rejects(saveReport(event, payload), /EEXIST/);
+    forceCollision = false;
+    assert.equal(fs.readFileSync(collisionPath, 'utf8'), 'existing report', 'Exclusive creation must never overwrite');
+    assert.equal(fs.readdirSync(logDirectory).some(file => file.endsWith('.tmp')), false);
+
+
     let bridge;
     const preloadContext = vm.createContext({
         require: () => ({
             contextBridge: { exposeInMainWorld: (key, value) => { assert.equal(key, '__RA2_SHELL__'); bridge = value; } },
-            ipcRenderer: { send: (...args) => sent.push(args), invoke: (...args) => sent.push(args) },
+            ipcRenderer: { send: (...args) => sent.push(args), invoke: (...args) => { sent.push(args); return Promise.resolve({ path: '/native/report.json' }); } },
         }),
         process: { argv: windowOptions.webPreferences.additionalArguments },
     });
@@ -130,7 +196,8 @@ async function checkShell({ name, platform, layout, variant = 'yr', override = f
     bridge.exitApp();
     bridge.hostGame({ port: 4567 });
     bridge.stopHosting();
-    assert.deepEqual(sent, [['ra2:exit'], ['ra2:host-game', { port: 4567 }], ['ra2:stop-hosting']]);
+    assert.deepEqual(await bridge.savePerformanceReport('{}'), { path: '/native/report.json' });
+    assert.deepEqual(sent, [['ra2:exit'], ['ra2:host-game', { port: 4567 }], ['ra2:stop-hosting'], ['ra2:save-performance-report', '{}']]);
     console.log(`PASS ${name}`);
 }
 

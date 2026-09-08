@@ -100,7 +100,7 @@ PY
 xcrun swiftc -O -swift-version 5 -target arm64-apple-macos14.0 \
   -module-cache-path "$ROOT/build/macos/ModuleCache" \
   -framework AppKit -framework WebKit -framework UniformTypeIdentifiers \
-  "$ROOT/ios/Sources/BundleSchemeHandler.swift" "$ROOT/macos/Sources/MultiplayerHost.swift" "$ROOT/macos/Sources/main.swift" \
+  "$ROOT/ios/Sources/BundleSchemeHandler.swift" "$ROOT/ios/Sources/PerformanceLogWriter.swift" "$ROOT/macos/Sources/MultiplayerHost.swift" "$ROOT/macos/Sources/main.swift" \
   -o "$APP/Contents/MacOS/RA2"
 codesign --force --sign - "$APP"
 echo "Built: $APP"

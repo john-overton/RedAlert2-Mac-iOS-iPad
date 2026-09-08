@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var window: NSWindow!
     private var webView: WKWebView!
     private let multiplayer = MultiplayerHost(executable: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/RA2Server"))
+    private let performanceLogs = PerformanceLogHandler()
     private var mouseMonitor: Any?
     private var commandClickActive = false
 
@@ -28,9 +29,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         config.mediaTypesRequiringUserActionForPlayback = []
         config.preferences.isElementFullscreenEnabled = true
         config.userContentController.add(self, name: "exitApp")
+        config.userContentController.addScriptMessageHandler(performanceLogs, contentWorld: .page, name: "performanceLogs")
         config.userContentController.addScriptMessageHandler(multiplayer, contentWorld: .page, name: "multiplayer")
         config.userContentController.addUserScript(WKUserScript(
             source: MultiplayerHost.script,
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(
+            source: PerformanceLogHandler.script,
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self

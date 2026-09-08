@@ -2,6 +2,7 @@ import UIKit
 import WebKit
 
 final class GameViewController: UIViewController, WKNavigationDelegate {
+    private let performanceLogs = PerformanceLogHandler()
     private var webView: WKWebView!
     private var contentProcessCrashCount = 0
     /// Monotonic clock, so a device-clock change cannot confuse the loop check.
@@ -44,6 +45,10 @@ final class GameViewController: UIViewController, WKNavigationDelegate {
             forMainFrameOnly: true
         )
         config.userContentController.addUserScript(bootstrap)
+        config.userContentController.addScriptMessageHandler(performanceLogs, contentWorld: .page, name: "performanceLogs")
+        config.userContentController.addUserScript(WKUserScript(
+            source: PerformanceLogHandler.script,
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self

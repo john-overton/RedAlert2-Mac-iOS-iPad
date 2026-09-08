@@ -1,3 +1,4 @@
+import { savePerformanceReport } from '@/performance/PerformanceReportExport';
 import { PerformanceOptions, type PerformanceOptionKey, type PerformanceOptionSnapshot, type PerformanceOptionVars, snapshotPerformanceOptions } from '@/performance/PerformanceOptions';
 
 type FrameMetricKind = 'ui' | 'game' | 'scheduler';
@@ -396,21 +397,14 @@ export function setPerformanceContext(key: string, value: unknown): void {
     telemetry.setContext(key, value);
 }
 
-export function downloadPerformanceReport(): void {
+export async function downloadPerformanceReport(): Promise<string> {
     const report = {
         schemaVersion: 1,
         description: 'Local slowdown diagnostics. Nested timings overlap; peer waits do not prove network latency. Uninstrumented CPU, GPU, OS scheduling and GC may remain unattributed.',
         userAgent: navigator.userAgent,
         ...snapshotPerformanceTelemetry(),
     };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }));
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `ra2-slowdown-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return savePerformanceReport(JSON.stringify(report, null, 2));
 }
 
 export function recordSchedulerPerformanceFrame(timestamp: number): void {

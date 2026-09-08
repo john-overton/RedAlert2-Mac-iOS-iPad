@@ -11,6 +11,7 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, protocol } = require('electro
 const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
+const { randomUUID } = require('crypto');
 
 const SCHEME = 'ra2app';
 const APP_DIR = __dirname;
@@ -144,6 +145,50 @@ ipcMain.handle('ra2:host-game', async (event, options) => {
     finally { hostingPending = false; }
 });
 ipcMain.handle('ra2:stop-hosting', (event) => { assertAppFrame(event); stopHosting(); });
+
+const MAX_PERFORMANCE_REPORT_BYTES = 16 * 1024 * 1024;
+ipcMain.handle('ra2:save-performance-report', async (event, payload) => {
+    const frame = event.senderFrame;
+    if (!win || event.sender !== win.webContents || !frame || frame !== win.webContents.mainFrame
+        || frame !== frame.top || !frame.url.startsWith(`${SCHEME}://app/`)) {
+        throw new Error('Only the bundled game main frame can save a performance report.');
+    }
+    if (typeof payload !== 'string' || payload.length > MAX_PERFORMANCE_REPORT_BYTES
+        || Buffer.byteLength(payload, 'utf8') > MAX_PERFORMANCE_REPORT_BYTES) {
+        throw new Error('Performance report must be JSON text no larger than 16 MiB.');
+    }
+    let report;
+    try { report = JSON.parse(payload); }
+    catch { throw new Error('Performance report contains invalid JSON.'); }
+    if (!report || typeof report !== 'object' || Array.isArray(report)) {
+        throw new Error('Performance report must contain a JSON object.');
+    }
+    // Linux runs system Electron with <game>/app beside <game>/run.sh.
+    // Windows bundles Electron as the game executable in the installation root.
+    const gameDirectory = process.platform === 'win32' ? path.dirname(process.execPath) : path.resolve(APP_DIR, '..');
+    const directory = path.join(gameDirectory, 'performance_logs');
+    const filename = `performance-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID()}.json`;
+    const destination = path.join(directory, filename);
+    let created = false;
+    let completed = false;
+    try {
+        await fs.promises.mkdir(directory, { recursive: true });
+        // Exclusive creation works on portable FAT/exFAT drives as well as
+        // NTFS/ext4. Never replace an existing report, even on a name collision.
+        const handle = await fs.promises.open(destination, 'wx', 0o600);
+        created = true;
+        try { await handle.writeFile(payload, 'utf8'); await handle.sync(); }
+        finally { await handle.close(); }
+        completed = true;
+        return { path: destination };
+    }
+    catch (error) {
+        throw new Error(`Could not save performance report in ${directory}: ${error.code || error.message || error}. Check that the game folder is writable.`);
+    }
+    finally {
+        if (created && !completed) await fs.promises.unlink(destination).catch(() => {});
+    }
+});
 app.on('before-quit', stopHosting);
 
 // Windowed by default like the Mac app. Tiling compositors (Hyprland) will
