@@ -7,12 +7,12 @@
 #   bash scripts/build-linux.sh --ra2                 # classic RA2   -> build/linux/ra2
 #   bash scripts/build-linux.sh --no-web              # reuse redalert2/dist
 #   bash scripts/build-linux.sh --retail-dir DIR      # app icon from the retail ICO
-#   bash scripts/build-linux.sh --ra2 --campaign      # bundle the imported Allied missions
+#   bash scripts/build-linux.sh --campaign            # require and bundle the imported Allied missions
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$HOME/.bun/bin:$PATH"
 SKIP_WEB=0
-CAMPAIGN=0
+CAMPAIGN=auto
 VARIANT=yr
 RETAIL="${RA2_RETAIL_DIR:-}"
 while [[ $# -gt 0 ]]; do
@@ -20,17 +20,23 @@ while [[ $# -gt 0 ]]; do
     --no-web) SKIP_WEB=1 ;;
     --ra2) VARIANT=ra2 ;;
     --campaign) CAMPAIGN=1 ;;
+    --no-campaign) CAMPAIGN=0 ;;
     --retail-dir)
       [[ $# -ge 2 && -d "$2" ]] || { echo "--retail-dir requires an existing directory" >&2; exit 1; }
       RETAIL="$2"; shift ;;
-    *) echo "Usage: $0 [--no-web] [--ra2] [--campaign] [--retail-dir DIR]" >&2; exit 1 ;;
+    *) echo "Usage: $0 [--no-web] [--ra2] [--campaign | --no-campaign] [--retail-dir DIR]" >&2; exit 1 ;;
   esac
   shift
 done
-# Campaign packaging mirrors build-macos.sh: classic mode only, missions imported
-# from the retail MAPS01.MIX by scripts/prepare-campaign.ts into campaign-export/.
+# Campaign packaging mirrors build-macos.sh: both engine variants can run
+# Allied missions imported by scripts/prepare-campaign.ts into campaign-export/.
+if [[ "$CAMPAIGN" == auto ]]; then
+  CAMPAIGN=0
+  if [[ -n "$RETAIL" || ( -s "$ROOT/campaign-export/ra2/allied-01/all01t.map" && -s "$ROOT/campaign-export/ra2/allied-02/all02s.map" ) ]]; then
+    CAMPAIGN=1
+  fi
+fi
 if [[ $CAMPAIGN == 1 ]]; then
-  [[ "$VARIANT" == ra2 ]] || { echo "--campaign currently requires --ra2" >&2; exit 1; }
   if [[ -n "$RETAIL" ]]; then bun "$ROOT/scripts/prepare-campaign.ts" "$RETAIL"; fi
   [[ -s "$ROOT/campaign-export/ra2/allied-01/all01t.map" && -s "$ROOT/campaign-export/ra2/allied-02/all02s.map" ]] || { echo "Import campaign missions with scripts/prepare-campaign.ts or supply --retail-dir" >&2; exit 1; }
 fi

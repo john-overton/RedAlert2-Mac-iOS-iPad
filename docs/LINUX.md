@@ -233,10 +233,11 @@ Those smoke scripts have not been validated on Debian or X11.
 
 | Option | Behavior |
 |---|---|
-| No variant flag | Build Yuri's Revenge in `build/linux/yr/` |
+| No variant flag | Build Yuri's Revenge in `build/linux/yr/`, including campaigns when imports are available |
 | `--ra2` | Build classic RA2 in `build/linux/ra2/` |
 | `--no-web` | Reuse `redalert2/dist`; omit this after web engine or CSS changes |
-| `--campaign` | With `--ra2`: bundle the imported Allied missions from `campaign-export/` |
+| `--campaign` | Require and bundle the imported Allied missions in either engine variant |
+| `--no-campaign` | Omit campaigns even when local imports are available |
 | `--retail-dir DIR` | Extract the matching retail ICO to the app icon; with `--campaign`, also run the mission importer against that install |
 | `RA2_RETAIL_DIR=DIR` | Supply the retail icon directory through the environment |
 
@@ -382,21 +383,23 @@ here, the same as on macOS.
 
 ### Campaigns
 
-The Allied campaign from this branch builds and runs on Linux in the classic
-variant:
+Allied missions 1 and 2 are available in both Yuri's Revenge and classic RA2.
+Normal Linux rebuilds include them when imports are available (or a retail
+directory is supplied). Require them explicitly with:
 
 ```sh
-bash scripts/build-linux.sh --ra2 --campaign --retail-dir "/path/to/ra2/install"
-bash scripts/install-linux.sh --ra2
+bash scripts/build-linux.sh --campaign
+build/linux/yr/run.sh
 ```
 
-`--campaign` requires `--ra2` and a populated `campaign-export/` tree
+`--campaign` requires a populated `campaign-export/` tree
 (`ra2/allied-01` and `ra2/allied-02` with the mission maps, manifests and
 converted movies). `scripts/prepare-campaign.ts` produces it from a retail
 install: it needs `MAPS01.MIX`, `movies01.mix`/`movies02.mix`, `ra2.mix` and
 `ffmpeg`. With `--retail-dir` the build script runs the importer for you;
 without a retail install on the machine, copy `campaign-export/` from another
-machine instead. The build stages the missions under
+machine instead. Add `--ra2` for classic mode or `--no-campaign` to omit missions.
+The build stages the missions under
 `Resources/WebDist/campaign/ra2/` and leaves the importer's `audit.json`,
 `*result.json` and `*.sha256` files out.
 
