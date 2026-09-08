@@ -246,3 +246,15 @@ Mac/Linux session with the user's friend remains the next manual check.
 - YR and classic macOS apps rebuilt; both code signatures verified. Screenshot:
   `build/macos/chat-popout.png`. These shared engine changes also apply to Linux;
   both players must rebuild matching source/revision before reconnecting.
+
+### Solo multiplayer starts
+
+- Permit a ready host to start alone or against bots. The UI no longer requires
+  two connected clients; the server defaults to one human while retaining an
+  explicit `allowSinglePlayer: false` opt-out. Map/content and guest readiness
+  requirements remain enforced.
+- Validation: 137 unit tests passed, including solo loading/order relay, a bot
+  opponent, and blocking an unready guest. `RA2_SOLO_SMOKE=1` runs the real engine
+  smoke with one client and no opponents: it loaded and advanced 150 ticks without
+  premature victory. Entry typecheck retains 42 baseline errors. Both Mac variants
+  rebuilt and signatures verified.

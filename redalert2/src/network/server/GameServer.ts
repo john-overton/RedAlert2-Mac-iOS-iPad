@@ -18,6 +18,7 @@ export interface GameServerOptions {
     orderLatency?: number;
     netFrameInterval?: number;
     allowSpectators?: boolean;
+    /** Solo practice and host-versus-AI rooms are allowed by default. */
     allowSinglePlayer?: boolean;
     countryCount?: number;
     dedicated?: boolean;
@@ -345,7 +346,7 @@ export class GameServer {
     }
     private startGame(peer: Peer): void {
         const players = this.model.clients.filter(c => c.slotIndex !== null);
-        if (this.upload || [...this.peers].some(p=>p.contentBusy) || !peer.client!.admin || players.length < (this.options.allowSinglePlayer ? 1 : 2) || this.model.clients.some(c => !c.mapReady || (this.model.content && c.contentReady !== this.model.content.id) || (!c.admin && !c.ready))) { this.fail(peer, 'All players must have the map and be ready'); return; }
+        if (this.upload || [...this.peers].some(p=>p.contentBusy) || !peer.client!.admin || players.length < (this.options.allowSinglePlayer === false ? 2 : 1) || this.model.clients.some(c => !c.mapReady || (this.model.content && c.contentReady !== this.model.content.id) || (!c.admin && !c.ready))) { this.fail(peer, 'All players must have the map and be ready'); return; }
         this.model.state = 'started';
         this.updatePlayers();
         for (const client of this.model.clients) this.active.add(client.id);

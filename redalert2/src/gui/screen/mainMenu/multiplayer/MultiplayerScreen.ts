@@ -486,7 +486,7 @@ export class MultiplayerScreen extends MainMenuScreen {
             this.controller.setMainComponent(component);
         }
         const buttons: any[] = session ? [
-            ...(self?.admin ? [{ label: 'Start Game', disabled: !session.clients.every(member => member.ready && member.mapReady && (!session.content || member.contentReady === session.content.id)) || session.clients.length < 2,
+            ...(self?.admin ? [{ label: 'Start Game', disabled: !session.clients.every(member => member.ready && member.mapReady && (!session.content || member.contentReady === session.content.id)) || !session.clients.some(member => member.slotIndex !== null),
                 onClick: () => this.send('startgame') }, { label: 'Change Map', disabled: self.ready || this.contentBusy, onClick: () => this.controller.pushScreen(MainMenuScreenType.MapSelection,
                     { lobbyType: LobbyType.MultiplayerHost, gameOpts: this.pregame.getGameOpts(), usedSlots: () => this.pregame.getUsedSlots() }) }] : []),
             { label: self?.ready ? 'Cancel Ready' : 'Ready', disabled: !canReady, onClick: ready },

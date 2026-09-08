@@ -358,3 +358,44 @@ test('an overlapping content request returns an error without kicking the player
     await new Promise(resolve=>setTimeout(resolve,0));
     expect(host.all('contentResult').some((m:any)=>m.requestId===1&&!m.error)).toBe(true);
 });
+
+
+test('solo host starts, loads and receives orders without waiting for another client', () => {
+    const { server, join } = setup();
+    const host = join('Host');
+    host.command('startgame');
+    expect(server.session.state).toBe('waiting'); // Map still missing.
+    host.command('state', { ready: true, mapDigest: 'digest' });
+    host.command('startgame');
+    expect(server.session.state).toBe('started');
+    expect(host.all('startGame')[0].humanAssignments).toHaveLength(1);
+    expect(host.all('startGame')[0].clientIds).toEqual([1]);
+    host.json({ type: 'loaded', percent: 100 });
+    expect(host.all('allLoaded')).toHaveLength(1);
+    host.receive(encodeOrderPacket(1, 1, new Uint8Array([10])));
+    expect(host.packets().at(-1)).toEqual({ kind: 'orders', clientId: 1, frame: 3, actions: new Uint8Array([10]) });
+});
+
+test('solo host can start against bots while an unready guest still blocks start', () => {
+    const { server, join } = setup();
+    const host = join('Host');
+    host.command('slot_bot', { slotIndex: 1, difficulty: 0 });
+    const guest = join('Guest');
+    host.command('state', { ready: true, mapDigest: 'digest' });
+    guest.command('map_ready', { digest: 'digest' });
+    host.command('startgame');
+    expect(server.session.state).toBe('waiting');
+    guest.close('Leaving');
+    host.command('state', { ready: true, mapDigest: 'digest' });
+    host.command('startgame');
+    expect(server.session.state).toBe('started');
+    expect(host.all('startGame')[0].gameOpts.aiPlayers.filter(Boolean)).toHaveLength(1);
+});
+
+test('servers may explicitly retain a two-human minimum', () => {
+    const { server, join } = setup({ allowSinglePlayer: false });
+    const host = join('Host');
+    host.command('state', { ready: true, mapDigest: 'digest' });
+    host.command('startgame');
+    expect(server.session.state).toBe('waiting');
+});
