@@ -7,23 +7,33 @@
 #   bash scripts/build-linux.sh --ra2                 # classic RA2   -> build/linux/ra2
 #   bash scripts/build-linux.sh --no-web              # reuse redalert2/dist
 #   bash scripts/build-linux.sh --retail-dir DIR      # app icon from the retail ICO
+#   bash scripts/build-linux.sh --ra2 --campaign      # bundle the imported Allied missions
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$HOME/.bun/bin:$PATH"
 SKIP_WEB=0
+CAMPAIGN=0
 VARIANT=yr
 RETAIL="${RA2_RETAIL_DIR:-}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-web) SKIP_WEB=1 ;;
     --ra2) VARIANT=ra2 ;;
+    --campaign) CAMPAIGN=1 ;;
     --retail-dir)
       [[ $# -ge 2 && -d "$2" ]] || { echo "--retail-dir requires an existing directory" >&2; exit 1; }
       RETAIL="$2"; shift ;;
-    *) echo "Usage: $0 [--no-web] [--ra2] [--retail-dir DIR]" >&2; exit 1 ;;
+    *) echo "Usage: $0 [--no-web] [--ra2] [--campaign] [--retail-dir DIR]" >&2; exit 1 ;;
   esac
   shift
 done
+# Campaign packaging mirrors build-macos.sh: classic mode only, missions imported
+# from the retail MAPS01.MIX by scripts/prepare-campaign.ts into campaign-export/.
+if [[ $CAMPAIGN == 1 ]]; then
+  [[ "$VARIANT" == ra2 ]] || { echo "--campaign currently requires --ra2" >&2; exit 1; }
+  if [[ -n "$RETAIL" ]]; then bun "$ROOT/scripts/prepare-campaign.ts" "$RETAIL"; fi
+  [[ -s "$ROOT/campaign-export/ra2/allied-01/all01t.map" && -s "$ROOT/campaign-export/ra2/allied-02/all02s.map" ]] || { echo "Import campaign missions with scripts/prepare-campaign.ts or supply --retail-dir" >&2; exit 1; }
+fi
 for required in redalert2/public/general.csf redalert2/public/generalmd.csf gameres-export/ra2.mix; do
   if [[ ! -s "$ROOT/$required" ]]; then
     echo "Missing $required. Run scripts/setup.sh with your retail install first." >&2
@@ -61,6 +71,11 @@ if [[ "$VARIANT" == ra2 ]]; then
   sed -i 's/^engine = yr/engine = ra2/; s/^csfFile = generalmd.csf/csfFile = general.csf/' "$RES/WebDist/config.ini"
 fi
 grep -E "^engine|^csfFile" "$RES/WebDist/config.ini"
+if [[ $CAMPAIGN == 1 ]]; then
+  echo "==> Staging campaign missions"
+  mkdir -p "$RES/WebDist/campaign/ra2"
+  rsync -a --delete --exclude audit.json --exclude '*result.json' --exclude '*.sha256' "$ROOT/campaign-export/ra2/" "$RES/WebDist/campaign/ra2/"
+fi
 
 echo "==> Staging GameRes ($VARIANT)"
 # Both variants ship the full imported tree, like the macOS build (the iOS

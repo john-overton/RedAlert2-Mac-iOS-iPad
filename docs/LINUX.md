@@ -63,7 +63,8 @@ icon, not an asset import.
 | No variant flag | Build Yuri's Revenge in `build/linux/yr/` |
 | `--ra2` | Build classic RA2 in `build/linux/ra2/` |
 | `--no-web` | Reuse `redalert2/dist`; omit this after web engine or CSS changes |
-| `--retail-dir DIR` | Extract the matching retail ICO to the app icon |
+| `--campaign` | With `--ra2`: bundle the imported Allied missions from `campaign-export/` |
+| `--retail-dir DIR` | Extract the matching retail ICO to the app icon; with `--campaign`, also run the mission importer against that install |
 | `RA2_RETAIL_DIR=DIR` | Supply the retail icon directory through the environment |
 
 The output directory holds `app/` (the Electron shell), `Resources/WebDist`,
@@ -71,8 +72,8 @@ The output directory holds `app/` (the Electron shell), `Resources/WebDist`,
 The two variants keep separate storage (`~/.config/ra2-yr` and
 `~/.config/ra2-ra2`), the Linux analogue of the separate bundle identifiers
 on macOS. The classic build changes the engine mode and active string table in
-its bundled configuration and omits the Yuri's Revenge archives; it is built
-the same way as the Yuri variant.
+its bundled configuration. Both variants ship the full imported asset tree,
+like the macOS build.
 
 ## Icons
 
@@ -177,13 +178,21 @@ bun test src/test/WorldInteraction.test.ts
 
 The window rule was verified at runtime on Hyprland 0.56.2 (floating,
 1280×800, centred), and a fresh `AudioContext` reports `running` in the shell,
-so the menu music starts without a click. The classic `--ra2` variant also
-boots to its menu, but the engine then logs `Engine.loadRules() failed: File
-mpteammd.ini not found for hashing`: classic mode still hashes the Yuri's
-Revenge multiplayer-mode overrides while only mounting the md archives in YR
-mode. That is engine behaviour rather than a shell problem, and it probably
-affects the macOS `--ra2` build too, so treat the classic variant as
-unverified for skirmish until it is fixed.
+so the menu music starts without a click. The main menu's **Exit** button quits
+the shell (verified: the Electron process ends when it is clicked).
+
+The classic `--ra2` variant boots to its menu and a skirmish started from the
+lobby runs (verified over the DevTools Protocol: game screen, ticking
+simulation, human and AI houses populated, screenshot of the deployed base).
+The console still shows one error at boot, `Engine.loadRules() failed: File
+mpteammd.ini not found for hashing`. It is not fatal: the rules and art are
+already merged when the mod-hash step throws, and only the hash is left unset.
+The cause is engine-side: the classic mode list in `ra2cd.mix`
+(`mpmodescd.ini`) names `MPTeamMD.ini` for the team-game mode, a Yuri's Revenge
+file that classic mode never mounts, and `Engine.computeModHash` hashes every
+mode's `rulesOverride` unconditionally. The same message is expected on the
+macOS classic build. A one-line fix would skip override files that do not
+exist in the VFS when hashing; it has not been applied.
 
 This is an initial Linux port, not a complete compatibility certification.
 Full-match AI behavior, LAN play, non-NVIDIA GPUs, and desktops other than
@@ -192,13 +201,35 @@ here, the same as on macOS.
 
 ### Campaigns
 
-Campaigns are not currently playable, and there is no campaign build switch.
-Bundling mission archives alone would not implement the mission logic. A local
-audit of retail `MAPS01.MIX` found that `all01t.map` uses 15 action types
-missing from `TriggerActionType`: 1, 2, 3, 4, 5, 7, 46, 47, 48, 74, 80, 100,
-104, 114, 115. `TriggerReader` skips unsupported types.
+The Allied campaign from this branch builds and runs on Linux in the classic
+variant:
 
-A campaign implementation needs a launch flow, scenario setup and progression,
-missing trigger and scripted-team behavior, briefing/movie integration, and
-mission-by-mission validation. Skirmish support remains that of this engine
-reconstruction; it does not imply exact retail-engine compatibility.
+```sh
+bash scripts/build-linux.sh --ra2 --campaign --retail-dir "/path/to/ra2/install"
+bash scripts/install-linux.sh --ra2
+```
+
+`--campaign` requires `--ra2` and a populated `campaign-export/` tree
+(`ra2/allied-01` and `ra2/allied-02` with the mission maps, manifests and
+converted movies). `scripts/prepare-campaign.ts` produces it from a retail
+install: it needs `MAPS01.MIX`, `movies01.mix`/`movies02.mix`, `ra2.mix` and
+`ffmpeg`. With `--retail-dir` the build script runs the importer for you;
+without a retail install on the machine, copy `campaign-export/` from another
+machine instead. The build stages the missions under
+`Resources/WebDist/campaign/ra2/` and leaves the importer's `audit.json`,
+`*result.json` and `*.sha256` files out.
+
+Verified on Omarchy: the classic menu gains a **Campaign** entry when missions
+are bundled (and shows none when they are not; the two manifest lookups just
+404). **Campaign → Red Alert 2 — Allied** opens the campaign picker with the
+Soviet and Yuri's Revenge entries as disabled placeholders, a new campaign
+shows the mission-one briefing text with **Begin Mission**, and the mission
+then loads to the game screen with the scripted opening running and the
+first in-game movie playing beside the sidebar (`currentTime` advancing).
+Console errors during that flow: only the non-fatal mod-hash message above.
+Not verified on Linux: playing a mission through to victory, the **Next
+Mission** transition, mission two, campaign saves and replays, and the intro
+movie's **Skip Intro** control. See [mission-one setup, verification, and
+limitations](CAMPAIGN_MISSION_ONE.md) and [mission-two coverage and
+limitations](CAMPAIGN_MISSION_TWO.md) for the state of the missions
+themselves, which is independent of the shell.

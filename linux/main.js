@@ -7,7 +7,7 @@
 //
 //   ra2app://app/<path>            -> <Resources>/WebDist/<path>
 //   ra2app://app/gameres/<path>    -> <Resources>/GameRes/<path>
-const { app, BrowserWindow, Menu, dialog, protocol } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, protocol } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
@@ -162,6 +162,13 @@ function installMenu() {
     ]);
     Menu.setApplicationMenu(menu);
 }
+
+// The main menu's Exit button (the macOS shell's `exitApp` message handler).
+// Only the bundled app's main frame may ask the shell to quit.
+ipcMain.on('ra2:exit', (event) => {
+    const frame = event.senderFrame;
+    if (frame && frame === frame.top && frame.url.startsWith(`${SCHEME}://app/`)) app.quit();
+});
 
 app.whenReady().then(() => {
     protocol.handle(SCHEME, (request) => {

@@ -7,9 +7,14 @@
 //
 // Sandboxed preloads cannot require fs, so main.js hands the version over as
 // an extra process argument.
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 const arg = process.argv.find((a) => a.startsWith('--ra2-shell-version='));
 const version = arg ? arg.slice('--ra2-shell-version='.length) : '0.1.0';
 
-contextBridge.exposeInMainWorld('__RA2_SHELL__', Object.freeze({ platform: 'linux', version }));
+contextBridge.exposeInMainWorld('__RA2_SHELL__', Object.freeze({
+    platform: 'linux',
+    version,
+    // Main-menu Exit button (redalert2/src/gui/screen/mainMenu/main/HomeScreen.ts).
+    exitApp: () => ipcRenderer.send('ra2:exit'),
+}));
