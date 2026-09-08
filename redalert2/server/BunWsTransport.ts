@@ -1,3 +1,4 @@
+import { RESUME_MAX_PACKET_BYTES } from '../src/network/ResumableChannel';
 import type { ServerConnection, ServerTransport, WireData } from '../src/network/server/ServerTransport';
 
 type Peer = {
@@ -18,7 +19,7 @@ export class BunWsTransport implements ServerTransport {
                 return new Response('Red Alert 2 game server', { status: 200 });
             },
             websocket: {
-                maxPayloadLength: 128 * 1024,
+                maxPayloadLength: RESUME_MAX_PACKET_BYTES,
                 backpressureLimit: 1024 * 1024,
                 closeOnBackpressureLimit: true,
                 open(socket) {

@@ -1,5 +1,61 @@
 # Multiplayer development progress — 8 September 2026
 
+## Multiplayer Back navigation
+
+- After returning from a match, Multiplayer can be the only screen in a fresh
+  menu controller. Back previously popped that last screen and left the menu
+  empty. It now opens Home when there is no previous screen and ignores repeated
+  Back clicks while navigation is pending.
+- `scripts/multiplayer-back-smoke.mjs` exercises the actual sidebar button from
+  normal Home entry and direct match-return routing, twice each. The direct-route
+  case failed before the fix; all four transitions pass afterward.
+- Full suite remains **195 passed, 0 failed**; production web build passes and
+  typecheck retains the same 42 existing diagnostics. Native apps still need
+  rebuilding to include these fixes.
+
+## Building-hover crash
+
+- Matched the reported `WorldInteractionFactory-BzqzuHbS.js:1:32659` stack
+  to `MapHoverHandler.doUpdate`: a large building sprite was hit while its
+  ground-tile intersection was missing, then `getBridgeOnTile(undefined)` tried
+  to read `tile.rx`. The failure does not depend on factory count.
+- Large buildings now fall back to their own tile when the ground ray misses;
+  missing tiles are never passed into the bridge lookup, and entities with no
+  usable tile clear their hover highlight. Valid ground hits retain their
+  existing targeting behavior.
+- Four regressions cover immediate hover, stationary render-frame refresh,
+  valid ground targeting, and loss of both tiles. Three reproduced the error
+  before the fix. Full suite: **195 passed, 0 failed, 2,266 assertions**.
+  Production web build passed. Native application bundles still need rebuilding.
+
+## Late-match crate crash and temporary socket recovery
+
+- Matched both reported crash stacks to crate expiration. Destroyed crates were
+  still tracked by the crate generator and removed a second time when their old
+  timer elapsed. The generator now retires timers on every unspawn and handles
+  removals during expiration callbacks. Five lifecycle regressions exercise the
+  real Game/World removal path; the original crash failed before the fix.
+- Temporary socket loss now holds the existing commander and lobby slot for
+  30 seconds and automatically reconnects the same running client. Private
+  recovery tokens and bounded, sequenced, acknowledged buffers preserve delivery
+  without duplicate orders or chat. Explicit quits/kicks remain terminal;
+  grace expiry applies the existing disconnect policy. This does not restore a
+  commander after restarting the app or after an applied departure.
+- Added reconnect notices in the lobby, commander stall panel and observer
+  overlay. The existing 120-second silent-open-socket timeout remains unchanged.
+- Browser validation forced a guest socket break and 3.5 seconds of failed
+  reconnect attempts. The same client ID, player slot and match instance resumed;
+  all three engines matched through 650 ticks. Host and late observer matched
+  through 1,200 ticks, including crate destruction/expiration and a subsequent
+  intentional guest departure with AI takeover. Log:
+  `build/crate-disconnect-engine.log`. Reproduce using
+  `RA2_CRATE_LIFECYCLE_SMOKE=1 RA2_RECOVERY_SMOKE=1` with
+  `scripts/observer-engine-smoke.mjs` and an asset-seeded Vite server.
+- Final validation: **191 tests passed, 0 failed, 2,257 assertions**. Production
+  web and server builds succeeded. Typecheck reports the same 42 pre-existing
+  diagnostics, with none in changed files. Native application bundles have not
+  been rebuilt for this change; rebuild both peers before playing together.
+
 Development resumed from the existing implementation; this progress record is
 included in the local multiplayer implementation commit on `allied-campaign`. The target
 covers the direct-IP core and host content delivery in [the plan](MULTIPLAYER_PLAN.md). See [MULTIPLAYER.md](MULTIPLAYER.md)

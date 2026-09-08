@@ -36,6 +36,7 @@ export class MultiplayerScreen extends MainMenuScreen {
     private error?: string;
     private hosting = false;
     private launching = false;
+    private backingOut = false;
     private joinRole: 'player' | 'observer' = 'player';
     private observePending = false;
     private observePendingGeneration?: number;
@@ -132,6 +133,21 @@ export class MultiplayerScreen extends MainMenuScreen {
         } catch { return []; }
     }
 
+    private async backToMenu(): Promise<void> {
+        if (this.backingOut) return;
+        this.backingOut = true;
+        try {
+            await this.controller.popScreen();
+            // Returning from a match opens this room as the menu's root screen,
+            // so there may be no Home screen underneath it to unstack.
+            if (!this.controller.getCurrentScreen()) {
+                await this.controller.pushScreen(MainMenuScreenType.Home);
+            }
+        } finally {
+            this.backingOut = false;
+        }
+    }
+
     private report(error: unknown): void {
         this.error = error instanceof Error ? error.message : String(error);
         this.render();
@@ -176,6 +192,9 @@ export class MultiplayerScreen extends MainMenuScreen {
             const client = new LobbyClient();
             this.client = client;
             client.onSession.subscribe(this.onSession);
+            client.connection.onReconnecting.subscribe(reconnecting => {
+                if (this.active && client === this.client) this.form?.applyOptions((options: any) => { options.reconnecting = reconnecting; });
+            });
             client.onConnectionHealth.subscribe(health => {
                 // Ping updates must not rehydrate map content, close selectors,
                 // or rebuild the sidebar while a commander edits the lobby.
@@ -554,6 +573,7 @@ export class MultiplayerScreen extends MainMenuScreen {
             disconnectAi: session?.gameOpts.disconnectAi, onDisconnectAi: (value: boolean) => this.send('option', { key: 'disconnectAi', value }),
             ready: self?.ready, canReady, recent: this.recent(), onField: (key: keyof ConnectionFields, value: string) => { this.fields = { ...this.fields, [key]: value }; this.render(); },
             connectionHealth: this.client?.getConnectionHealth(), connectionPlayers: session?.clients.map(({id,name}) => ({id,name})),
+            reconnecting: this.client?.connection.isReconnecting,
             managedPlayers: session?.state === 'waiting' && self?.admin && !self.ready ? session?.clients.filter(member => member.id !== self.id) : [],
             onKick: (clientId: number) => this.send('kick', { clientId }), onMakeAdmin: (clientId: number) => this.send('make_admin', { clientId }),
             onHost: () => void this.connect(true), onJoin: () => void this.connect(false), onReady: ready };
@@ -572,7 +592,7 @@ export class MultiplayerScreen extends MainMenuScreen {
             { label: 'Create Game', disabled: this.busy || !props.canHost, onClick: props.onHost },
             { label: 'Join Game', disabled: this.busy, onClick: props.onJoin },
             { label: 'QR LAN', disabled: this.busy, tooltip: 'Open the existing QR connection prototype', onClick: () => this.controller.pushScreen(MainMenuScreenType.LanSetup) },
-            { label: 'Back', isBottom: true, onClick: () => this.controller.popScreen() },
+            { label: 'Back', isBottom: true, onClick: () => this.backToMenu() },
         ];
         this.controller.setSidebarButtons(buttons, true);
         this.controller.setSidebarMpContent({ text: session ? this.strings.get(this.gameModes.getById(session.gameOpts.gameMode).label) + '\n\n' + session.gameOpts.mapTitle : '' });

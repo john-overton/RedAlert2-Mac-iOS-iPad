@@ -115,7 +115,9 @@ export class MapHoverHandler {
                 }
             }
             else if (gameObject.isBuilding?.() && foundation && (foundation.width > 1 || foundation.height > 1)) {
-                tile = groundTile;
+                // A tall sprite can be hit even when the pointer's ground ray
+                // misses the map. Keep the building target on its own tile.
+                tile = groundTile ?? gameObject.tile;
             }
             else if (gameObject.isTechno?.() && !gameObject.art?.isVoxel) {
                 tile = gameObject.tile;
@@ -130,8 +132,8 @@ export class MapHoverHandler {
                 }
                 tile = tile ?? gameObject.tile;
             }
-            const bridge = this.map.tileOccupation.getBridgeOnTile(tile);
-            if (this.currentHoverEntity.gameObject.isOverlay?.() && this.currentHoverEntity.gameObject.isBridge?.() && !bridge) {
+            const bridge = tile ? this.map.tileOccupation.getBridgeOnTile(tile) : undefined;
+            if (!tile || (gameObject.isOverlay?.() && gameObject.isBridge?.() && !bridge)) {
                 this.currentHoverEntity = undefined;
             }
             this.currentHoverTile = tile;

@@ -9,6 +9,7 @@ import { RadialTileFinder } from "@/game/map/tileFinder/RadialTileFinder";
 import { PowerupType } from "@/game/type/PowerupType";
 import { SpeedType } from "@/game/type/SpeedType";
 import { NotifyTick } from "@/game/trait/interface/NotifyTick";
+import { NotifyUnspawn } from "@/game/trait/interface/NotifyUnspawn";
 import { SuperWeaponType } from "@/game/type/SuperWeaponType";
 import { SuperWeaponsTrait } from "@/game/trait/SuperWeaponsTrait";
 import { CloakableTrait } from "@/game/gameobject/trait/CloakableTrait";
@@ -31,7 +32,7 @@ interface CrateInfo {
     powerup: any;
     ticksLeft: number;
 }
-export class CrateGeneratorTrait implements NotifyTick {
+export class CrateGeneratorTrait implements NotifyTick, NotifyUnspawn {
     private randomCrateSpawn: boolean;
     private crates: CrateInfo[] = [];
     private availEdgeTiles: any[] = [];
@@ -94,6 +95,12 @@ export class CrateGeneratorTrait implements NotifyTick {
     }
     [NotifyTick.onTick](gameState: any): void {
         for (const crate of this.crates) {
+            // An earlier removal callback can remove another crate while this
+            // tick is still iterating the original list.
+            if (!crate.obj.isSpawned) {
+                this[NotifyUnspawn.onUnspawn](crate.obj);
+                continue;
+            }
             crate.ticksLeft--;
             if (crate.ticksLeft <= 0) {
                 gameState.unspawnObject(crate.obj);
@@ -105,6 +112,11 @@ export class CrateGeneratorTrait implements NotifyTick {
             for (let i = 0; i < this.minCrates - this.crates.length && this.spawnCrateAtRandom(this.allTiles, gameState); i++)
                 ;
         }
+    }
+    [NotifyUnspawn.onUnspawn](obj: any): void {
+        // Destruction and other external removals must retire the timer too.
+        // Replace the array so expiry callbacks do not skip adjacent crates.
+        this.crates = this.crates.filter(crate => crate.obj !== obj);
     }
     spawnCrateAtRandom(tiles: any[], gameState: any): boolean {
         const spawnTile = this.chooseSpawnTile(tiles, gameState);

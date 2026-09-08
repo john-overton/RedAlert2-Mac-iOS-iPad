@@ -1,3 +1,4 @@
+import { RESUME_MAX_PACKET_BYTES } from '../src/network/ResumableChannel';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { ServerConnection, ServerTransport } from '../src/network/server/ServerTransport';
 
@@ -12,7 +13,7 @@ export class NodeWsTransport implements ServerTransport {
         return new Promise((resolve, reject) => {
             const listener = this.listener = new WebSocketServer({
                 port: this.requestedPort, host: this.host,
-                maxPayload: 128 * 1024, perMessageDeflate: false,
+                maxPayload: RESUME_MAX_PACKET_BYTES, perMessageDeflate: false,
             });
             listener.once('error', reject);
             listener.once('listening', () => {

@@ -1,3 +1,4 @@
+import { ResumableConnections } from './ResumableConnections';
 import { MatchArchive } from './MatchArchive';
 import type { StartGameMessage } from './Protocol';
 import { Parser } from '../gameopt/Parser';
@@ -65,6 +66,7 @@ const scalarOptions: Record<string, [number, number] | 'boolean'> = {
 /** Authoritative, runtime independent lobby and frame relay. Call tick every second. */
 export class GameServer {
     private readonly peers = new Set<Peer>();
+    private readonly resumableConnections = new ResumableConnections(connection => this.accept(connection));
     private readonly model: Session;
     private readonly now: () => number;
     private readonly syncs = new Map<number, Map<number, string>>();
@@ -100,7 +102,7 @@ export class GameServer {
     get isStopped(): boolean { return this.stopped; }
     private get countryMax(): number { return (this.options.countryCount ?? (this.options.identity.engine === 'yr' ? 10 : 9)) - 1; }
     get session(): Session { return { ...clone(this.model), ...(this.model.state === 'started' && !this.archive?.available ? { observationUnavailable: 'Match history exceeded its limit; observation is unavailable for this round.' } : {}) }; }
-    start(): void | Promise<void> { return this.transport?.listen(connection => this.accept(connection)); }
+    start(): void | Promise<void> { return this.transport?.listen(connection => this.resumableConnections.accept(connection)); }
     accept(connection: ServerConnection): void {
         if (this.stopped || this.peers.size >= 24) { connection.close('Server unavailable'); return; }
         const now = this.now();
@@ -116,6 +118,7 @@ export class GameServer {
         this.upload = undefined; this.contentFiles.clear(); this.archive = undefined; this.matchStart = undefined;
         this.broadcast({ type: 'message', key: 'serverClosed' });
         for (const peer of [...this.peers]) { this.peers.delete(peer); peer.connection.close('Server closed'); }
+        this.resumableConnections.close();
         this.transport?.close();
     }
     tick(now = this.now()): void {

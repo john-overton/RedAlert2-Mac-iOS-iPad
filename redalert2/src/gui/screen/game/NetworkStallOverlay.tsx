@@ -19,7 +19,8 @@ export class NetworkStallOverlay {
     }
     private render(): void {
         const duration = this.turns.getStallDuration();
-        if (duration < 1500 || this.match.fatalError) {
+        const reconnecting = this.match.connection.isReconnecting;
+        if ((!reconnecting && duration < 1500) || this.match.fatalError) {
             this.root.render(null); this.pending.clear(); this.waiting = false; return;
         }
         if (this.match.controlError) this.pending.clear();
@@ -30,9 +31,9 @@ export class NetworkStallOverlay {
         const host = this.match.isHost();
         this.root.render(<div className="network-stall-panel" role="status" aria-live="polite"
             onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
-            <strong>Synchronizing game…</strong>
-            <p>Waiting for the connection to recover. {Math.floor(duration / 1000)}s</p>
-            {host && <>
+            <strong>{reconnecting ? 'Reconnecting…' : 'Synchronizing game…'}</strong>
+            <p>{reconnecting ? 'Reconnecting automatically for up to 30 seconds. Keep this window open to retain control of your army.' : `Waiting for the connection to recover. ${Math.floor(duration / 1000)}s`}</p>
+            {host && !reconnecting && <>
                 {lagging.length ? lagging.map(player => <div className="network-stall-player" key={player.clientId}>
                     <span>{this.match.getHumanAssignment(String(player.clientId))?.name ?? 'Player'}
                         {String(player.clientId) === this.match.descriptor.localPeerId ? ' (you)' : ''}

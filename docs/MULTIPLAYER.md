@@ -67,7 +67,8 @@ including disconnect-to-AI/destruction events, and verify each frame's agreed ha
 Catch-up shows progress and suppresses historical gameplay audio. The server retains
 at most 100,000 frames or 64 MiB of accounted history per match; exceeding either
 limit makes observation unavailable while commanders continue playing. This is
-observation from the beginning, not player reconnect/resume or a saved snapshot.
+observation from the beginning. Temporary socket recovery, described below, keeps
+the existing running simulation instead of replaying it as an observer.
 
 ## Implemented
 
@@ -280,6 +281,21 @@ During a connection stall, a centered synchronization message appears after
 1.5 seconds. The host sees which commander's turn progress is behind and can
 keep waiting or choose **Kick & replace with AI**. Other players see only the
 waiting message. It clears automatically when play resumes.
+
+A broken socket now triggers automatic reconnection for up to **30 seconds**.
+Keep the game window open: the server holds the same lobby slot and commander,
+and the client retains its running simulation. Missed messages are replayed in
+order without applying them twice. The lobby and game show **Reconnecting** while
+this is happening. A connection that remains open but stops responding retains
+the existing 120-second timeout.
+
+This recovery requires the same running client and host. Quitting or restarting
+the app, choosing Leave, being kicked, exceeding the recovery buffer, or missing
+the grace period ends that connection. A later manual join cannot reclaim a
+commander whose departure has already been applied; it can wait or observe the
+ongoing match. Recovery buffers are bounded to 4 MiB / 2,048 messages per direction.
+Leaving while already offline releases the server seat when the grace period
+expires, since the leave message cannot reach the host.
 
 Before starting, the host can choose **When a player disconnects**:
 **Destroy their base and units** (default), or **Replace with AI (Normal)**.

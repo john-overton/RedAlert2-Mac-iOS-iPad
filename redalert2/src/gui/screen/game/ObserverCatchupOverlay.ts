@@ -24,6 +24,7 @@ export class ObserverCatchupOverlay {
     private render(): void {
         const { frame, liveFrame } = this.match.getCatchupProgress();
         this.status.textContent = this.match.fatalError ? this.match.fatalError.message
+            : this.match.connection.isReconnecting ? 'Reconnecting automatically… Keep this window open.'
             : this.match.isCatchingUp() ? `Catching up: ${frame.toLocaleString()} / ${liveFrame.toLocaleString()} frames`
             : `Observing live · Frame ${frame.toLocaleString()}`;
     }

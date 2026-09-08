@@ -6,6 +6,8 @@ import { BunWsTransport } from '../redalert2/server/BunWsTransport.ts';
 import { HANDSHAKE_PROTOCOL, ORDERS_PROTOCOL } from '../redalert2/src/network/server/Protocol.ts';
 import { mkdirSync, writeFileSync } from 'node:fs';
 const longCatchup = process.env.RA2_OBSERVER_LONG_SMOKE === '1';
+const crateLifecycle = process.env.RA2_CRATE_LIFECYCLE_SMOKE === '1';
+const recoverySmoke = process.env.RA2_RECOVERY_SMOKE === '1';
 const finalTicks = longCatchup ? 10000 : 1200;
 const base = process.env.RA2_DEV_URL || 'http://127.0.0.1:4000';
 const identity = { protocol: HANDSHAKE_PROTOCOL, ordersProtocol: ORDERS_PROTOCOL, engine: 'ra2', mod: 'smoke', version: 'observer-smoke', modHash: 'same-rules', assetFingerprint: 'same-seeded-vfs' };
@@ -25,7 +27,7 @@ async function boot() {
   return page;
 }
 async function connect(page, name, role, cap = 600) {
-  await page.evaluate(async ({identity,address,name,role,cap}) => {
+  await page.evaluate(async ({identity,address,name,role,cap,crateLifecycle}) => {
     const { LobbyClient } = await import('/src/network/client/LobbyClient.ts');
     const controller = window.__ra2debug.mainMenuController.getCurrentScreen().rootController;
     const probe = window.__observerSmoke = {cap,role,hashes:[],chat:[],errors:[],paused:false,peakBufferedFrames:0,suppressedTicks:0};
@@ -43,8 +45,23 @@ async function connect(page, name, role, cap = 600) {
     };
     // Record the real simulation after each update, including accelerated history playback.
     const { Game } = await import('/src/game/Game.ts');
+    const { CrateGeneratorTrait } = await import('/src/game/trait/CrateGeneratorTrait.ts');
+    const { PowerupType } = await import('/src/game/type/PowerupType.ts');
     const update = Game.prototype.update;
     Game.prototype.update = function(...args) {
+      // Repeat the same deterministic lifecycle on every engine, including a
+      // late observer replaying from tick zero. Before the fix tick 300 crashes.
+      if (crateLifecycle && this.currentTick === 50) {
+        const generator = this.traits.get(CrateGeneratorTrait);
+        const tile = this.map.tiles.getAll().find(tile => generator.canPlaceCrateOnTile(this, tile));
+        if (!tile) throw new Error('No empty crate test tile');
+        probe.testCrate = generator.spawnCrateAt(tile, {type:PowerupType.Money,data:1000}, this);
+        generator.crates.find(crate => crate.obj === probe.testCrate).ticksLeft = 250;
+      }
+      if (crateLifecycle && this.currentTick === 60) {
+        this.destroyObject(probe.testCrate);
+        probe.crateDestroyed = probe.testCrate.isDisposed;
+      }
       if (role==='observer') {
         probe.catchupStarted ??= performance.now();
         if (window.__ra2debug.gameScreen?.sound?.gameplaySuppressed) probe.suppressedTicks++;
@@ -68,7 +85,7 @@ async function connect(page, name, role, cap = 600) {
       client.command('player',{slotIndex:self.slotIndex,teamId:self.slotIndex,colorId:self.slotIndex,countryId:0,startPos:self.slotIndex});
       client.command('state',{ready:true,mapDigest:client.session.gameOpts.mapDigest});
     } else if (client.session.state === 'started') client.observeGame();
-  },{identity,address:`127.0.0.1:${transport.port}`,name,role,cap});
+  },{identity,address:`127.0.0.1:${transport.port}`,name,role,cap,crateLifecycle});
 }
 async function drive(page) {
   await page.waitForFunction(() => window.__ra2debug?.gameScreen?.gameTurnMgr && (window.__observerSmoke.role!=='observer' || window.__ra2debug.gameScreen.gameAnimationLoop?.isStarted),undefined,{timeout:180000});
@@ -119,6 +136,34 @@ try {
   await Promise.all([host,guest,observer].map(drive));
   await Promise.all([host,guest,observer].map(page=>at(page,600)));
   await compare(host,guest,600); await compare(host,observer,600);
+  if (recoverySmoke) {
+    await guest.evaluate(() => {
+      const probe = window.__observerSmoke, connection = probe.client.connection;
+      probe.originalMatch = probe.match;
+      probe.originalClientId = probe.client.clientId;
+      probe.recoveryEvents = [];
+      connection.onReconnecting.subscribe(value => probe.recoveryEvents.push(value));
+      const create = connection.createSocket;
+      const until = Date.now() + 3500;
+      connection.createSocket = url => {
+        if (Date.now() < until) throw new Error('Simulated temporary network outage');
+        return create(url);
+      };
+      connection.socket.close(4001, 'Simulated temporary network outage');
+    });
+    await Promise.all([host,guest,observer].map(page => page.evaluate(() => { window.__observerSmoke.cap = 650; })));
+    await guest.waitForFunction(() => window.__observerSmoke.client.connection.isReconnecting);
+    await guest.getByText('Reconnecting…', {exact:true}).waitFor({state:'visible'});
+    await guest.waitForFunction(() => window.__observerSmoke.recoveryEvents.includes(false), undefined, {timeout:15000});
+    await Promise.all([host,guest,observer].map(page => at(page,650)));
+    await guest.evaluate(() => {
+      const probe = window.__observerSmoke;
+      const self = probe.client.session.clients.find(client => client.id === probe.client.clientId);
+      if (probe.match !== probe.originalMatch || probe.client.clientId !== probe.originalClientId || self.role !== 'player' || self.slotIndex === null) throw new Error('Recovery lost commander or live simulation');
+    });
+    await compare(host,guest,650); await compare(host,observer,650);
+    console.log('Socket outage recovered the same commander and simulation; all three engines agree through 650 ticks');
+  }
   for (const page of [host,guest,observer]) {
     const setupErrors=await page.evaluate(()=>window.__observerSmoke.errors);
     if(setupErrors.length) throw new Error(`Setup server errors: ${JSON.stringify(setupErrors)}`);
@@ -173,8 +218,12 @@ try {
   observer=await boot();
   await connect(observer,'Late watcher','observer',finalTicks); await drive(observer); await at(observer,finalTicks);
   await compare(host,observer,finalTicks);
+  if (crateLifecycle) for (const page of [host,guest,observer]) {
+    if (!(await page.evaluate(() => window.__observerSmoke.crateDestroyed))) throw new Error('Crate destruction was not exercised');
+  }
   if (errors.length) throw new Error(`Browser errors: ${JSON.stringify(errors)}`);
   const result=await observer.evaluate(()=>({ticks:window.__ra2debug.game.currentTick,hash:window.__ra2debug.game.getHash(),errors:window.__observerSmoke.errors,fatal:window.__observerSmoke.match.fatalError,catchupMillis:window.__observerSmoke.catchupMillis,peakBufferedFrames:window.__observerSmoke.peakBufferedFrames,suppressedTicks:window.__observerSmoke.suppressedTicks}));
+  Object.assign(result, {crateLifecycle, socketRecovery: recoverySmoke});
   if (!result.suppressedTicks || result.peakBufferedFrames>64) throw new Error(`Catch-up did not suppress gameplay sound or exceeded frame budget: ${JSON.stringify(result)}`);
   if (result.errors.length||result.fatal) throw new Error(`Observer errors: ${JSON.stringify(result)}`);
   mkdirSync('build',{recursive:true});writeFileSync(longCatchup?'build/observer-long-smoke.json':'build/observer-engine-smoke.json',JSON.stringify(result,null,2));

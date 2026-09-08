@@ -38,6 +38,7 @@ export interface MultiplayerProps {
     onDisconnectAi?: (enabled: boolean) => void;
     canReady?: boolean;
     connectionHealth?: ConnectionHealth & {serverIdleMs:number};
+    reconnecting?: boolean;
     connectionPlayers?: {id:number; name:string}[];
     managedPlayers?: { id: number; name: string }[];
     contentStatus?: string;
@@ -92,7 +93,7 @@ export function Multiplayer(props: MultiplayerProps) {
                 <button className="dialog-button" onClick={props.onWait}>Wait in Lobby</button>
                 {props.observationUnavailable && <p role="status">{props.observationUnavailable}</p>}
             </div>}
-            <ConnectionStatus health={props.connectionHealth} players={props.connectionPlayers ?? []}/>
+            <ConnectionStatus health={props.connectionHealth} players={props.connectionPlayers ?? []} reconnecting={props.reconnecting}/>
             {props.error && <div className="mp-error" role="alert">{props.error}</div>}
             <details className="mp-content" open={Boolean(props.contentStatus)}><summary>Maps and Custom Units</summary>
                 {props.canManageContent && <label>Host content files<input aria-label="Host content files" type="file" multiple
