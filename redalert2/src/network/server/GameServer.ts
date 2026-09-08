@@ -1,3 +1,6 @@
+import { CONTENT_CHUNK_BYTES, decodeContentBytes, encodeContentBytes, validateContentManifest, verifyContentFiles } from '../content/ContentPackage';
+import type { ContentManifest } from '../content/ContentPackage';
+import type { ContentRequest } from './Protocol';
 import type { GameOpts } from '../../game/gameopts/GameOpts';
 import type { SlotInfo } from '../gameopt/SlotInfo';
 import { decodePacket, encodeOrderPacket, encodeRelayedSyncPacket, HANDSHAKE_PROTOCOL, MAX_PACKET_BYTES, ORDERS_PROTOCOL } from './Protocol';
@@ -31,6 +34,8 @@ interface Peer {
     floodAt: number;
     floodCount: number;
     warned: boolean;
+    contentBusy?: boolean;
+    contentGeneration?: number;
 }
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const integer = (value: unknown, min: number, max: number): value is number => Number.isInteger(value) && (value as number) >= min && (value as number) <= max;
@@ -51,6 +56,9 @@ export class GameServer {
     private allLoaded = false;
     private embeddedHostId?: number;
     private stopped = false;
+    private contentFiles = new Map<string, Uint8Array>();
+    private upload?: { owner: Peer; manifest: ContentManifest; files: Map<string, Uint8Array>; offsets: Map<string, number>; updatedAt: number };
+
 
     constructor(private readonly options: GameServerOptions, private readonly transport?: ServerTransport) {
         this.now = options.now ?? Date.now;
@@ -85,11 +93,13 @@ export class GameServer {
         if (this.stopped) return;
         this.stopped = true;
         this.model.state = 'ended';
+        this.upload = undefined; this.contentFiles.clear();
         this.broadcast({ type: 'message', key: 'serverClosed' });
         for (const peer of [...this.peers]) { this.peers.delete(peer); peer.connection.close('Server closed'); }
         this.transport?.close();
     }
     tick(now = this.now()): void {
+        if (this.upload && now - this.upload.updatedAt > 60000) this.upload = undefined;
         for (const peer of [...this.peers]) {
             if ((!peer.client && now - peer.connectedAt >= 10000) || now - peer.lastSeen >= 60000) { this.reject(peer, 'timeout'); continue; }
             if (peer.client && now - peer.lastSeen >= 10000 && !peer.warned) {
@@ -112,7 +122,7 @@ export class GameServer {
     private fail(peer: Peer, message: string): void { this.send(peer, { type: 'error', code: 'invalidCommand', message }); }
     private receive(peer: Peer, data: WireData): void {
         if (!this.peers.has(peer)) return;
-        if (data.length > MAX_PACKET_BYTES || (typeof data === 'string' && data.length * 3 > MAX_PACKET_BYTES)) { this.reject(peer, 'packetTooLarge'); return; }
+        if (data.length > MAX_PACKET_BYTES || (typeof data === 'string' && new TextEncoder().encode(data).length > MAX_PACKET_BYTES)) { this.reject(peer, 'packetTooLarge'); return; }
         try {
             if (typeof data !== 'string') {
                 // Buffered frames may arrive after the first mismatch. Preserve that
@@ -126,6 +136,18 @@ export class GameServer {
                 if (!peer.client) { if (message.type !== 'hello') throw new Error('Handshake required'); this.hello(peer, message); }
                 else if (message.type === 'pong') { if (typeof message.t !== 'number' || message.t !== peer.lastPing) throw new Error('Invalid pong'); peer.client.ping = Math.max(0, this.now() - message.t); }
                 else if (message.type === 'ping') { if (typeof message.t !== 'number' || !Number.isFinite(message.t)) throw new Error('Invalid ping'); this.send(peer, { type: 'pong', t: message.t }); }
+                else if (message.type === 'content') {
+                    if (message.action === 'cancel' && peer.client.admin && integer(message.requestId,1,0xffffffff)) {
+                        peer.contentGeneration=(peer.contentGeneration??0)+1;
+                        if(this.upload?.owner===peer) this.upload=undefined;
+                        this.send(peer,{type:'contentResult',requestId:message.requestId});
+                        peer.lastSeen=this.now();peer.warned=false;
+                        return;
+                    }
+                    if (peer.contentBusy) throw new Error('Concurrent content request');
+                    peer.contentBusy = true;
+                    void this.contentRequest(peer, message).finally(() => { peer.contentBusy = false; });
+                }
                 else if (message.type === 'loaded') this.loaded(peer, message.percent);
                 else {
                     const now = this.now();
@@ -170,8 +192,11 @@ export class GameServer {
         if (client.ready && name !== 'state' && name !== 'ready' && name !== 'startgame') { this.fail(peer, 'Unready before changing the lobby'); return; }
         if (name === 'state' || name === 'ready') {
             if (args.mapDigest === this.model.gameOpts.mapDigest) client.mapReady = true;
-            if (typeof args.ready !== 'boolean' || (args.ready && !client.mapReady)) { this.fail(peer, 'The selected map must be available before readying'); return; }
+            if (typeof args.ready !== 'boolean' || (args.ready && (!client.mapReady || Boolean(this.model.content && client.contentReady !== this.model.content.id)))) { this.fail(peer, 'The selected map must be available before readying'); return; }
             client.ready = args.ready;
+        } else if (name === 'content_ready') {
+            client.contentReady = args.id === this.model.content?.id ? args.id as string : undefined;
+            if (!client.contentReady) client.ready = false;
         } else if (name === 'map_ready') {
             client.mapReady = args.digest === this.model.gameOpts.mapDigest;
             if (!client.mapReady) client.ready = false;
@@ -236,14 +261,59 @@ export class GameServer {
             } else if (name === 'make_admin') {
                 const target = this.model.clients.find(c => c.id === args.clientId);
                 if (!target) { this.fail(peer, 'Invalid player'); return; }
+                if(this.upload?.owner===peer) this.upload=undefined;
+                peer.contentGeneration=(peer.contentGeneration??0)+1;
                 client.admin = false; target.admin = true;
             } else { this.fail(peer, 'Unknown lobby command'); return; }
         }
         this.syncLobby();
     }
+    private async contentRequest(peer: Peer, request: ContentRequest): Promise<void> {
+        const reply = (result: {error?: string; data?: string} = {}) => this.send(peer, {type:'contentResult', requestId:request.requestId, ...result});
+        try {
+            if (!integer(request.requestId, 1, 0xffffffff) || this.model.state !== 'waiting') throw new Error('Content transfer unavailable');
+            if (request.action === 'get') {
+                if (request.id !== this.model.content?.id) throw new Error('Content package changed');
+                const bytes = this.contentFiles.get(request.path!);
+                if (!bytes || !integer(request.offset,0,bytes.length-1) || request.offset % CONTENT_CHUNK_BYTES !== 0) throw new Error('Invalid content download');
+                reply({data:encodeContentBytes(bytes.subarray(request.offset,request.offset+CONTENT_CHUNK_BYTES))}); return;
+            }
+            if (!peer.client?.admin) throw new Error('Only the host can publish content');
+            if (request.action === 'cancel') { if (this.upload?.owner === peer) this.upload = undefined; reply(); return; }
+            if (request.action === 'begin') {
+                if (this.upload) throw new Error('Content upload already in progress');
+                const generation=peer.contentGeneration??0;
+                const manifest = await validateContentManifest(request.manifest);
+                if (!this.peers.has(peer) || !peer.client.admin || this.model.state !== 'waiting' || generation!==(peer.contentGeneration??0)) throw new Error('Content upload cancelled');
+                this.upload = {owner:peer,manifest,files:new Map(),offsets:new Map(),updatedAt:this.now()};
+                this.resetReady(); this.syncLobby();
+            } else {
+                const upload = this.upload;
+                if (!upload || upload.owner !== peer || request.id !== upload.manifest.id) throw new Error('Content upload expired');
+                upload.updatedAt = this.now();
+                if (request.action === 'put') {
+                    const entry = upload.manifest.files.find(file => file.path === request.path);
+                    if (!entry || request.offset !== (upload.offsets.get(entry.path) ?? 0)) throw new Error('Invalid content upload offset');
+                    const chunk = decodeContentBytes(request.data!);
+                    if (request.offset! + chunk.length > entry.size) throw new Error('Content upload exceeds declared size');
+                    let bytes = upload.files.get(entry.path);
+                    if (!bytes) { bytes = new Uint8Array(entry.size); upload.files.set(entry.path,bytes); }
+                    bytes.set(chunk,request.offset); upload.offsets.set(entry.path,request.offset!+chunk.length);
+                } else if (request.action === 'commit') {
+                    if (upload.manifest.files.some(file => upload.offsets.get(file.path) !== file.size)) throw new Error('Content upload incomplete');
+                    await verifyContentFiles(upload.manifest,Array.from(upload.files,([path,bytes]) => ({path,bytes})));
+                    if (this.upload !== upload || !this.peers.has(peer) || !peer.client.admin || this.model.state !== 'waiting') throw new Error('Content upload cancelled');
+                    this.contentFiles = upload.files; this.model.content = upload.manifest; this.upload = undefined;
+                    for (const client of this.model.clients) { client.ready=false; client.mapReady=false; client.contentReady=undefined; }
+                    this.syncLobby();
+                } else throw new Error('Unknown content operation');
+            }
+            reply();
+        } catch (error) { reply({error:error instanceof Error ? error.message : 'Content transfer failed'}); }
+    }
     private startGame(peer: Peer): void {
         const players = this.model.clients.filter(c => c.slotIndex !== null);
-        if (!peer.client!.admin || players.length < (this.options.allowSinglePlayer ? 1 : 2) || this.model.clients.some(c => !c.mapReady || (!c.admin && !c.ready))) { this.fail(peer, 'All players must have the map and be ready'); return; }
+        if (this.upload || [...this.peers].some(p=>p.contentBusy) || !peer.client!.admin || players.length < (this.options.allowSinglePlayer ? 1 : 2) || this.model.clients.some(c => !c.mapReady || (this.model.content && c.contentReady !== this.model.content.id) || (!c.admin && !c.ready))) { this.fail(peer, 'All players must have the map and be ready'); return; }
         this.model.state = 'started';
         this.updatePlayers();
         for (const client of this.model.clients) this.active.add(client.id);
@@ -292,6 +362,7 @@ export class GameServer {
     private drop(peer: Peer): void {
         if (!this.peers.delete(peer) || !peer.client) return;
         const client = peer.client;
+        if (this.upload?.owner === peer) this.upload = undefined;
         this.model.clients = this.model.clients.filter(c => c.id !== client.id);
         if (client.id === this.embeddedHostId) { this.stop(); return; }
         if (this.model.state === 'started') {

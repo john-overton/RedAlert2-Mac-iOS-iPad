@@ -66,4 +66,15 @@ export class Strings {
     public getKeys(): string[] {
         return Object.keys(this.data);
     }
+    public beginOverlay(values: Record<string, string>): () => void {
+        const previous = this.data;
+        this.data = { ...previous };
+        this.fromJson(values);
+        let restored = false;
+        return () => {
+            if (restored) return;
+            restored = true;
+            this.data = previous;
+        };
+    }
 }

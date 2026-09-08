@@ -16,7 +16,7 @@ class FakeSocket {
     open() { this.readyState = 1; this.onopen?.(); }
     receive(message: unknown) { this.onmessage?.({ data: JSON.stringify(message) }); }
 }
-const hello: HelloMessage = { type: 'hello', protocol: 1, ordersProtocol: 2, name: 'Alice', engine: 'ra2', version: 'test', mod: 'ra2', modHash: 'rules', assetFingerprint: 'retail' };
+const hello: HelloMessage = { type: 'hello', protocol: 2, ordersProtocol: 2, name: 'Alice', engine: 'ra2', version: 'test', mod: 'ra2', modHash: 'rules', assetFingerprint: 'retail' };
 
 test('password rejection is specific and the same lobby client can retry', async () => {
     const sockets: FakeSocket[] = [];
@@ -65,4 +65,52 @@ test('events queued on a cancelled socket cannot mutate or close its replacement
     expect(sockets[1].sent).toHaveLength(1);
     expect(received).toEqual([]);
     connection.close();
+});
+
+import { GameServer } from '../server/GameServer';
+import { createContentManifest, CONTENT_CHUNK_BYTES, encodeContentBytes } from '../content/ContentPackage';
+import type { ServerConnection, WireData } from '../server/ServerTransport';
+class LinkedSocket extends FakeSocket implements ServerConnection {
+    remoteAddress='127.0.0.1';
+    incoming:(data:WireData)=>void=()=>{};
+    closing:()=>void=()=>{};
+    // Server uses this separate adapter; socket.send is the client -> server direction.
+    adapter:ServerConnection={remoteAddress:this.remoteAddress,send:data=>queueMicrotask(()=>this.receive(JSON.parse(data as string))),close:()=>this.close(),onMessage:handler=>{this.incoming=handler;},onClose:handler=>{this.closing=handler;}};
+    send(data:string) { super.send(data); queueMicrotask(()=>this.incoming(data)); }
+    onMessage(handler:(data:WireData)=>void) {this.incoming=handler;}
+    onClose(handler:()=>void) {this.closing=handler;}
+    close() {super.close();this.closing();}
+}
+test('real lobby client publishes, downloads, reuses verified cache, and resets package',async()=>{
+    const server=new GameServer({identity:hello,gameOpts:{gameSpeed:3,maxSlots:2,mapDigest:'test',aiPlayers:[]} as any,dedicated:true});
+    async function join(name:string) {
+        let socket:LinkedSocket;
+        const lobby=new LobbyClient(new WebSocketConnection(()=>{socket=new LinkedSocket();server.accept(socket.adapter);queueMicrotask(()=>socket.open());return socket as any;}));
+        await lobby.connect('localhost',{...hello,name});return {lobby,socket:socket!};
+    }
+    const host=await join('Host');const guest=await join('Guest');
+    const files=[{path:'custom.map',bytes:new Uint8Array(CONTENT_CHUNK_BYTES+11).fill(9)},{path:'rules.ini',bytes:new TextEncoder().encode('[MTNK]\nStrength=800')}];
+    const manifest=await host.lobby.publishContent(files);expect(guest.lobby.session?.content?.id).toBe(manifest.id);
+    const progress:number[]=[];expect(await guest.lobby.downloadContent(manifest,received=>progress.push(received))).toEqual(files.sort((a,b)=>a.path.localeCompare(b.path)));
+    expect(progress.at(-1)).toBe(manifest.totalBytes);
+    const before=guest.socket.sent.length;expect(await guest.lobby.downloadContent(manifest)).toHaveLength(2);expect(guest.socket.sent.length).toBe(before);
+    const changed=await host.lobby.publishContent([files[0],{path:'rules.ini',bytes:new TextEncoder().encode('[MTNK]\nStrength=900')}]);
+    const beforeChanged=guest.socket.sent.length;await guest.lobby.downloadContent(changed);
+    expect(guest.socket.sent.slice(beforeChanged).map(data=>JSON.parse(data)).filter(message=>message.action==='get').map(message=>message.path)).toEqual(['rules.ini']);
+    const empty=await host.lobby.publishContent([]);expect(await guest.lobby.downloadContent(empty)).toEqual([]);
+    await expect(guest.lobby.downloadContent(manifest)).rejects.toThrow('changed');
+    host.lobby.close();guest.lobby.close();server.stop();
+});
+test('download cancellation, socket close and corrupted data settle without readying',async()=>{
+    const socket=new FakeSocket();const lobby=new LobbyClient(new WebSocketConnection(()=>socket as any));
+    const connecting=lobby.connect('host',hello);socket.open();await Promise.resolve();
+    const manifest=await createContentManifest([{path:'unique.map',bytes:new Uint8Array([5,6,7])}]);
+    socket.receive({type:'welcome',clientId:1,session:{content:manifest,clients:[]}});await connecting;
+    const abort=new AbortController();const pending=lobby.downloadContent(manifest,undefined,abort.signal);
+    await new Promise(resolve=>setTimeout(resolve,0));abort.abort();await expect(pending).rejects.toThrow('cancelled');
+    const corrupt=lobby.downloadContent(manifest);await new Promise(resolve=>setTimeout(resolve,0));
+    const request=JSON.parse(socket.sent.at(-1)!);socket.receive({type:'contentResult',requestId:request.requestId,data:encodeContentBytes(new Uint8Array([0,0,0]))});
+    await expect(corrupt).rejects.toThrow('checksum');
+    const closing=lobby.downloadContent(manifest);await new Promise(resolve=>setTimeout(resolve,0));lobby.close();await expect(closing).rejects.toThrow('cancelled');
+    expect(socket.sent.some(data=>JSON.parse(data).name==='content_ready')).toBe(false);
 });

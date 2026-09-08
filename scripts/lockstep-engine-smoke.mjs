@@ -10,7 +10,7 @@ import { BunWsTransport } from '../redalert2/server/BunWsTransport.ts';
 const targetTicks = Number(process.argv[2] ?? 150);
 if (!Number.isInteger(targetTicks) || targetTicks < 100) throw new Error('Use at least 100 ticks.');
 const base = process.env.RA2_DEV_URL || 'http://127.0.0.1:4000';
-const identity = { protocol: 1, ordersProtocol: 2, engine: 'ra2', mod: 'smoke', version: 'engine-smoke', modHash: 'same-rules', assetFingerprint: 'same-seeded-vfs' };
+const identity = { protocol: 2, ordersProtocol: 2, engine: 'ra2', mod: 'smoke', version: 'engine-smoke', modHash: 'same-rules', assetFingerprint: 'same-seeded-vfs' };
 let core;
 const transport = new BunWsTransport(0, '127.0.0.1');
 const browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || '/usr/bin/chromium', args: ['--disable-dev-shm-usage'] });

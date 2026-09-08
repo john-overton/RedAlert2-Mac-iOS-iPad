@@ -7,7 +7,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 const root = resolve(import.meta.dirname, '..');
 const app = await electron.launch({ executablePath: process.env.RA2_ELECTRON || '/usr/lib/electron43/electron',
-    args: [resolve(root, 'build/linux/yr/app'), '--ozone-platform=wayland', `--user-data-dir=${resolve(root, 'build/multiplayer-ui-host-profile')}`], timeout: 60000 });
+    args: [resolve(root, 'build/linux/yr/app'), '--ozone-platform=wayland', `--user-data-dir=${process.env.RA2_UI_HOST_PROFILE || resolve(root, 'build/multiplayer-ui-host-profile')}`], timeout: 60000 });
 let browser, host, guest;
 const output = resolve(root, 'build/multiplayer-ui');
 mkdirSync(output, { recursive: true });

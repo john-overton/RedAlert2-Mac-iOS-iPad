@@ -40,3 +40,9 @@
     #ra2web-root .mp-connection-columns { grid-template-columns: 1fr; }
     #ra2web-root .opts.multiplayer-entry { padding: 18px; }
 }
+
+#ra2web-root .mp-content { margin: 8px 10px; border: 1px solid #8c762c; padding: 8px; }
+#ra2web-root .mp-content summary { cursor: pointer; }
+#ra2web-root .mp-content label { display: flex; gap: 12px; align-items: center; margin: 8px 0; }
+#ra2web-root .mp-content input { min-width: 0; max-width: 340px; }
+#ra2web-root .mp-content button { margin: 6px 8px 0 0; }

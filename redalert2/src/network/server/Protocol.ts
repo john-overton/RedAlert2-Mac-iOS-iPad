@@ -1,7 +1,7 @@
 import type { GameOpts } from '../../game/gameopts/GameOpts';
 import type { Session } from './Session';
 
-export const HANDSHAKE_PROTOCOL = 1;
+export const HANDSHAKE_PROTOCOL = 2;
 export const ORDERS_PROTOCOL = 2;
 export const MAX_PACKET_BYTES = 128 * 1024;
 export const DEFAULT_PORT = 1620;
@@ -33,12 +33,14 @@ export interface StartGameMessage {
     orderLatency: number;
     netFrameInterval: number;
 }
-export type ClientMessage = HelloMessage
+export type ClientMessage = ContentRequest | HelloMessage
     | { type: 'command'; name: string; args?: Record<string, unknown> }
     | { type: 'chat'; to: 'all' | 'team' | number; text: string }
     | { type: 'loaded'; percent: number }
     | { type: 'ping' | 'pong'; t: number; queueLength?: number };
-export type ServerMessage =
+export type ContentRequest = { type: 'content'; requestId: number; action: 'begin' | 'put' | 'commit' | 'get' | 'cancel'; manifest?: import('../content/ContentPackage').ContentManifest; id?: string; path?: string; offset?: number; data?: string };
+export type ContentResponse = { type: 'contentResult'; requestId: number; error?: string; data?: string };
+export type ServerMessage = ContentResponse
     | { type: 'welcome'; clientId: number; session: Session }
     | { type: 'session'; session: Session }
     | { type: 'error'; code: string; message?: string }

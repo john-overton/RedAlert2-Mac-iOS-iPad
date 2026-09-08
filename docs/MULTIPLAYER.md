@@ -128,6 +128,47 @@ to a clean HEAD snapshot with the same browser typings; there are no new
 diagnostics in the multiplayer paths. Browser build typings
 are explicitly separated from Node transport typings.
 
+## Maps and custom units from the host
+
+In the direct-IP lobby, open **Maps and Custom Units** and select **Host content
+files**. Select one custom `.map`, `.mpr` or `.yrm` and its loose resource files
+in the same file-picker operation. A rules/art-only package applies to the current
+map. Custom maps selected through Change Map are shared automatically.
+
+Use `rulescd.ini` and `artcd.ini` for small rule/art patches; variant retail INI
+names are also merged as patches. Include the supported resources referenced by
+new unit definitions: `.shp`, `.vxl`, `.hva`, `.pal`, `.tmp`, `.wav`, and `.csf`.
+Files use flat, case-insensitive names; archives and executable code are not
+accepted. Units must use mechanics implemented by this engine. See [MODDING.md](MODDING.md)
+for definition and dependency guidance.
+
+The host uploads a manifest and files to its embedded server over the existing
+WebSocket connection. Guests automatically download missing files, verify SHA-256
+checksums, and mount a temporary resource overlay. Ready and Start require the
+current content acknowledgement and matching selected map. The lobby shows byte
+progress and verification/errors, with **Cancel Transfer**, **Verify Content**
+(retry) and host **Remove Content** controls using the RA2 menu styling.
+
+Limits are 256 files, 32 MiB per file and 64 MiB per package. Verified files are
+cached in memory up to 64 MiB and reused by digest, including across package
+changes; restarting the app clears this cache. Changing content clears Ready.
+Leaving the lobby or match restores prior rules, art, strings, sound definitions
+and resource caches. Retail imports are not overwritten or transferred.
+
+The transfer manifest uses SHA-256 while existing map-list/replay CRC keys remain
+compatible. This implementation uses chunked WebSocket transfer on the same port,
+without requiring a separate HTTP listener or master server. Apple host transport
+and real-device acceptance remain separate work.
+
+### Local content smoke
+
+Build with `bash scripts/build-linux.sh`. Start `RA2_HTTP=1 bun run dev` from
+`redalert2/`, then run `node scripts/multiplayer-content-ui-smoke.mjs` from the
+repository root. The test uses the staged Electron host, a fresh Chromium guest,
+and port 19621. It generates fixture files under `build/multiplayer-content-ui/fixture`
+that can also be selected manually using **Host content files**. Both test
+clients must use the same build; restart Vite after rebuilding changed source.
+
 ## Remaining acceptance and scope
 
 - A desync stops each client on receipt and records both the server's mismatch
@@ -144,12 +185,12 @@ are explicitly separated from Node transport typings.
   still need acceptance testing. In-game chat/diplomacy/connection-detail
   integration remains separate from the implemented lobby chat and lag signal.
 - Phase 1 uses one simulation tick per network frame. Spectators and custom bot
-  uploads are explicitly disabled. Official or manually installed custom maps
-  must already be present and match; map downloads and SHA-256 map keys are
-  phase 2 work. Existing CRC map keys remain unchanged.
+  uploads are explicitly disabled. Official maps must already be present and match. Custom maps and unit
+  content can now be delivered by the host. Existing CRC map keys remain unchanged;
+  delivery manifests and file verification use SHA-256.
 - Apple hosting/relay, LAN discovery, join-link scanning/deep-link registration,
   the master browser/service, dedicated CLI, server-side replays, adaptive
-  pacing/NAT, and mod delivery are not implemented by this slice. The runtime
+  pacing/NAT, and a public mod repository are not implemented by this slice. The runtime
   adapters and protocol provide the foundation without presenting those
   unfinished features as available.
 

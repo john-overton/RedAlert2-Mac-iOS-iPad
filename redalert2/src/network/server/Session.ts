@@ -12,11 +12,13 @@ export interface SessionClient {
     admin: boolean;
     ready: boolean;
     mapReady: boolean;
+    contentReady?: string;
     loaded: number;
     ping: number;
 }
 
 export interface Session {
+    content?: import('../content/ContentPackage').ContentManifest;
     state: 'waiting' | 'started' | 'ended';
     serverName: string;
     clients: SessionClient[];

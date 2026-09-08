@@ -22,6 +22,14 @@ export interface MultiplayerProps {
     ready?: boolean;
     canReady?: boolean;
     managedPlayers?: { id: number; name: string }[];
+    contentStatus?: string;
+    contentBusy?: boolean;
+    canManageContent?: boolean;
+    hasContent?: boolean;
+    onContentFiles: (files: File[]) => void;
+    onRemoveContent: () => void;
+    onRetryContent: () => void;
+    onCancelContent: () => void;
     recent: string[];
     onField: (key: keyof ConnectionFields, value: string) => void;
     onHost: () => void;
@@ -44,8 +52,20 @@ export function Multiplayer(props: MultiplayerProps) {
             <div className="mp-room-heading"><strong>{props.serverName}</strong><span>{props.status}</span></div>
             {props.addresses.length > 0 && <div className="mp-addresses">Join by address: {props.addresses.join(' · ')}</div>}
             {props.error && <div className="mp-error" role="alert">{props.error}</div>}
+            <details className="mp-content" open={Boolean(props.contentStatus)}><summary>Maps and Custom Units</summary>
+                {props.canManageContent && <label>Host content files<input aria-label="Host content files" type="file" multiple
+                    accept=".map,.mpr,.yrm,.ini,.shp,.vxl,.hva,.pal,.tmp,.wav,.csf"
+                    disabled={props.contentBusy || props.ready} onChange={event => {
+                        props.onContentFiles(Array.from(event.target.files ?? [])); event.target.value = '';
+                    }}/></label>}
+                <div role="status">{props.contentStatus || 'Select a custom map and its unit rules, art and resources.'}</div>
+                {props.contentBusy ? <button className="dialog-button" onClick={props.onCancelContent}>Cancel Transfer</button> : <>
+                    {props.hasContent && <button className="dialog-button" onClick={props.onRetryContent} disabled={props.ready}>Verify Content</button>}
+                    {props.canManageContent && props.hasContent && <button className="dialog-button" onClick={props.onRemoveContent} disabled={props.ready}>Remove Content</button>}
+                </>}
+            </details>
             <LobbyForm {...props.lobbyProps} beforeChatContent={<><div className="mp-ready-bar">
-                <span>{props.ready ? 'Ready for battle' : !props.canReady ? 'Waiting for map verification.' : 'Choose your side, color and team, then click Ready.'}</span>
+                <span>{props.ready ? 'Ready for battle' : !props.canReady ? 'Waiting for map and content verification.' : 'Choose your side, color and team, then click Ready.'}</span>
                 <button className="dialog-button" type="button" disabled={!props.canReady} onClick={props.onReady}>{props.ready ? 'Cancel Ready' : 'Ready'}</button>
             </div>
                 {Boolean(props.managedPlayers?.length) && <details className="mp-host-controls"><summary>Manage Players</summary>

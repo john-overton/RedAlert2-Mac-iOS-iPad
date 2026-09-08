@@ -20,7 +20,7 @@ class Connection implements ServerConnection {
     all(type: string): any[] { return this.messages.filter(m => typeof m === 'string').map(m => JSON.parse(m as string)).filter(m => m.type === type); }
     packets() { return this.messages.filter(m => m instanceof Uint8Array).map(m => decodePacket(m as Uint8Array)); }
 }
-const identity = { protocol: 1, ordersProtocol: 2, engine: 'ra2' as const, mod: 'base', version: 'test', modHash: 'rules', assetFingerprint: 'retail' };
+const identity = { protocol: 2, ordersProtocol: 2, engine: 'ra2' as const, mod: 'base', version: 'test', modHash: 'rules', assetFingerprint: 'retail' };
 const gameOpts: GameOpts = { gameMode: 0, gameSpeed: 3, credits: 10000, unitCount: 0, shortGame: true, superWeapons: true, buildOffAlly: true, mcvRepacks: true, cratesAppear: true, destroyableBridges: true, multiEngineer: false, noDogEngiKills: false, mapName: 'test.map', mapTitle: 'Test Map', mapDigest: 'digest', mapSizeBytes: 100, maxSlots: 4, mapOfficial: true, humanPlayers: [], aiPlayers: [] };
 function setup(extra: Record<string, unknown> = {}) {
     let time = 1000;
@@ -245,4 +245,60 @@ test('relayed sync decoding respects offsets and requires the exact payload size
     expect(decodePacket(padded.subarray(4, 25))).toEqual({ kind: 'syncRelay', clientId: 42, frame: 10, hash: 0xffffffff, defeatMask: 0xffffffffffffffffn });
     expect(() => decodePacket(original.subarray(0, 20))).toThrow();
     expect(() => decodePacket(padded.subarray(4, 26))).toThrow();
+});
+
+import { createContentManifest, encodeContentBytes, decodeContentBytes, CONTENT_CHUNK_BYTES } from '../content/ContentPackage';
+let requestId=0;
+async function content(connection:Connection,args:Record<string,unknown>) {
+    const id=++requestId;
+    connection.json({type:'content',requestId:id,...args});
+    for(let i=0;i<30;i++) { await new Promise(resolve=>setTimeout(resolve,0)); const reply=connection.all('contentResult').find(m=>m.requestId===id); if(reply) return reply; }
+    throw new Error('No content response');
+}
+test('host content transfers exact chunks and requires every content acknowledgement before start',async()=>{
+    const {server,join}=setup();const a=join('Host'),b=join('Guest');
+    const bytes=new Uint8Array(CONTENT_CHUNK_BYTES+17).fill(42);
+    const manifest=await createContentManifest([{path:'custom.map',bytes}]);
+    expect((await content(b,{action:'begin',manifest})).error).toContain('Only the host');
+    expect((await content(a,{action:'begin',manifest})).error).toBeUndefined();
+    a.command('map_ready',{digest:'digest'});b.command('state',{ready:true,mapDigest:'digest'});a.command('startgame');
+    expect(server.session.state).toBe('waiting');
+    expect((await content(a,{action:'commit',id:manifest.id})).error).toContain('incomplete');
+    for(let offset=0;offset<bytes.length;offset+=CONTENT_CHUNK_BYTES) expect((await content(a,{action:'put',id:manifest.id,path:'custom.map',offset,data:encodeContentBytes(bytes.subarray(offset,offset+CONTENT_CHUNK_BYTES))})).error).toBeUndefined();
+    await content(a,{action:'commit',id:manifest.id});
+    expect(server.session.content).toEqual(manifest);expect(server.session.clients.every(c=>!c.ready&&!c.mapReady)).toBe(true);
+    const downloaded=await content(b,{action:'get',id:manifest.id,path:'custom.map',offset:CONTENT_CHUNK_BYTES});
+    expect(decodeContentBytes(downloaded.data)).toEqual(bytes.subarray(CONTENT_CHUNK_BYTES));
+    a.command('map_ready',{digest:'digest'});b.command('state',{ready:true,mapDigest:'digest'});
+    expect(server.session.clients[1].ready).toBe(false);
+    a.command('content_ready',{id:manifest.id});b.command('content_ready',{id:'stale'});a.command('startgame');expect(server.session.state).toBe('waiting');
+    b.command('content_ready',{id:manifest.id});b.command('state',{ready:true});a.command('startgame');expect(server.session.state).toBe('started');
+});
+test('content rejects tampering, invalid offsets and stale downloads; cancel and empty package recover',async()=>{
+    const {server,join}=setup();const a=join('Host');const bytes=new Uint8Array([1,2,3]);const manifest=await createContentManifest([{path:'rules.ini',bytes}]);
+    await content(a,{action:'begin',manifest});
+    expect((await content(a,{action:'put',id:manifest.id,path:'rules.ini',offset:1,data:encodeContentBytes(bytes)})).error).toContain('offset');
+    await content(a,{action:'put',id:manifest.id,path:'rules.ini',offset:0,data:encodeContentBytes(new Uint8Array([3,2,1]))});
+    expect((await content(a,{action:'commit',id:manifest.id})).error).toContain('checksum');expect(server.session.content).toBeUndefined();
+    await content(a,{action:'cancel'});
+    const empty=await createContentManifest([]);await content(a,{action:'begin',manifest:empty});await content(a,{action:'commit',id:empty.id});
+    expect(server.session.content).toEqual(empty);
+    expect((await content(a,{action:'get',id:manifest.id,path:'rules.ini',offset:0})).error).toContain('changed');
+});
+
+test('cancelling an in-flight manifest validation does not leave the host upload locked',async()=>{
+    const {server,join}=setup();const host=join('Host');const manifest=await createContentManifest([{path:'cancel.map',bytes:new Uint8Array([1])}]);
+    const pending=++requestId;host.json({type:'content',requestId:pending,action:'begin',manifest});
+    const cancelled=await content(host,{action:'cancel'});expect(cancelled.error).toBeUndefined();expect(host.closed).toBeUndefined();
+    expect(host.all('contentResult').find(m=>m.requestId===pending)?.error).toContain('cancelled');
+    expect((await content(host,{action:'begin',manifest})).error).toBeUndefined();
+    await content(host,{action:'cancel'});expect(server.session.content).toBeUndefined();
+});
+test('upload expires and uploader departure releases pending package without publication',async()=>{
+    const {server,join,advance}=setup();const host=join('Host'),guest=join('Guest');const manifest=await createContentManifest([{path:'expire.ini',bytes:new Uint8Array([1])}]);
+    await content(host,{action:'begin',manifest});advance(50000);host.json({type:'ping',t:1});guest.json({type:'ping',t:1});advance(10001);
+    expect((await content(host,{action:'commit',id:manifest.id})).error).toContain('expired');
+    await content(host,{action:'begin',manifest});host.close('left');
+    expect(server.session.content).toBeUndefined();expect(server.session.clients[0].admin).toBe(true);
+    expect((await content(guest,{action:'begin',manifest})).error).toBeUndefined();
 });

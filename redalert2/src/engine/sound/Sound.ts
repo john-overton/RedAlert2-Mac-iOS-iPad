@@ -83,6 +83,11 @@ export class Sound {
         this.audioSystem.dispose();
         this.document.removeEventListener("click", this.handleClick);
     }
+    beginSpecsOverlay(specs: SoundSpecs): () => void {
+        const previous = this.soundSpecs;
+        this.soundSpecs = specs;
+        return () => { this.soundSpecs = previous; };
+    }
     private getSoundKey(key: SoundKey | string): string | undefined {
         let soundKey: string | undefined;
         if (typeof SoundKey[key as keyof typeof SoundKey] === "string") {

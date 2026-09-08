@@ -4,6 +4,8 @@ import { VirtualFile } from '@/data/vfs/VirtualFile';
 export class MapFileLoader {
     constructor(private resourceLoader: any, private vfs?: any) { }
     async load(filename: string, cancellationToken?: any): Promise<VirtualFile> {
+        const sessionMap = this.vfs?.openOverrideFile?.(filename);
+        if (sessionMap) return sessionMap;
         const mission = campaignMissionForMap(filename);
         if (mission) {
             const response = await fetch(new URL(campaignAssetPath(mission, mission.map), document.baseURI));

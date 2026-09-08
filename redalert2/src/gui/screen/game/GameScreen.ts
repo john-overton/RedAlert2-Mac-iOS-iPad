@@ -35,6 +35,7 @@ import { NetworkTurnManager } from '@/network/client/NetworkTurnManager';
 import { LanLockstepTurnManager } from '@/network/lan/LanLockstepTurnManager';
 import { LanMatchSession } from '@/network/lan/LanMatchSession';
 import { NetworkMatchSession } from '@/network/client/NetworkMatchSession';
+import { hasSessionContent, restoreSessionContent } from '@/network/content/SessionContentResources';
 import { CombatantSidebarModel } from '@/gui/screen/game/component/hud/viewmodel/CombatantSidebarModel';
 import { ActionFactoryReg } from '@/game/action/ActionFactoryReg';
 import { MessageList } from '@/gui/screen/game/component/hud/viewmodel/MessageList';
@@ -137,6 +138,10 @@ export class GameScreen extends RootScreen {
         return !this.isSinglePlayer && !this.isLanGame;
     }
     async onEnter(params: any): Promise<void> {
+        if (hasSessionContent()) {
+            this.vxlGeometryPool?.clear();
+            this.buildingImageDataCache?.clear();
+        }
         this.gameEndHandled = false;
         inGameViewportActive.value = true;
         this.pointer.lock();
@@ -408,6 +413,11 @@ export class GameScreen extends RootScreen {
         this.lanMatchSession?.dispose();
         this.lanMatchSession = undefined;
         this.disposables.dispose();
+        if (hasSessionContent()) {
+            this.vxlGeometryPool?.clear();
+            this.buildingImageDataCache?.clear();
+            restoreSessionContent();
+        }
         this.activeWorldScene = undefined;
         if (hadGameAnimationLoop) {
             this.uiAnimationLoop.start();

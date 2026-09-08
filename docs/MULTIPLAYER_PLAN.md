@@ -1,6 +1,6 @@
 # Multiplayer lobby system plan
 
-**Status:** Phase 1 implementation in progress. The direct-IP Electron host,
+**Status:** Direct-IP core and phase-2 host content delivery implemented; physical-device acceptance remains open. The direct-IP Electron host,
 authoritative server, client lockstep, and RA2-style lobby are implemented;
 automated socket, UI, and two-engine smokes pass. Physical two-machine/full-match
 acceptance remains open. See [implementation and testing](MULTIPLAYER.md).
@@ -175,7 +175,7 @@ that added them (`BotControllerClientIndex`).
 | Lockstep | OpenRA's order-latency scheme replaces the same-tick barrier: orders for tick `T` apply at `T + L`, server pre-seeds `L` empty frames, clients tick only when every peer's frame is present. | Removes the RTT stall on every tick. `L = 2` on LAN (133 ms), `L = 4` over the internet, chosen per game speed as OpenRA does. |
 | Desync handling | Sync hash every net frame, compared on the server and cross-checked on clients; mismatch ends the game with the frame number and writes `debugGetState()` from each client for diffing. | The hash and the state dump already exist; only the comparison is missing. |
 | Bots | Keep this project's approach: bots run deterministically on every client, no bot orders on the wire. Fallback is OpenRA's model (only the controlling client runs the bot and sends its actions) if cross-platform determinism proves fragile. | Zero traffic, already how the LAN prototype works. The sync hash tells us within seconds if it is wrong. |
-| Assets | Never transferred. Handshake compares an *asset fingerprint*. Custom maps and, later, mod overlays are served by the host's server. | Legal and practical: retail content stays each player's own import. |
+| Retail assets | Never transferred. Handshake compares an *asset fingerprint*. Custom maps and mod overlays are served by the host's server in phase 2. | Legal and practical: retail content stays each player's own import. |
 | Identity | Player name only, no accounts. | OpenRA's fingerprint/auth service is out of scope; leave the fields in the handshake for later. |
 | Existing WebRTC/QR path | Retire once phase 1 plays end to end on two machines. Keep `qrcode` to render a *join link* QR. | Two transports is double the surface. A QR of `ra2://host:port` gives iPad the same "scan to join" without SDP blobs. |
 
@@ -218,9 +218,9 @@ Master server (Bun, HTTPS): POST /ping (connect-back check) · GET /games ◄─
   injection at last frame + 1, server-side replay recording.
 - `SyncCheck` — byte compare of sync packets per frame; on mismatch broadcast
   `OutOfSync {frame}` and stop relaying.
-- `MapStore` — bytes of the current custom map keyed by digest, served to
-  clients (see 3.5).
-- `Announcer` — master-server pinger and LAN beacon payload builder (phase 2
+- Content store — the current verified map/unit package and manifest, served
+  to authenticated clients (see 3.5); currently embedded in `GameServer`.
+- `Announcer` — master-server pinger and LAN beacon payload builder (phase 2b
   and 3).
 - `ServerTransport` — `listen()`, `onConnection(conn)`, `conn.send(bytes |
   string)`, `conn.close(reason)`, `conn.remoteAddress`. Implementations:
@@ -327,25 +327,50 @@ that says which side differs. This replaces "the host pushes assets".
 
 ### 3.5 Maps, mods, assets
 
-- **Official maps** are matched by `mapDigest` (CRC-32 hex today). Upgrade
-  `MapDigest` to SHA-256 with a pure-TS implementation (do not depend on
-  `crypto.subtle`, which WKWebView may withhold from a custom scheme) so
-  digests are usable as repository keys.
-- **Custom maps**: the host's `LobbyClient` uploads the map bytes to its own
-  server once (`MapStore`), the session carries `{digest, size, filename}`,
-  and a client that lacks it `GET`s `http://host:port/maps/<digest>` from the
-  same listener (`fetch` from the app origin is verified to work). The existing
-  chunked transfer in `LanRoomSession` becomes the fallback for the relay
-  transport on Apple hosts, where there is no HTTP listener in the page.
-  Ready is blocked until every client reports the digest present, like
-  `canStart()` today.
+- **Official maps** remain local. Existing map-list and replay keys retain CRC-32
+  compatibility; transferable files and package manifests use SHA-256, with a
+  portable TypeScript fallback when `crypto.subtle` is unavailable.
+- **Custom maps**: the host uploads a canonical manifest and bounded chunks through
+  its authenticated lobby WebSocket. The server verifies and atomically publishes
+  a complete package; clients request missing files on the same connection.
+  SHA-keyed verified memory caching avoids repeated transfers (64 MiB bound).
+  Ready is blocked until map and current package acknowledgements both match.
+  This replaces the originally proposed HTTP map endpoint and avoids a second
+  transport for delivery. Apple shell integration remains future work.
 - **Mod overlays** (custom `rules`/`art` INIs, the [modding](MODDING.md)
-  layer) ride the same path in phase 5: the session lists overlay files by
+  layer) ride the same path in phase 2: the session lists overlay files by
   digest and clients fetch what they lack. This is host-to-client, unlike
   OpenRA, because there is no resource centre; a repository service can be
   added later with the same digests.
 - **Retail assets**: compared by fingerprint, never sent. Say so in the UI when
   a join fails for that reason.
+- **Custom units and dependencies**: the host selects a content package containing
+  custom maps, rules/art overrides, and the supported graphics, cameos, palettes,
+  animations, sounds and strings those units reference. Reusing installed retail
+  resources is supported; transferring a map alone is not sufficient for units
+  with new artwork. Only engine-supported definitions are in scope; downloadable
+  executable code and new engine mechanics are outside this milestone.
+- **Package identity and loading**: use a canonical manifest with normalized paths,
+  file sizes, SHA-256 digests and explicit overlay order, plus a digest for the
+  manifest itself. The implementation uses sorted flat filenames and a fixed
+  base/variant/project INI patch order. Keep base engine/version/retail compatibility checks separate
+  from downloadable session content so a missing overlay can be fetched instead
+  of failing the initial mod-hash check. Verify the effective content identity
+  after mounting and before Ready. Implement and verify the resource-loading path;
+  the existing mod importer/menu is not a completed end-user workflow.
+- **Session lifecycle**: stage verified files in a digest-keyed cache and mount
+  them as a session overlay without replacing the retail import or another mod.
+  Rebuild rules and affected resource caches before loading the match. Unmount
+  and restore the previous resource configuration on leave, failure or host change.
+  Changing the package clears Ready for everyone; stale transfers cannot satisfy
+  the new manifest. The server gates Start on every participant's current content
+  acknowledgement. Cache reuse must still verify the requested identity.
+- **Transfer handling and UI**: authenticated lobby clients fetch only files in
+  the selected manifest. Bound file/package sizes, chunk sizes and concurrent
+  transfers; reject invalid paths, duplicate normalized names, corrupt data and
+  unsupported files. Show package name, size, download/verification progress,
+  retry/cancel and a concrete failure reason using existing RA2 menu controls.
+  Disconnects and cancellation clean up partial files and keep Ready disabled.
 
 ### 3.6 Direct IP and discovery
 
@@ -357,7 +382,7 @@ that says which side differs. This replaces "the host pushes assets".
   reads it from `__RA2_SHELL__.launchUrl` at boot and goes straight to the
   join flow, as OpenRA's launch-argument path does. The host screen renders
   this URL as a QR code for iPads and phones.
-- **LAN discovery** (phase 2): UDP broadcast beacon every 2 s on a fixed port
+- **LAN discovery** (phase 2b): UDP broadcast beacon every 2 s on a fixed port
   carrying the same announce JSON; Electron main uses `dgram`, the Apple
   shells `NWListener`/`NWConnection` over UDP. Bonjour is an alternative on
   Apple only; the beacon is the same code everywhere, so prefer it.
@@ -455,10 +480,25 @@ import are each refused with the right message.
 `scripts/lockstep-smoke.mjs`: two headless engine instances against a Bun
 server in-process, with an artificial 200 ms delay and 2 % loss on one link.
 
-**2. Apple hosts, LAN discovery, map delivery.**
+**2. Host-to-client maps and custom unit content (direct-IP extension).**
+Deliver custom maps and complete custom unit packages from the Electron host to
+joining clients using the content manifest, verified cache and session overlay
+in section 3.5. Implement map transfer first, then custom rules/art and supported
+resource dependencies, within this same milestone. Preserve RA2 menu styling.
+Acceptance: a clean guest with only matching retail assets joins a host with a
+custom map and a custom unit with original artwork; it downloads missing content,
+sees the same unit/cameo, builds and uses it, and matches simulation hashes with
+the host. Rejoining reuses verified content. Map/package changes clear Ready;
+corruption, interruption, cancellation and stale acknowledgements cannot start
+a match. Leaving restores the prior content, verified by starting a stock game.
+Add automated transfer/lifecycle tests and an engine/UI smoke with an original
+small custom-content fixture. Physical-machine acceptance remains required.
+
+**2b. Apple hosts and LAN discovery.**
 Swift relay transport on macOS and iOS (local-network permission prompt
 verified); `ShellRelayTransport`; UDP beacon and the LAN section of the
-browser; custom map upload/serve and the chunked fallback; `ra2://` deep links
+browser; extend phase-2 content delivery to the Swift relay with the chunked
+fallback; `ra2://` deep links
 and the join-link QR; recent servers. Acceptance: iPad hosts, Mac and Linux
 join by scanning the QR and by browsing the LAN list, with a custom map the
 guests do not have.
@@ -476,9 +516,9 @@ replays, adaptive tick scale (`OrderBuffer`), vote kick, UPnP on Electron,
 `wss://` behind a reverse proxy. Acceptance: a four-player game on a VPS with
 one player on a 150 ms link runs an hour without a stall over one second.
 
-**5. Mods and repositories (optional).**
-Mod overlay delivery by digest, a map/mod repository service using the same
-digests, and player identity if ever wanted.
+**5. Repositories and identity (optional).**
+A map/mod repository service using the phase-2 content digests, and player
+identity if ever wanted. Host-to-client mod delivery belongs to phase 2.
 
 ## 5. Risks and open questions
 
@@ -499,8 +539,9 @@ digests, and player identity if ever wanted.
   wall-clock case; the sync hash finds the rest.
 - **Password in the clear.** Same as OpenRA over TCP. Acceptable on a LAN;
   dedicated internet servers terminate TLS in front of Bun.
-- **Map digest** is CRC-32 today; two different custom maps can collide.
-  Upgrade before it becomes a repository key.
+- **Map keys** retain CRC-32 for compatibility. Host delivery verifies both the
+  manifest and file bytes with SHA-256; use those digests for future repository
+  keys rather than the legacy map identifier.
 - **Time budget.** Phase 1 is the bulk: the server core plus the turn manager
   rewrite is roughly the size of the existing `network/lan` tree (about
   3,000 lines) and touches `GameScreen.ts` construction only.

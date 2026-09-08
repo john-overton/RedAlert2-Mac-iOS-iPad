@@ -5,6 +5,9 @@ import { HtmlView } from '@/gui/jsx/HtmlView';
 import { jsx } from '@/gui/jsx/jsx';
 import { MusicType } from '@/engine/sound/Music';
 import { MapDigest } from '@/engine/MapDigest';
+import { VirtualFile } from '@/data/vfs/VirtualFile';
+import { MAX_CONTENT_BYTES, MAX_CONTENT_FILE_BYTES, type ContentFile } from '@/network/content/ContentPackage';
+import { mountSessionContent, restoreSessionContent } from '@/network/content/SessionContentResources';
 import { MapFile } from '@/data/MapFile';
 import { MapPreviewRenderer } from '@/gui/screen/mainMenu/lobby/MapPreviewRenderer';
 import { PregameController, PregameMapSelectionResult } from '@/gui/screen/mainMenu/lobby/PregameController';
@@ -40,6 +43,14 @@ export class MultiplayerScreen extends MainMenuScreen {
     private validatedMapFile?: any;
     private active = false;
     private generation = 0;
+    private contentStatus?: string;
+    private contentBusy = false;
+    private contentAbort?: AbortController;
+    private uploadAbort?: AbortController;
+    private mountedContent?: string;
+    private checkingContent?: string;
+    private contentRevision = 0;
+    private originalMapOpts?: any;
     private fields: ConnectionFields;
 
     constructor(private rootController: any, private strings: any, private jsxRenderer: any,
@@ -76,7 +87,7 @@ export class MultiplayerScreen extends MainMenuScreen {
         if (selection && this.client?.session) {
             try {
                 this.pregame.applyMapSelection(selection);
-                this.send('map', { gameOpts: this.pregame.getSnapshot().gameOpts });
+                void this.publishSelectedMap(this.pregame.getSnapshot());
             } catch (error) { this.report(error); }
         }
         this.render();
@@ -154,6 +165,9 @@ export class MultiplayerScreen extends MainMenuScreen {
             });
             await client.connect(address, { ...identity, type: 'hello', name: this.fields.playerName.trim(), password: this.fields.password });
             if (generation !== this.generation || client !== this.client) { client.close(); return; }
+            if (host && !client.session!.gameOpts.mapOfficial) {
+                await this.publishSelectedMap(this.pregame.getSnapshot());
+            }
             this.localPrefs.setItem(NAME_KEY, this.fields.playerName.trim());
             if (!host) {
                 // Store addresses only: a password-bearing join URL must not enter preferences.
@@ -172,8 +186,150 @@ export class MultiplayerScreen extends MainMenuScreen {
     private onSession = (session: Session): void => {
         this.hydrateSession(session);
         this.render();
-        void this.checkMap(session);
+        void this.checkContent(session);
     };
+
+    private async publishSelectedMap(snapshot: any): Promise<void> {
+        const client = this.client;
+        const generation = this.generation;
+        if (!client?.session || this.contentBusy) return;
+        const abort = this.uploadAbort = new AbortController();
+        this.contentBusy = true; this.render();
+        const current = () => !abort.signal.aborted && client === this.client && generation === this.generation;
+        try {
+            if (!snapshot.gameOpts.mapOfficial) {
+                this.originalMapOpts ??= { ...client.session.gameOpts };
+                const map = snapshot.currentMapFile ?? await this.mapFileLoader.load(snapshot.gameOpts.mapName);
+                if (!current()) return;
+                const existing = client.session.content;
+                const files = existing ? await client.downloadContent(existing, undefined, abort.signal) : [];
+                if (!current()) return;
+                await client.publishContent([...files.filter(file => !/\.(map|mpr|yrm)$/i.test(file.path)),
+                    { path: snapshot.gameOpts.mapName.toLowerCase(), bytes: map.getBytes() }], undefined, abort.signal);
+            }
+            if (current()) client.command('map', { gameOpts: snapshot.gameOpts });
+        } catch (error) { if (current()) this.report(error); }
+        finally {
+            if (this.uploadAbort === abort) {
+                this.uploadAbort = undefined;
+                if (!this.checkingContent || this.mountedContent === this.checkingContent) this.contentBusy = false;
+                this.render();
+            }
+        }
+    }
+
+    private async importContent(realFiles: File[]): Promise<void> {
+        const client = this.client;
+        if (!realFiles.length || !client?.session || this.contentBusy) return;
+        const abort = new AbortController();
+        this.uploadAbort?.abort(); this.uploadAbort = abort;
+        this.contentBusy = true; this.contentStatus = 'Preparing host content…'; this.render();
+        try {
+            if (realFiles.length > 256 || realFiles.some(file => file.size > MAX_CONTENT_FILE_BYTES) || realFiles.reduce((sum, file) => sum + file.size, 0) > MAX_CONTENT_BYTES) {
+                throw new Error('Content is limited to 256 files, 32 MiB per file and 64 MiB per package.');
+            }
+            const files: ContentFile[] = await Promise.all(realFiles.map(async file => ({ path: file.name.toLowerCase(), bytes: new Uint8Array(await file.arrayBuffer()) })));
+            if (abort.signal.aborted || client !== this.client) return;
+            const maps = files.filter(file => /\.(map|mpr|yrm)$/.test(file.path));
+            if (maps.length > 1) throw new Error('Select one custom map per package.');
+            let opts = { ...client.session.gameOpts };
+            if (maps.length) {
+                const file = VirtualFile.fromBytes(maps[0].bytes, maps[0].path);
+                const map = new MapFile(file);
+                const maxSlots = map.startingLocations.length;
+                if (maxSlots < 2 || maxSlots > 8) throw new Error('Custom multiplayer maps must have 2–8 starting locations.');
+                if (client.session.clients.some(member => member.slotIndex !== null && member.slotIndex >= maxSlots)) throw new Error('Move players before choosing a smaller map.');
+                this.originalMapOpts ??= { ...opts };
+                opts = { ...opts, mapName: file.filename, mapTitle: map.getSection('Basic')?.getString('Name') || file.filename,
+                    mapDigest: MapDigest.compute(file), mapSizeBytes: file.getSize(), mapOfficial: false, maxSlots };
+            } else if (!opts.mapOfficial) {
+                const file = await this.mapFileLoader.load(opts.mapName);
+                files.push({ path: opts.mapName.toLowerCase(), bytes: file.getBytes() });
+            }
+            this.contentStatus = 'Uploading host content…'; this.render();
+            await client.publishContent(files, undefined, abort.signal);
+            if (abort.signal.aborted || client !== this.client) return;
+            this.send('map', { gameOpts: opts });
+        } catch (error) { if (client === this.client) this.report(error); }
+        finally { if (this.uploadAbort === abort) { this.uploadAbort = undefined; if (!this.checkingContent || this.mountedContent === this.checkingContent) this.contentBusy = false; this.render(); } }
+    }
+
+    private async removeContent(): Promise<void> {
+        const client = this.client;
+        const generation = this.generation;
+        if (!client?.session) return;
+        this.cancelContent();
+        const abort = this.uploadAbort = new AbortController();
+        const originalMapOpts = this.originalMapOpts;
+        this.contentBusy = true; this.render();
+        try {
+            await client.publishContent([], undefined, abort.signal);
+            if (abort.signal.aborted || client !== this.client || generation !== this.generation) return;
+            if (originalMapOpts) client.command('map', { gameOpts: originalMapOpts });
+            this.originalMapOpts = undefined;
+        } catch (error) { if (client === this.client) this.report(error); }
+        finally {
+            if (this.uploadAbort === abort) {
+                this.uploadAbort = undefined;
+                if (!this.checkingContent || this.mountedContent === this.checkingContent) this.contentBusy = false;
+                this.render();
+            }
+        }
+    }
+
+    private cancelContent(): void {
+        this.contentAbort?.abort(); this.uploadAbort?.abort(); this.contentRevision++;
+        this.contentBusy = false;
+        this.contentStatus = 'Content transfer cancelled. Verify Content to retry.';
+        this.render();
+    }
+
+    private async checkContent(session: Session, retry = false): Promise<void> {
+        const client = this.client;
+        if (!client) return;
+        const manifest = session.content;
+        if (!manifest) {
+            if (this.mountedContent) restoreSessionContent();
+            this.mountedContent = undefined;
+            await this.checkMap(session); return;
+        }
+        const self = session.clients.find(member => member.id === client.clientId);
+        if (!retry && this.mountedContent === manifest.id) {
+            if (self?.contentReady !== manifest.id) client.contentReady(manifest.id);
+            await this.checkMap(session); return;
+        }
+        if (!retry && this.checkingContent === manifest.id) return;
+        this.contentAbort?.abort();
+        const abort = this.contentAbort = new AbortController();
+        const revision = ++this.contentRevision;
+        this.checkingContent = manifest.id;
+        this.contentBusy = true;
+        this.contentStatus = `Downloading content (${manifest.totalBytes.toLocaleString()} bytes)…`;
+        this.render();
+        try {
+            const files = await client.downloadContent(manifest, (received, total) => {
+                if (revision !== this.contentRevision) return;
+                this.contentStatus = `Downloading content: ${received.toLocaleString()} / ${total.toLocaleString()} bytes`;
+                this.render();
+            }, abort.signal);
+            if (abort.signal.aborted || revision !== this.contentRevision || client !== this.client || client.session?.content?.id !== manifest.id) return;
+            restoreSessionContent();
+            mountSessionContent(new Map(files.map(file => [file.path, file.bytes])), { strings: this.strings, sound: (this.controller as any).sound });
+            this.mountedContent = manifest.id;
+            this.checkedMap = undefined; this.validatedMap = undefined; this.validatedMapFile = undefined;
+            this.contentStatus = `Content verified: ${manifest.files.length} files (${manifest.totalBytes.toLocaleString()} bytes)`;
+            this.error = undefined;
+            client.contentReady(manifest.id);
+            await this.checkMap(client.session!);
+        } catch (error) {
+            if (revision === this.contentRevision && client === this.client) {
+                this.contentStatus = 'Content unavailable. Verify Content to retry.';
+                this.report(error);
+            }
+        } finally {
+            if (revision === this.contentRevision) { this.contentBusy = false; this.render(); }
+        }
+    }
 
     private hydrateSession(session: Session): void {
         if (this.validatedMap !== session.gameOpts.mapDigest) {
@@ -200,7 +356,7 @@ export class MultiplayerScreen extends MainMenuScreen {
         try {
             const file = await this.mapFileLoader.load(session.gameOpts.mapName);
             if (client !== this.client || this.checkedMap !== digest) return;
-            if (MapDigest.compute(file) !== digest) throw new Error('Your map differs from the host’s map. Import the same map before joining.');
+            if (MapDigest.compute(file) !== digest) throw new Error('The loaded map differs from the selected host map.');
             this.validatedMap = digest;
             this.validatedMapFile = file;
             this.hydrateSession(client!.session!);
@@ -212,12 +368,16 @@ export class MultiplayerScreen extends MainMenuScreen {
             }
         } catch (error) {
             if (client !== this.client || this.checkedMap !== digest) return;
-            this.report(`Map unavailable: ${error instanceof Error ? error.message : error}. Each player must import the same map; map downloads are not available yet.`);
+            this.report(`Map unavailable: ${error instanceof Error ? error.message : error}. The host can share the map through Maps and Custom Units.`);
         }
     }
 
     private async disconnect(): Promise<void> {
         this.generation++;
+        this.contentAbort?.abort(); this.uploadAbort?.abort(); this.contentRevision++;
+        restoreSessionContent();
+        this.mountedContent = undefined; this.checkingContent = undefined;
+        this.contentBusy = false; this.contentStatus = undefined; this.originalMapOpts = undefined;
         this.client?.onSession.unsubscribe(this.onSession);
         this.client?.close();
         this.client = undefined;
@@ -228,6 +388,11 @@ export class MultiplayerScreen extends MainMenuScreen {
         this.checkedMap = undefined;
         this.validatedMap = undefined;
         this.validatedMapFile = undefined;
+        // A downloaded map belongs to the departed session. A subsequent host
+        // starts from local preferences instead of retaining its temporary bytes.
+        this.pregame = new PregameController(this.strings, this.rules, this.mapFileLoader,
+            this.mapList, this.gameModes, this.localPrefs, this.fields.playerName);
+        this.launching = false;
         this.chatHistory.reset();
         this.controller.setSidebarPreview();
         this.controller.toggleSidebarPreview(false);
@@ -296,11 +461,15 @@ export class MultiplayerScreen extends MainMenuScreen {
         if (!this.active) return;
         const session = this.client?.session;
         const self = session?.clients.find(member => member.id === this.client?.clientId);
-        const canReady = Boolean(self?.mapReady);
+        const canReady = Boolean(self?.mapReady && !this.contentBusy && (!session?.content || self.contentReady === session.content.id));
         const ready = () => { if (canReady) this.send('state', { ready: !self?.ready }); };
         const props = { fields: this.fields, busy: this.busy, error: this.error, canHost: Boolean((window as any).__RA2_SHELL__?.hostGame),
             lobbyProps: session ? this.lobbyProps(session) : undefined, serverName: session?.serverName, addresses: this.addresses,
             status: session ? `${session.clients.filter(member => member.ready).length}/${session.clients.length} ready` : undefined,
+            contentStatus: this.contentStatus, contentBusy: this.contentBusy,
+            canManageContent: self?.admin, hasContent: Boolean(session?.content?.files.length),
+            onContentFiles: (files: File[]) => void this.importContent(files), onRemoveContent: () => void this.removeContent(),
+            onRetryContent: () => session && void this.checkContent(session, true), onCancelContent: () => this.cancelContent(),
             ready: self?.ready, canReady, recent: this.recent(), onField: (key: keyof ConnectionFields, value: string) => { this.fields = { ...this.fields, [key]: value }; this.render(); },
             managedPlayers: self?.admin && !self.ready ? session?.clients.filter(member => member.id !== self.id) : [],
             onKick: (clientId: number) => this.send('kick', { clientId }), onMakeAdmin: (clientId: number) => this.send('make_admin', { clientId }),
@@ -311,8 +480,8 @@ export class MultiplayerScreen extends MainMenuScreen {
             this.controller.setMainComponent(component);
         }
         const buttons: any[] = session ? [
-            ...(self?.admin ? [{ label: 'Start Game', disabled: !session.clients.every(member => member.ready && member.mapReady) || session.clients.length < 2,
-                onClick: () => this.send('startgame') }, { label: 'Change Map', disabled: self.ready, onClick: () => this.controller.pushScreen(MainMenuScreenType.MapSelection,
+            ...(self?.admin ? [{ label: 'Start Game', disabled: !session.clients.every(member => member.ready && member.mapReady && (!session.content || member.contentReady === session.content.id)) || session.clients.length < 2,
+                onClick: () => this.send('startgame') }, { label: 'Change Map', disabled: self.ready || this.contentBusy, onClick: () => this.controller.pushScreen(MainMenuScreenType.MapSelection,
                     { lobbyType: LobbyType.MultiplayerHost, gameOpts: this.pregame.getGameOpts(), usedSlots: () => this.pregame.getUsedSlots() }) }] : []),
             { label: self?.ready ? 'Cancel Ready' : 'Ready', disabled: !canReady, onClick: ready },
             { label: 'Leave Game', isBottom: true, onClick: async () => { await this.disconnect(); this.error = undefined; this.render(); } },

@@ -2,7 +2,7 @@
 
 Development resumed from the existing implementation; this progress record is
 included in the local multiplayer implementation commit on `allied-campaign`. The target
-remains phase 1 of [the plan](MULTIPLAYER_PLAN.md). See [MULTIPLAYER.md](MULTIPLAYER.md)
+covers the direct-IP core and host content delivery in [the plan](MULTIPLAYER_PLAN.md). See [MULTIPLAYER.md](MULTIPLAYER.md)
 for setup, architecture, commands and scope. No installs into the applications
 directory, external posts or pushes have been made.
 
@@ -51,6 +51,48 @@ directory, external posts or pushes have been made.
 - Final `git diff --check` and smoke script syntax check passed. The temporary
   Vite server and test applications were stopped after validation.
 
+## Host content delivery — direct-IP extension
+
+Implemented the next milestone before Apple hosting/discovery and the master
+server/browser. Hosts can share custom maps and loose custom unit packages from
+the lobby; guests verify and mount them before Ready. See [usage](MULTIPLAYER.md#maps-and-custom-units-from-the-host).
+
+- Handshake protocol is now **2**; orders protocol remains **2**. Rebuild both
+  players. The base mod/retail identity remains separate from session content.
+- Canonical SHA-256 manifests, portable hashing, authenticated 8 KiB chunks,
+  atomic publication, transfer cancellation/timeouts, and a bounded verified
+  per-file memory cache. Start rejects pending uploads and stale acknowledgements.
+- Temporary VFS overlays merge rules/art/AI patches, expose custom resources,
+  update strings/sound definitions, and restore baseline state after leaving.
+- RA2-style lobby file selection, byte progress, verification, retry/cancel and
+  removal. Custom map selection also publishes the selected map.
+- The local content smoke creates its map and unit patches from the test
+  machine's installed resources plus an original generated cameo. Generated
+  files stay under `build/`; no retail map or unit data is committed.
+
+### Content validation
+
+- `bun test`: **115 passed, 0 failed**, 1,854 assertions across 18 files.
+- Production web build, server bundle and Linux YR packaging pass.
+- Bun and Node socket smokes pass with handshake protocol 2, 100 matching frames,
+  artificial delay/stalls, rejection cases and injected desync.
+- `node scripts/multiplayer-content-ui-smoke.mjs`: **passes** with a real Electron
+  host and fresh Chromium guest. Transfers custom map/rules/art/original cameo,
+  removes and reloads content, builds and moves the custom tank through normal
+  guest network commands, and matches all 501 captured hashes (ticks 100–600).
+  Test setup creates identical factories at paused tick 150. Leaving restores
+  baseline resources; a subsequent stock skirmish advances at least 30 ticks.
+  The host also imports content, leaves, and recreates a lobby on the same screen;
+  it starts with a local map and no stale content package.
+- Existing direct-IP UI smoke also passes: password retry, host departure/port
+  reuse, map/bot/options/team/chat controls, Ready/Start and running simulation.
+- Artifacts: `build/multiplayer-content-ui/report.json`, `host-lobby.png`,
+  `guest-lobby.png`, `guest-game.png`, and generated `fixture/` files. Intermediate
+  failure artifacts may remain from test-development runs; the final report is
+  the passing result. The cameo is visible in the in-game sidebar screenshot.
+- `typecheck:entry` retains the same **42 existing diagnostics**, with no new
+  diagnostics in the changed multiplayer/resource code. `git diff --check` passes.
+
 ## Remaining acceptance and implementation
 
 1. Play a full skirmish on two physical Linux machines and test a cable pull.
@@ -58,7 +100,7 @@ directory, external posts or pushes have been made.
 2. Exact same-tick desync stopping and historical per-frame state snapshots
    remain absent. Reports retain both mismatch frame and actual stopped tick.
 3. In-game chat/diplomacy/connection details, real Apple-device validation,
-   map delivery, discovery, master service and dedicated hardening remain open.
+   discovery, master service and dedicated hardening remain open.
    Client sync cross-checking is now implemented.
 
 ## Reproduction notes
