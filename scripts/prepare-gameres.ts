@@ -31,7 +31,7 @@ if (!RETAIL) {
         "RA2_RETAIL_DIR is not set.\n\n" +
             "Point it at your own Red Alert 2 install (the folder containing ra2.mix), e.g.:\n" +
             '  RA2_RETAIL_DIR="/path/to/steamapps/common/Command & Conquer Red Alert 2" bun scripts/prepare-gameres.ts\n\n' +
-            "Or use the friendly wrapper: ./scripts/setup.sh <path>",
+            "Or use scripts/setup.sh <path> (macOS/Linux) or scripts/setup-windows.ps1 -RetailDir <path> (PowerShell).",
     );
     process.exit(1);
 }
@@ -238,4 +238,4 @@ const walk = (dir: string, prefix: string) => {
 walk(OUT, "");
 writeFileSync(join(OUT, "manifest.json"), JSON.stringify({ files: manifestFiles }, null, 1));
 
-console.log("== Done. Now run scripts/build-ios.sh to bundle everything.");
+console.log("== Done. Run the build script for your platform (see docs/MACOS.md, docs/LINUX.md or docs/WINDOWS.md).");

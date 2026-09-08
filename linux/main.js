@@ -1,5 +1,5 @@
 'use strict';
-// Electron shell for the Linux (Omarchy/Arch) build. Mirrors the AppKit shell in
+// Shared Electron shell for the Linux and Windows builds. Mirrors the AppKit shell in
 // macos/Sources/main.swift and the bundle scheme handler in
 // ios/Sources/BundleSchemeHandler.swift: the built web app and the imported
 // game assets are served from disk under the custom `ra2app://` scheme, so
@@ -16,10 +16,26 @@ const SCHEME = 'ra2app';
 const APP_DIR = __dirname;
 const appInfo = readAppInfo();
 const RESOURCES = process.env.RA2_RESOURCES
+    || [
+        // Packaged Electron apps (including app.asar) keep game files outside
+        // the application archive. The Linux system-Electron launcher instead
+        // stages app/ and Resources/ as siblings.
+        process.resourcesPath && path.join(process.resourcesPath, 'Resources'),
+        path.join(APP_DIR, '..', 'Resources'),
+    ].find((candidate) => candidate && fs.existsSync(candidate))
     || path.join(APP_DIR, '..', 'Resources');
 const WEB_ROOT = path.join(RESOURCES, 'WebDist');
 const GAMERES_ROOT = path.join(RESOURCES, 'GameRes');
 const ICON_PATH = path.join(RESOURCES, 'icon.png');
+
+if (process.platform === 'win32') {
+    // Keep classic and YR saves/preferences separate, and preserve them across
+    // portable builds moved to another folder. Electron stores this in AppData.
+    const userData = path.join(app.getPath('appData'), appInfo.name);
+    fs.mkdirSync(userData, { recursive: true });
+    app.setPath('userData', userData);
+    app.setAppUserModelId(`com.redalert2.desktop.${appInfo.variant}`);
+}
 
 function readAppInfo() {
     try {
@@ -58,11 +74,17 @@ function serve(request) {
     try { url = new URL(request.url); }
     catch { return text(400, 'bad url'); }
     // URL parsing already drops the query string vite appends (?v=...).
-    let pathname = decodeURIComponent(url.pathname);
+    if (url.protocol !== `${SCHEME}:` || url.hostname !== 'app') return text(403, 'forbidden');
+    let pathname;
+    try { pathname = decodeURIComponent(url.pathname); }
+    catch { return text(400, 'bad url'); }
     if (pathname === '' || pathname === '/') pathname = '/index.html';
     const relative = pathname.replace(/^\/+/, '');
     // Reject traversal before touching the filesystem, exactly like the iOS handler.
-    if (relative.split('/').includes('..')) return text(403, 'forbidden');
+    // Backslashes are filesystem separators on Windows, and ':' can address
+    // NTFS alternate data streams. Neither is valid in a bundled asset URL.
+    if (relative.includes('\\') || relative.includes(':') || relative.includes('\0')
+        || relative.split('/').includes('..')) return text(403, 'forbidden');
 
     const file = relative.startsWith('gameres/')
         ? path.join(GAMERES_ROOT, relative.slice('gameres/'.length))
@@ -91,7 +113,9 @@ protocol.registerSchemesAsPrivileged([{
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true },
 }]);
 
-app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations');
+if (process.platform === 'linux') {
+    app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations');
+}
 
 let win;
 let hostedGame;
@@ -145,7 +169,10 @@ function createWindow() {
             // Menu music and the intro video autoplay, like the Mac shell's
             // mediaTypesRequiringUserActionForPlayback = [].
             autoplayPolicy: 'no-user-gesture-required',
-            additionalArguments: [`--ra2-shell-version=${appInfo.version}`],
+            additionalArguments: [
+                `--ra2-shell-version=${appInfo.version}`,
+                `--ra2-shell-platform=${process.platform === 'win32' ? 'windows' : 'linux'}`,
+            ],
         },
     });
     win.setTitle(appInfo.name);

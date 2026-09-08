@@ -12,6 +12,11 @@ Arch and Debian/Ubuntu dependencies, prebuilt Electron installation, retail
 asset import, builds and multiplayer testing. Debian/Ubuntu instructions are
 provided but have not yet been validated on those distributions.
 
+An experimental Windows build setup now packages both variants with Electron
+included. See the [Windows guide](docs/WINDOWS.md) for PowerShell asset setup,
+portable builds and cross-packaging from Mac/Linux. Native Windows gameplay and
+cross-device acceptance remain pending.
+
 Browse the [documentation index](docs/README.md), including [modding units and stats](docs/MODDING.md)
 and [future additions: world and unit editors](docs/FUTURE_ADDITIONS.md).
 
@@ -310,6 +315,9 @@ cd redalert2 && RA2_HTTP=1 bun run dev
 | [`docs/LINUX.md`](docs/LINUX.md) | Linux build guide: Arch and Debian/Ubuntu setup, Electron, asset import, testing |
 | [`docs/MULTIPLAYER.md`](docs/MULTIPLAYER.md) | Direct-IP multiplayer setup, implementation status, and socket/engine/UI smokes |
 | `linux/main.js` | Electron shell: `ra2app://` protocol handler, window, fullscreen, error dialogs |
+| [`docs/WINDOWS.md`](docs/WINDOWS.md) | Windows setup, portable packaging and validation limits |
+| `scripts/setup-windows.ps1` | Native Windows dependency/retail import setup |
+| `scripts/build-windows.ps1` | Windows build wrapper (Bun builder also runs on Mac/Linux) |
 | `scripts/build-linux.sh` | Linux build: web build, staged assets, launcher and desktop entry |
 | `scripts/install-linux.sh` | Install a built variant under `~/.local/share/ra2` with a desktop entry |
 | `scripts/setup.sh` | One-shot setup: deps + retail import + next steps |

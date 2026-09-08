@@ -1,0 +1,2 @@
+# Keep source bytes identical across Windows/macOS/Linux for multiplayer build hashes.
+* text=auto eol=lf

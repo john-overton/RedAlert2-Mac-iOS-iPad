@@ -11,9 +11,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const arg = process.argv.find((a) => a.startsWith('--ra2-shell-version='));
 const version = arg ? arg.slice('--ra2-shell-version='.length) : '0.1.0';
+const platformArg = process.argv.find((a) => a.startsWith('--ra2-shell-platform='));
+const platform = platformArg ? platformArg.slice('--ra2-shell-platform='.length) : 'linux';
 
 contextBridge.exposeInMainWorld('__RA2_SHELL__', Object.freeze({
-    platform: 'linux',
+    platform,
     version,
     // Main-menu Exit button (redalert2/src/gui/screen/mainMenu/main/HomeScreen.ts).
     exitApp: () => ipcRenderer.send('ra2:exit'),
