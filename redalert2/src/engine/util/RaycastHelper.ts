@@ -29,12 +29,16 @@ export class RaycastHelper {
     private intersectLegacy(point: Point, targets: THREE.Object3D[], recursive: boolean): THREE.Intersection[] {
         const raycaster = new THREE.Raycaster();
         const normalizedPointer = this.normalizePointerLegacy(point, this.scene.viewport);
+        // Batched building sprites live on layer 1 but are still pick targets.
+        raycaster.layers.enable(1);
         raycaster.setFromCamera(normalizedPointer as any, this.scene.camera);
         return raycaster.intersectObjects(targets, recursive);
     }
     private intersectOptimized(point: Point, targets: THREE.Object3D[], recursive: boolean): THREE.Intersection[] {
         const raycaster = this.raycaster ?? (this.raycaster = new THREE.Raycaster());
         const normalizedPointer = this.normalizePointerOptimized(point, this.scene.viewport);
+        // Batched building sprites live on layer 1 but are still pick targets.
+        raycaster.layers.enable(1);
         raycaster.setFromCamera(normalizedPointer as any, this.scene.camera);
         return raycaster.intersectObjects(targets, recursive);
     }

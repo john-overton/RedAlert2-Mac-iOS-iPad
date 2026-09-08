@@ -138,7 +138,7 @@ export class Infantry {
     create3DObject(): void {
         let obj = this.get3DObject();
         if (!obj) {
-            obj = new BoxIntersectObject3D(new THREE.Vector3(0.5, 2 / 3, 0.5).multiplyScalar(Coords.LEPTONS_PER_TILE));
+            obj = new BoxIntersectObject3D(new THREE.Vector3(0.5, 2 / 3, 0.5).multiplyScalar(Coords.LEPTONS_PER_TILE), true);
             obj.name = this.label;
             obj.userData.id = this.gameObject.id;
             this.target = obj;

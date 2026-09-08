@@ -293,7 +293,7 @@ export class Vehicle {
     create3DObject() {
         let e = this.get3DObject();
         e ||
-            ((e = new d.BoxIntersectObject3D(new THREE.Vector3(1, 1 / 3, 1).multiplyScalar(S.Coords.LEPTONS_PER_TILE))),
+            ((e = new d.BoxIntersectObject3D(new THREE.Vector3(1, 1 / 3, 1).multiplyScalar(S.Coords.LEPTONS_PER_TILE), true)),
                 (e.name = this.label),
                 (e.userData.id = this.gameObject.id),
                 (this.target = e),

@@ -279,6 +279,8 @@ export class Minimap extends UiObject {
     }
     createTexture(canvas: HTMLCanvasElement): THREE.Texture {
         const texture = new THREE.Texture(canvas);
+        // Canvas colors are already sRGB; treating them as linear washes out radar.
+        texture.colorSpace = THREE.SRGBColorSpace;
         texture.needsUpdate = true;
         texture.flipY = false;
         texture.minFilter = THREE.NearestFilter;

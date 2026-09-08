@@ -5,7 +5,7 @@ export class BoxIntersectObject3D extends THREE.Object3D {
     private static box: THREE.Box3 = new THREE.Box3();
     private static center: THREE.Vector3 = new THREE.Vector3();
     private boxSize: THREE.Vector3;
-    constructor(boxSize: THREE.Vector3) {
+    constructor(boxSize: THREE.Vector3, private readonly anchorAtBase: boolean = false) {
         super();
         this.boxSize = boxSize;
     }
@@ -14,6 +14,7 @@ export class BoxIntersectObject3D extends THREE.Object3D {
             BoxIntersectObject3D.matrix.copy(this.parent.matrixWorld).invert();
             BoxIntersectObject3D.ray.copy(raycaster.ray).applyMatrix4(BoxIntersectObject3D.matrix);
             BoxIntersectObject3D.center.copy(this.position);
+            if (this.anchorAtBase) BoxIntersectObject3D.center.y += this.boxSize.y / 2;
             const box = BoxIntersectObject3D.box.setFromCenterAndSize(BoxIntersectObject3D.center, this.boxSize);
             if (BoxIntersectObject3D.ray.intersectsBox(box)) {
                 const point = new THREE.Vector3();

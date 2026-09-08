@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import * as THREE from 'three';
 import { IsoCoords } from '@/engine/IsoCoords';
 import { Coords } from '@/game/Coords';
+import { BatchedMesh } from '@/engine/gfx/batch/BatchedMesh';
 import { RaycastHelper } from '@/engine/util/RaycastHelper';
 import { EntityIntersectHelper } from '@/engine/util/EntityIntersectHelper';
 import { MapTileIntersectHelper } from '@/engine/util/MapTileIntersectHelper';
@@ -20,6 +21,27 @@ beforeEach(() => {
 });
 
 describe('RaycastHelper', () => {
+    test('picks batched building graphics above their ground footprint at different zooms', () => {
+        const camera = new THREE.OrthographicCamera(-400, 400, 300, -300, .1, 1000);
+        camera.position.z = 100;
+        camera.updateMatrixWorld(true);
+        const mesh = new BatchedMesh(new THREE.PlaneGeometry(80, 100), new THREE.MeshBasicMaterial());
+        mesh.position.y = 80;
+        mesh.updateMatrixWorld(true);
+        const helper = new RaycastHelper({ viewport: { x: 20, y: 30, width: 800, height: 600 }, camera });
+        for (const reuse of [false, true]) {
+            attachPerformanceOptions(new PerformanceOptions({ raycastHelperReuse: reuse }));
+            for (const zoom of [.75, 1, 1.5]) {
+                camera.zoom = zoom;
+                camera.updateProjectionMatrix();
+                const projected = mesh.position.clone().project(camera);
+                const point = { x: 20 + (projected.x + 1) * 400, y: 30 + (1 - projected.y) * 300 };
+                expect(helper.intersect(point, [mesh])[0]?.object).toBe(mesh);
+            }
+        }
+        mesh.geometry.dispose();
+        (mesh.material as THREE.Material).dispose();
+    });
     test('returns the same intersection and reuses a single Raycaster when enabled', () => {
         const viewport = { x: 0, y: 0, width: 800, height: 600 };
         const camera = new THREE.OrthographicCamera(-400, 400, 300, -300, 0.1, 1000);

@@ -56,7 +56,7 @@ export class PsychicDominatorEffect extends SuperWeaponEffect {
         const bridge = game.map.tileOccupation.getBridgeOnTile(tile);
         const elevation = bridge?.tileElevation ?? 0;
         const zone = game.map.getTileZone(tile);
-        warhead.detonate(game as any, damage, tile, elevation, Coords.tile3dToWorld(tile.rx + 0.5, tile.ry + 0.5, tile.z + elevation), zone, bridge ? CollisionType.OnBridge : CollisionType.None, game.createTarget(bridge, tile), { player: this.owner, weapon: undefined } as any, false, undefined, undefined, true);
+        warhead.detonate(game as any, damage, tile, elevation, Coords.tile3dToWorld(tile.rx + 0.5, tile.ry + 0.5, tile.z + elevation), zone, bridge ? CollisionType.OnBridge : CollisionType.None, game.createTarget(bridge, tile), { player: this.owner, weapon: undefined } as any, false, undefined, undefined);
     }
 
     private captureUnits(game: Game): any[] {

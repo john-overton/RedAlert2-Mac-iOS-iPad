@@ -12,6 +12,7 @@ export class MessageList {
     localPlayer: any;
     isComposing: boolean;
     messages: Message[];
+    private recentChatMessages: Message[] = [];
     private _onNewMessage: EventDispatcher<[
         MessageList,
         Message
@@ -55,6 +56,9 @@ export class MessageList {
         this.messages.push(msg);
         this._onNewMessage.dispatch(this as any, msg);
     }
+    getRecentChatMessages(): Message[] {
+        return this.recentChatMessages;
+    }
     addChatMessage(text: string, color: string) {
         const msg: Message = {
             text,
@@ -62,6 +66,8 @@ export class MessageList {
             time: Date.now(),
             animate: true,
         };
+        this.recentChatMessages.push(msg);
+        if (this.recentChatMessages.length > 10) this.recentChatMessages.shift();
         this.messages.push(msg);
         this._onNewMessage.dispatch(this as any, msg);
     }

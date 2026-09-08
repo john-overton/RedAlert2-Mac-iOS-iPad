@@ -3336,6 +3336,8 @@ input[type="range"]:focus {
 
 
 #ra2web-root .game-chat-console {
+    position: absolute;
+    bottom: 0;
     width: 100%;
     background: rgba(8, 14, 12, .94);
     border: 1px solid #687c70;
@@ -3351,4 +3353,17 @@ input[type="range"]:focus {
 @keyframes game-chat-open {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
+}
+
+#ra2web-root .game-chat-history {
+    max-height: min(200px, 35vh);
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    padding: 0 10px;
+    font-size: 13px;
+    line-height: 20px;
+}
+#ra2web-root .game-chat-history:not(:empty) {
+    padding-top: 8px;
 }

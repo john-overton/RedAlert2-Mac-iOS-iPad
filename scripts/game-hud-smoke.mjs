@@ -24,6 +24,23 @@ export async function checkGameHud(pages) {
   await page.keyboard.press('Enter');
   await input.waitFor({ state: 'visible' });
   if (await page.locator('.game-chat-input label').innerText() !== teamLabel) throw new Error('Chat audience was not remembered');
+  // History survives expiring HUD notifications and updates while composing.
+  await page.evaluate(() => {
+    const list = window.__ra2debug.gameScreen.hud.messageList;
+    for (let i = 0; i < 12; i++) list.addChatMessage(`History smoke ${i}`, '#55ff55');
+    for (const message of list.getAll()) message.time -= 120000;
+    list.prune();
+  });
+  const history = page.locator('.game-chat-history');
+  await page.waitForFunction(() => document.querySelector('.game-chat-history')?.children.length === 10);
+  if (await history.locator('div').first().innerText() !== 'History smoke 2' || await history.locator('div').last().innerText() !== 'History smoke 11') throw new Error('Wrong retained chat history');
+  await page.keyboard.press('Escape');
+  await input.waitFor({state:'hidden'});
+  await page.keyboard.press('Enter');
+  await input.waitFor({state:'visible'});
+  if (await history.locator('div').count() !== 10) throw new Error('Chat history lost on reopen');
+  const expanded = await page.locator('.game-chat-console').boundingBox();
+  if (!expanded || expanded.y < 0 || expanded.y + expanded.height > 900 || expanded.height < 200) throw new Error(`History panel clipped: ${JSON.stringify(expanded)}`);
   await page.locator('.game-chat-console').evaluate(async element => { await Promise.all(element.getAnimations().map(animation => animation.finished)); });
   await page.screenshot({path:'build/macos/chat-popout.png'});
   await input.fill('Cancelled message');

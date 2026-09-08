@@ -2,7 +2,7 @@ import { Order } from "./Order";
 import { OrderType } from "./OrderType";
 import { PointerType } from "@/engine/type/PointerType";
 import { RangeHelper } from "@/game/gameobject/unit/RangeHelper";
-import { CaptureBuildingTask } from "@/game/gameobject/task/CaptureBuildingTask";
+import { CaptureBuildingTask, canCaptureBuilding, shouldDamageBeforeCapture } from "@/game/gameobject/task/CaptureBuildingTask";
 import { OrderFeedbackType } from "./OrderFeedbackType";
 export class CaptureOrder extends Order {
     private game: any;
@@ -20,13 +20,8 @@ export class CaptureOrder extends Order {
         if (isMini) {
             return PointerType.OccupyMini;
         }
-        if (this.game.gameOpts.multiEngineer) {
-            const generalRules = this.game.rules.general;
-            const targetObj = this.target.obj;
-            if ((!targetObj.owner.isNeutral || !generalRules.engineerAlwaysCaptureTech) &&
-                targetObj.healthTrait.health > 100 * generalRules.engineerCaptureLevel) {
-                return PointerType.EngineerDamage;
-            }
+        if (shouldDamageBeforeCapture(this.game, this.target.obj)) {
+            return PointerType.EngineerDamage;
         }
         return PointerType.Occupy;
     }
@@ -39,7 +34,7 @@ export class CaptureOrder extends Order {
             !this.game.areFriendly(this.sourceObject, this.target.obj));
     }
     isAllowed(): boolean {
-        return true;
+        return canCaptureBuilding(this.game, this.sourceObject, this.target.obj);
     }
     process(): CaptureBuildingTask[] {
         return [new CaptureBuildingTask(this.game, this.target.obj)];

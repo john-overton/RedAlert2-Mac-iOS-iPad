@@ -4,6 +4,7 @@ import { ObjectType } from '@/engine/type/ObjectType';
 import { EventDispatcher } from '@/util/event';
 import { PrereqCategory } from '@/game/rules/GeneralRules';
 import { SideType } from '@/game/SideType';
+import { SuperWeaponType } from '@/game/type/SuperWeaponType';
 const PREREQ_MAP = new Map()
     .set("POWER", PrereqCategory.Power)
     .set("FACTORY", PrereqCategory.Factory)
@@ -124,6 +125,8 @@ export class Production {
             object.techLevel <= this.maxTechLevel &&
             !(object.buildLimit === 0 && !this.player.isAi) &&
             !(object.superWeapon &&
+                // Force Shield is a battle-lab ability, not a dedicated SW building.
+                this.rules.getSuperWeapon(object.superWeapon).type !== SuperWeaponType.ForceShield &&
                 this.rules.getSuperWeapon(object.superWeapon).disableableFromShell &&
                 !this.gameOpts.superWeapons) &&
             this.hasFactoryFor(object) &&

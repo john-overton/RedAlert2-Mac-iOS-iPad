@@ -1,23 +1,30 @@
-import { Building, BuildStatus } from "@/game/gameobject/Building";
+import { BuildStatus } from "@/game/gameobject/Building";
 import { BuildingCaptureEvent } from "@/game/event/BuildingCaptureEvent";
 import { Warhead } from "@/game/Warhead";
 import { CollisionType } from "@/game/gameobject/unit/CollisionType";
 import { ZoneType } from "@/game/gameobject/unit/ZoneType";
 import { EnterBuildingTask } from "@/game/gameobject/task/EnterBuildingTask";
+/** Keep the capture cursor and entry-time validation in agreement. */
+export function canCaptureBuilding(game: any, engineer: any, target: any): boolean {
+    return !!(engineer.isInfantry() && engineer.rules.engineer &&
+        target?.isBuilding() && target.rules.capturable && !target.isDestroyed &&
+        target.buildStatus !== BuildStatus.BuildDown && !game.areFriendly(engineer, target));
+}
+export function shouldDamageBeforeCapture(game: any, target: any): boolean {
+    const general = game.rules.general;
+    return !!(game.gameOpts.multiEngineer &&
+        (!target.rules.needsEngineer || !general.engineerAlwaysCaptureTech) &&
+        target.healthTrait.health > 100 * general.engineerCaptureLevel);
+}
 export class CaptureBuildingTask extends EnterBuildingTask {
     isAllowed(e: any): boolean {
-        return (e.rules.engineer &&
-            this.target.rules.capturable &&
-            !this.target.isDestroyed &&
-            this.target.buildStatus !== BuildStatus.BuildDown &&
-            !this.game.areFriendly(e, this.target));
+        return canCaptureBuilding(this.game, e, this.target);
     }
     onEnter(t: any): void {
         this.game.unspawnObject(t);
         if (this.game.gameOpts.multiEngineer) {
             const generalRules = this.game.rules.general;
-            if ((!this.target.rules.needsEngineer || !generalRules.engineerAlwaysCaptureTech) &&
-                this.target.healthTrait.health > 100 * generalRules.engineerCaptureLevel) {
+            if (shouldDamageBeforeCapture(this.game, this.target)) {
                 let damage = Math.floor(generalRules.engineerDamage * this.target.healthTrait.maxHitPoints);
                 const minHealth = Math.floor((1 - Math.floor(1 / generalRules.engineerDamage) * generalRules.engineerDamage) *
                     this.target.healthTrait.maxHitPoints);

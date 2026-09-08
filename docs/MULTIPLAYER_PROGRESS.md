@@ -220,3 +220,29 @@ Mac/Linux session with the user's friend remains the next manual check.
   range ring appears on selection and hides on deselection.
 - Browser regression passed: six-tile weapon ring and selection/deselection
   verified. YR and classic Mac apps rebuilt and signatures verified.
+
+### Chat history, production options, targeting and destruction effects
+
+- Expanded the Enter chat panel with the last ten chat messages. Preserve sender
+  colors and audience labels after top-left notices expire, scroll wrapped text
+  to the newest message, and grow upward above the command bar.
+- Keep YR battle labs and their advanced-unit prerequisites available with
+  superweapons off. Disable the labs' Force Shield ability separately, including
+  captured/preplaced buildings; retain Spy Plane and other non-disableable powers.
+- Mark the minimap canvas texture as sRGB to avoid a second brightness conversion.
+  A GPU sample now displays gray 128 as 128 rather than 188 (32% lower).
+- Include batched sprite layer 1 in picking, so building graphics can be targeted
+  above their foundation. Anchor infantry/tank hitboxes above their feet.
+- Align engineer cursor and entry-time eligibility, including selling buildings
+  and the multi-engineer tech-building exception.
+- Remove incorrect weather-storm flags from debris and Psychic Dominator blasts;
+  actual Lightning Storm strikes retain their lightning effects.
+- Validation: 134 unit tests passed; entry typecheck retains 42 baseline errors.
+  Asset-backed browser checks passed for all three factions' labs/advanced units,
+  disabled powers, building sprite picking, capture eligibility and destruction
+  flags. Actual engineer capture/outpost AA regression passed. Two engine clients
+  verified ten-message history, reopening, audience routing and panel bounds,
+  matched 150 ticks, and stopped on injected divergence at frame 151.
+- YR and classic macOS apps rebuilt; both code signatures verified. Screenshot:
+  `build/macos/chat-popout.png`. These shared engine changes also apply to Linux;
+  both players must rebuild matching source/revision before reconnecting.

@@ -21,6 +21,9 @@ export class SuperWeaponTrait {
         this.addSuperWeaponToPlayerIfNeeded(gameObject.owner, newOwner);
     }
     private addSuperWeaponToPlayerIfNeeded(player: any, world: any): void {
+        // Battle labs remain available with superweapons off. Enforce the option
+        // on abilities too, including preplaced and captured buildings.
+        if (!world.gameOpts.superWeapons && world.rules.getSuperWeapon(this.name).disableableFromShell) return;
         if (player.superWeaponsTrait && !player.superWeaponsTrait.has(this.name)) {
             const superWeapon = world.createSuperWeapon(this.name, player);
             player.superWeaponsTrait.add(superWeapon);

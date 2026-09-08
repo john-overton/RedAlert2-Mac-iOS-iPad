@@ -240,6 +240,8 @@ export failures cannot suppress the error dialog. These changes do not reconnect
 a closed WebSocket or resume an interrupted match.
 
 In-game chat: press Enter to open the composer above the bottom command bar.
+The panel shows the last ten chat messages, including expired HUD notifications,
+with the newest at the bottom. Long messages wrap and the history scrolls.
 Tab cycles the audience (all players/allies), which is remembered for the next
 message in the match. Enter sends; Escape, an empty submission, or clicking away
 cancels. Incoming messages appear at the top left. Typing pauses command hotkeys
