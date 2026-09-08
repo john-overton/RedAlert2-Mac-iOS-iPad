@@ -87,7 +87,7 @@ export function Multiplayer(props: MultiplayerProps) {
                     {field('port', 'Port', 'text', '1620')}
                     {field('password', 'Password', 'password', 'Optional')}
                     <button className="dialog-button" type="submit" disabled={props.busy || !props.canHost}>Create Game</button>
-                    {!props.canHost && <p className="mp-hint">Hosting is available in the Linux desktop app. You can join a host by address here.</p>}
+                    {!props.canHost && <p className="mp-hint">Hosting isn’t supported in this build yet. You can join a host by address.</p>}
                 </fieldset>
             </form>
             <form onSubmit={event => { event.preventDefault(); props.onJoin(); }}>

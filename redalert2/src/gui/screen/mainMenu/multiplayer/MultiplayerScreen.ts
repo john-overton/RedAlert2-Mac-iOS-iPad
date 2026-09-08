@@ -124,7 +124,7 @@ export class MultiplayerScreen extends MainMenuScreen {
             let address = this.fields.address.trim();
             if (host) {
                 const shell = (window as any).__RA2_SHELL__;
-                if (!shell?.hostGame) throw new Error('Hosting requires the Linux desktop app.');
+                if (!shell?.hostGame) throw new Error('Hosting is not supported in this build yet.');
                 const port = Number(this.fields.port);
                 if (!/^\d+$/.test(this.fields.port) || port < 1 || port > 65535) throw new Error('Enter a port between 1 and 65535.');
                 if (!this.pregame.isInitialized()) await this.pregame.initialize();

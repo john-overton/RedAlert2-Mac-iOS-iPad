@@ -46,7 +46,13 @@ if [[ $SKIP_WEB == 0 ]]; then
 fi
 [[ -s "$ROOT/redalert2/dist/index.html" ]] || { echo "Missing web build" >&2; exit 1; }
 APP="$ROOT/build/macos/$VARIANT/Red Alert 2.app"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$ROOT/build/macos/ModuleCache"
+mkdir -p "$APP/Contents/Helpers" "$APP/Contents/MacOS" "$APP/Contents/Resources" "$ROOT/build/macos/ModuleCache"
+# Compile the existing server plus Bun into a standalone helper; players need no runtime install.
+bun build --compile --target=bun-darwin-arm64 "$ROOT/redalert2/server/macos.ts" --outfile "$APP/Contents/Helpers/RA2Server"
+codesign --force --sign - "$APP/Contents/Helpers/RA2Server"
+mkdir -p "$APP/Contents/Resources/Licenses"
+cp "$ROOT/macos/Licenses/Bun-LICENSE.md" "$APP/Contents/Resources/Licenses/"
+bun --version > "$APP/Contents/Resources/Licenses/Bun-version.txt"
 # Synchronize generated resources so rebuilds cannot retain obsolete assets.
 rsync -a --delete --exclude local-pack "$ROOT/redalert2/dist/" "$APP/Contents/Resources/WebDist/"
 if [[ $CAMPAIGN == 1 ]]; then
@@ -83,6 +89,8 @@ files = [{'path': p.relative_to(root).as_posix(), 'size': p.stat().st_size}
 info = dict(CFBundleExecutable='RA2', CFBundleIdentifier=f'com.ra2web.macos.{variant}',
         CFBundleName='Red Alert 2', CFBundleDisplayName="Yuri's Revenge" if variant == 'yr' else 'Red Alert 2',
         CFBundlePackageType='APPL', CFBundleShortVersionString='0.1.0', CFBundleVersion='1',
+        NSLocalNetworkUsageDescription='Host and join Red Alert 2 multiplayer games on your local network.',
+        NSAppTransportSecurity={'NSAllowsLocalNetworking': True},
         LSMinimumSystemVersion='14.0', NSHighResolutionCapable=True, NSPrincipalClass='NSApplication')
 if (resources / 'AppIcon.icns').is_file():
     info['CFBundleIconFile'] = 'AppIcon.icns'
@@ -92,7 +100,7 @@ PY
 xcrun swiftc -O -swift-version 5 -target arm64-apple-macos14.0 \
   -module-cache-path "$ROOT/build/macos/ModuleCache" \
   -framework AppKit -framework WebKit -framework UniformTypeIdentifiers \
-  "$ROOT/ios/Sources/BundleSchemeHandler.swift" "$ROOT/macos/Sources/main.swift" \
+  "$ROOT/ios/Sources/BundleSchemeHandler.swift" "$ROOT/macos/Sources/MultiplayerHost.swift" "$ROOT/macos/Sources/main.swift" \
   -o "$APP/Contents/MacOS/RA2"
 codesign --force --sign - "$APP"
 echo "Built: $APP"

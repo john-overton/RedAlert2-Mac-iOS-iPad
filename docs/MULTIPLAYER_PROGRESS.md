@@ -122,3 +122,28 @@ its headless Ozone launcher previously crashed.
 Their existing S3 findings and script are preserved. Earlier diagnostics under
 `/tmp/ra2-multiplayer-*` and the clean-HEAD typecheck snapshot are optional;
 they are not required source files.
+
+
+## macOS hosting (September 8, 2026)
+
+The native Mac shell now exposes `hostGame`/`stopHosting` through a reply-capable
+WKWebView bridge. `scripts/build-macos.sh` compiles and signs a standalone ARM64
+Bun helper, reusing GameServer and BunWsTransport. No installed runtime is needed
+when launching the app. Hosting is supported by both Mac variants; iOS hosting,
+physical cross-device full matches and NAT/relay support remain pending.
+
+See [Mac hosting and validation](MACOS.md#hosting-multiplayer) for lifecycle,
+network reachability, tests and output locations. Generated binaries and retail
+resources remain ignored. Bun runtime notices are packaged with the app.
+
+
+Validated locally: 116 unit tests; 100 matched lockstep frames with delayed
+socket delivery and the expected mismatch at frame 101; standalone Mac helper
+host/guest, password rejection, chat, custom map/unit content, match start,
+port conflict, invalid port, EOF/termination cleanup and port reuse; native
+WKWebView bridge startup/cancellation/iframe checks; native built-game UI Create
+Game, guest join, Leave Game and same-port rehosting. Both Mac app variants were
+rebuilt and their nested helper/app signatures verified. Native UI checks use
+a separate persistent test profile because WebKit ephemeral storage does not
+support the game's OPFS asset import. Logs are in ignored `build/macos/hosting-*.log`.
+These do not constitute physical two-machine or full-skirmish acceptance.

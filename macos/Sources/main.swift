@@ -4,6 +4,7 @@ import WebKit
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler {
     private var window: NSWindow!
     private var webView: WKWebView!
+    private let multiplayer = MultiplayerHost(executable: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/RA2Server"))
     private var mouseMonitor: Any?
     private var commandClickActive = false
 
@@ -27,8 +28,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         config.mediaTypesRequiringUserActionForPlayback = []
         config.preferences.isElementFullscreenEnabled = true
         config.userContentController.add(self, name: "exitApp")
+        config.userContentController.addScriptMessageHandler(multiplayer, contentWorld: .page, name: "multiplayer")
         config.userContentController.addUserScript(WKUserScript(
-            source: "window.__RA2_SHELL__ = { platform: 'macos', version: '0.1.0', exitApp: () => window.webkit.messageHandlers.exitApp.postMessage(null) };",
+            source: MultiplayerHost.script,
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
@@ -94,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        multiplayer.stop()
         if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
     }
 
@@ -101,7 +104,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         showError(error.localizedDescription)
     }
 
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        multiplayer.stop()
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        let url = navigationAction.request.url
+        decisionHandler(url?.scheme == BundleSchemeHandler.scheme && url?.host == "app" ? .allow : .cancel)
+    }
+
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        multiplayer.stop()
         showError("The game process stopped. Quit and reopen the app to return to the menu. Unsaved progress may be lost.")
     }
 

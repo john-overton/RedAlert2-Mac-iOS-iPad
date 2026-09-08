@@ -146,3 +146,42 @@ existing classic saves are not migrated into the YR app.
 
 The YR app uses the purple retail `RA2MD.ico` icon, converted to `AppIcon.icns`.
 Rebuilds preserve the imported icon when no retail directory is supplied.
+
+
+## Hosting multiplayer
+
+Both Mac variants can host from **Multiplayer → Create Game**. Enter your player
+name, optional password and port (default TCP 1620), then give guests the LAN
+address shown in the lobby. Guests use **Join Game** with the same build, engine,
+retail assets and mod. Allow local-network/incoming connections if macOS asks;
+the selected TCP port must be reachable from the guest. Internet play requires
+a reachable host address/port; this does not add NAT traversal or a relay.
+
+The build compiles a standalone ARM64 `Contents/Helpers/RA2Server` from the shared
+GameServer and Bun WebSocket transport. It includes its runtime, so Finder-launched
+apps do not depend on your shell PATH, Node or Bun installation. The WebKit bridge
+starts it with options over a private pipe and returns its listening port/LAN
+addresses. Leaving the hosted game, closing the app, reloading the main page or
+losing the WebKit content process stops the server. Pipe EOF also stops it if the
+parent exits unexpectedly. Startup failures reach the normal multiplayer error
+panel; stop completes after the process exits so the port can be reused.
+
+Native bridge calls are restricted to the bundled main frame. Host/guest traffic,
+passwords, content delivery, lobby rules and match synchronization use the same
+protocol as Linux. iPhone/iPad hosting is still unimplemented.
+
+Validation commands (build first):
+
+```sh
+bun scripts/macos-host-smoke.ts
+bash scripts/macos-host-bridge-smoke.sh
+bash scripts/macos-host-bridge-smoke.sh --ui
+```
+
+The first uses real sockets to check password rejection, chat, custom map/unit
+content, match start, port conflicts and cleanup. The second uses WKWebView to
+check the production native bridge, socket connections, duplicate requests,
+cancellation, stop/rehost and rejection of iframe requests. The third uses the
+built game UI in a separate native test app with a separate WebKit test profile.
+Physical Mac-to-Linux/iPad full-match and Internet/NAT testing remain separate
+manual acceptance work.

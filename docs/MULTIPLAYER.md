@@ -9,9 +9,16 @@ engine instances, but has not completed the plan's physical two-machine,
 full-skirmish, cable-pull, or Apple-device acceptance tests. The QR LAN prototype
 remains available from the Multiplayer sidebar.
 
-## Play on Linux
+## Play on macOS or Linux
 
-Build and launch the Electron app:
+Build and launch the Mac app:
+
+```sh
+bash scripts/build-macos.sh
+open "build/macos/yr/Red Alert 2.app"
+```
+
+Or build and launch the Linux Electron app:
 
 ```sh
 bash scripts/build-linux.sh
@@ -29,12 +36,12 @@ same build, engine variant, imported retail archives, active mod, and map.
    Each player clicks **Ready**; the host clicks **Start Game**. Two humans are
    required; bots can occupy the remaining map slots.
 
-Only the Linux Electron shell hosts through the menu today. Browser development
-clients can join by address; Apple client networking still needs real-device
-validation. Addresses accept hostnames, `host:port`, `[IPv6]:port`, `ra2://host:port`,
+The macOS and Linux shells host through the menu. Browser development clients
+and iPhone/iPad builds can join by address; physical cross-device full-match
+validation remains pending. Addresses accept hostnames, `host:port`, `[IPv6]:port`, `ra2://host:port`,
 and explicit WebSocket URLs. Passwords are entered separately and never saved
 in recent addresses. IPv6-capable external listeners can be joined; the embedded
-Linux listener currently binds IPv4. The host's TCP port must be reachable.
+Mac and Linux listeners currently bind IPv4. The host's TCP port must be reachable.
 
 Leaving as the physical host ends the server, even after transferring lobby
 administration. Guests cannot keep a host-embedded match alive independently.
@@ -59,6 +66,9 @@ administration. Guests cannot keep a host-embedded match alive independently.
   `dist-server/multiplayer.cjs`; the Linux packaging script stages that bundle
   and the ws MIT licence. No server runtime dependency installation is needed
   in the packaged app.
+- macOS WebKit hosting through a bundled standalone Bun helper, with startup
+  error reporting, duplicate-host prevention, cancellation, and cleanup on
+  departure/app shutdown/content-process failure. See [Mac hosting](MACOS.md#hosting-multiplayer).
 - Menus reuse the original LobbyForm controls, metallic sidebar, red world-map
   background and RA2 button art, with settings-style create/join forms.
 - Build identity combines the Git description and source-content digest, so
@@ -157,7 +167,7 @@ and resource caches. Retail imports are not overwritten or transferred.
 
 The transfer manifest uses SHA-256 while existing map-list/replay CRC keys remain
 compatible. This implementation uses chunked WebSocket transfer on the same port,
-without requiring a separate HTTP listener or master server. Apple host transport
+without requiring a separate HTTP listener or master server. iPhone/iPad host transport
 and real-device acceptance remain separate work.
 
 ### Local content smoke
@@ -188,7 +198,7 @@ clients must use the same build; restart Vite after rebuilding changed source.
   uploads are explicitly disabled. Official maps must already be present and match. Custom maps and unit
   content can now be delivered by the host. Existing CRC map keys remain unchanged;
   delivery manifests and file verification use SHA-256.
-- Apple hosting/relay, LAN discovery, join-link scanning/deep-link registration,
+- iPhone/iPad hosting, relay, LAN discovery, join-link scanning/deep-link registration,
   the master browser/service, dedicated CLI, server-side replays, adaptive
   pacing/NAT, and a public mod repository are not implemented by this slice. The runtime
   adapters and protocol provide the foundation without presenting those

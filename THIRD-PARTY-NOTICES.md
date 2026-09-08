@@ -94,3 +94,15 @@ is also staged beside the Electron server bundle as `ws-LICENSE`.
 
 The multiplayer implementation is original TypeScript based on the design
 recorded in `docs/MULTIPLAYER_PLAN.md`; no OpenRA source has been copied.
+
+
+## Bun runtime — macOS multiplayer helper
+
+The Mac build compiles `redalert2/server/macos.ts` into `Contents/Helpers/RA2Server`
+with Bun. The app therefore includes Bun and its statically linked dependencies;
+players do not need a separately installed runtime. The upstream notices from
+Bun 1.4.2 are retained in `macos/Licenses/Bun-LICENSE.md` and copied into the app’s
+`Contents/Resources/Licenses/`, alongside the build-time Bun version. Source:
+https://github.com/oven-sh/bun/tree/bun-v1.4.2. Update these notices when upgrading
+the bundled runtime. See the upstream document for linked-library notices and
+WebKit rebuild instructions.
