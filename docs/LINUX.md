@@ -1,60 +1,233 @@
-# Linux (Omarchy / Arch) build
+# Building and running on Linux
 
-The Linux app runs the existing TypeScript/WebGL engine in an Electron shell
-on the system Electron package. It reuses the same `ra2app://` resource layout
-as the iOS and macOS shells and the same first-launch asset seeder. It does
-not execute the original Windows game binaries, and nothing is downloaded.
+The Linux app runs the TypeScript/WebGL engine in Electron. It uses the same
+`ra2app://` resources and first-launch asset seeder as the Apple shells. Wine,
+Proton and the original Windows executable are not needed to run this port;
+Proton can be used to install your retail copy before importing its data.
 
-Developed and verified on Omarchy 4.0 (Arch Linux, Hyprland on Wayland,
-x86_64, NVIDIA GPU). Other Arch-based desktops should work the same way;
-other distributions need an Electron 43 package and the same tools.
+**Verified:** Omarchy/Arch, Hyprland/Wayland, x86_64, NVIDIA, Electron 43.
+**Expected but not tested here:** Debian/Ubuntu and other modern glibc Linux
+Desktop systems with Electron 43, working WebGL 2 graphics drivers, and the
+runtime libraries below. Electron makes the shell portable, but does not
+eliminate OS library, GPU, display-server or sandbox differences. ARM64 and
+musl-based distributions such as Alpine are not validated by this guide.
 
-## Requirements and setup
+These steps build the game, not Electron or Chromium from source. They download
+open-source tools and dependencies; game assets come from your own retail copy
+and remain local. Allow several GB of free disk space for dependencies, generated
+assets, the build, and Electron's separate first-launch storage copy.
 
-- Arch-based Linux with the `electron43` package (Electron 43). The launcher
-  falls back to a plain `electron` binary if `electron43` is absent.
-- Bun (the web engine builds with it), Python 3, ffmpeg (asset import only),
-  rsync.
-- Your own Red Alert 2 + Yuri's Revenge installation. No retail assets or
-  icons are included in the repository.
+## 1. Install system tools
 
-```sh
-sudo pacman -S electron43 ffmpeg python rsync
-curl -fsSL https://bun.sh/install | bash      # installs to ~/.bun/bin
+Use a terminal in your normal graphical desktop session. Commands below use Bash.
+
+### Arch / Omarchy
+
+```bash
+sudo pacman -S --needed git curl unzip ffmpeg python python-pillow rsync electron43
 ```
 
-The build scripts add `~/.bun/bin` to `PATH` themselves; add it to your shell
-profile if you want to run `bun` directly.
+`python-pillow` is used only for retail icons that contain BMP instead of PNG.
+The launcher searches for `electron43`, then `electron` on PATH.
 
-**Assets.** Either import from a retail install on this machine, or copy an
-existing import from another machine.
+### Debian 13 / Ubuntu 24.04
 
-- From a retail install (Steam under Proton, or any copy of the game
-  directory): run setup against it. With no path given, the script also
-  searches `~/.steam/steam/steamapps/common`.
+Install build tools and the shared libraries used by the prebuilt Electron
+runtime. GTK pulls in additional desktop libraries through apt dependencies.
 
-  ```sh
-  ./scripts/setup.sh "/path/to/your/ra2/install"
-  ```
+```bash
+sudo apt update
+sudo apt install git curl ca-certificates unzip ffmpeg python3 python3-pil rsync \
+  libgtk-3-0t64 libasound2t64 libnss3 libgbm1 libxss1 libxtst6 \
+  libx11-xcb1 libdrm2 libxkbcommon0 libxrandr2 libxdamage1 libxfixes3 \
+  libxcomposite1 libxext6 libxrender1 libxcb1 libdbus-1-3 xdg-utils
+```
 
-- From another machine where setup already ran: copy `gameres-export/` and the
-  two extracted string tables into the same places in this checkout.
+For Debian 12 / Ubuntu 22.04, replace `libgtk-3-0t64` and `libasound2t64`
+with `libgtk-3-0` and `libasound2`. Package names are release-specific; see
+[Debian's ALSA package](https://packages.debian.org/stable/libs/libasound2t64)
+and [Ubuntu's GTK package](https://packages.ubuntu.com/noble/libgtk-3-0t64).
+Install your distribution's appropriate GPU driver as well. This package list
+has been checked against the build requirements, but has not been exercised
+on a Debian/Ubuntu machine in this project.
 
-  ```sh
-  rsync -avP 'user@host:/path/to/repo/gameres-export/' gameres-export/
-  scp 'user@host:/path/to/repo/redalert2/public/general*.csf' redalert2/public/
-  ```
+### Other distributions
 
-Then build and run from the repository root:
+Install equivalents of Git, curl, unzip, ffmpeg, Python 3, Pillow and rsync,
+plus Electron's GTK 3, NSS, ALSA, GBM/DRM, D-Bus and X11 runtime dependencies.
+Use your distribution's Electron 43 package if available, or the prebuilt
+runtime below. Hyprland is optional; GNOME/KDE and X11 need no Hyprland rules.
 
-```sh
-bash scripts/build-linux.sh --retail-dir "/path/to/your/ra2/install"
+## 2. Install Bun and Electron
+
+Bun builds the web engine and multiplayer server. The repository declares
+Bun 1.3.10 in `redalert2/package.json`; use that version for reproducibility.
+The [Bun installer](https://bun.com/docs/installation) requires unzip on Linux.
+
+```bash
+curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"
+export PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"
+bun --version
+```
+
+Add that PATH export to your shell's startup configuration if it is not already
+present. The setup script needs Bun on PATH; the build script also adds
+`~/.bun/bin` itself.
+
+**On Arch, Electron is already installed by step 1.** On Debian/Ubuntu or a
+system without a suitable package, install the official prebuilt runtime in your
+home directory. The example pins Electron 43.6.0; keep the full extracted
+runtime directory, not just its executable. Electron publishes its binaries on
+[GitHub Releases](https://github.com/electron/electron/releases/tag/v43.6.0).
+
+```bash
+case "$(uname -m)" in
+  x86_64) RA2_ELECTRON_ARCH=x64 ;;
+  aarch64|arm64) RA2_ELECTRON_ARCH=arm64 ;;
+  *) echo "Unsupported CPU for these instructions"; exit 1 ;;
+esac
+mkdir -p "$HOME/.local/share/ra2-electron43" "$HOME/.local/bin"
+curl -fL "https://github.com/electron/electron/releases/download/v43.6.0/electron-v43.6.0-linux-${RA2_ELECTRON_ARCH}.zip" \
+  -o /tmp/ra2-electron43.zip
+unzip -o /tmp/ra2-electron43.zip -d "$HOME/.local/share/ra2-electron43"
+ln -sf "$HOME/.local/share/ra2-electron43/electron" "$HOME/.local/bin/electron"
+electron --version
+```
+
+Use this symlink only if you are not already managing an `electron` executable
+at that location. For graphical app-menu launches, ensure `~/.local/bin` is in
+your desktop session's PATH too; logging out and back in may be necessary after
+adding it. You can always launch explicitly without PATH discovery:
+
+```bash
+"$HOME/.local/share/ra2-electron43/electron" "$PWD/build/linux/yr/app"
+```
+
+Node.js/npm are not required for the production build when using these prebuilt
+Electron instructions. The default Node-based development server and scripted
+UI smokes do need Node; use a current Node 22.12+ or 24 installation from the
+[Node.js installation guide](https://nodejs.org/en/download), or use the Bun
+server command below for manual development.
+
+## 3. Clone the multiplayer branch
+
+```bash
+git clone --branch allied-campaign https://github.com/john-overton/RedAlert2-Mac-iOS-iPad.git
+cd RedAlert2-Mac-iOS-iPad
+```
+
+If you already have a checkout, switch to `allied-campaign` and update it with
+`git pull --ff-only` after preserving any local work. Run the remaining commands
+from this repository root unless a command explicitly changes directories.
+
+## 4. Import your retail assets
+
+Use your own Red Alert 2 **and Yuri's Revenge** installation for this build
+workflow. Setup checks `ra2.mix`, `language.mix`, and `multi.mix`, then imports
+YR resources from `ra2md.mix` and `langmd.mix`. Copy the whole installed game
+directory, including its other MIX and movie files, rather than only these five.
+Steam/Proton installations and copied Windows installation directories work as
+asset sources; point at the directory containing the MIX files.
+
+```bash
+bash scripts/setup.sh "/path/to/your/Red Alert 2 install"
+```
+
+Setup runs `bun install` in `redalert2/`, imports/converts assets with ffmpeg,
+and writes `gameres-export/` and `redalert2/public/general.csf` / `generalmd.csf`.
+Pass the path explicitly for custom Steam libraries or Flatpak Steam installs;
+the script's automatic search covers only a few common locations.
+
+Alternatively, reuse your own already-imported data from another machine:
+
+```bash
+rsync -avP 'user@host:/path/to/repo/gameres-export/' gameres-export/
+scp 'user@host:/path/to/repo/redalert2/public/general*.csf' redalert2/public/
+(cd redalert2 && bun install --frozen-lockfile)
+```
+
+Do not skip the dependency install on a fresh checkout when copying assets.
+Imported/generated retail data is gitignored and should not be committed or
+published with a build. The current Linux build checks for **both string tables
+even with `--ra2`**; an RA2-only import is therefore not a complete input to this
+workflow. Import YR as well, or reuse both tables from your own existing import.
+
+## 5. Build and run
+
+```bash
+bash scripts/build-linux.sh
 build/linux/yr/run.sh
 ```
 
-Skip setup if `gameres-export/` and the string tables already exist. The
-build script packages those imported assets; `--retail-dir` supplies the app
-icon, not an asset import.
+This builds the production web app and multiplayer server, then stages the shell,
+assets and launcher under `build/linux/yr/`. It does not install an application
+or launch anything automatically. To extract the retail app icon too:
+
+```bash
+bash scripts/build-linux.sh --retail-dir "/path/to/your/Red Alert 2 install"
+```
+
+`--retail-dir` supplies the icon, **not an asset import** (except that campaign
+mode also imports missions). Without it, the build reuses an existing icon or
+uses the repository's fallback app icon. First launch seeds local browser
+storage and reloads once; wait for the main menu before starting a game.
+
+For classic RA2:
+
+```bash
+bash scripts/build-linux.sh --ra2
+build/linux/ra2/run.sh
+```
+
+For a desktop menu entry after testing the build:
+
+```bash
+bash scripts/install-linux.sh
+```
+
+This is a per-user install; do not use sudo. It copies to
+`~/.local/share/ra2/yr` by default. Re-run it after rebuilding to update that
+installed copy. Use `--ra2` for classic or `--uninstall` to remove the selected
+variant; saved games and options are retained.
+
+## 6. Update and verify
+
+```bash
+git pull --ff-only
+(cd redalert2 && bun install --frozen-lockfile)
+bash scripts/build-linux.sh
+build/linux/yr/run.sh
+```
+
+Quit the previous app before launching the new build. Existing imported assets
+can be reused. Re-run setup when changing the retail installation; re-run the
+installer if you launch the installed copy instead of `build/linux/yr/run.sh`.
+
+Manual check: launch a skirmish, build and move a unit, confirm rendering/audio,
+and return to the menu. For direct IP, both players must build the same commit
+and source with matching retail imports. Host through **Multiplayer → Create
+Game**, then join using the host's IP and TCP port (default 1620). Custom maps
+and unit packages transfer from the host in the lobby. See [multiplayer usage,
+content delivery, and local automated tests](MULTIPLAYER.md).
+
+```bash
+(cd redalert2 && bun test)
+```
+
+For a manual browser client alongside the desktop host, start a development
+server from another terminal:
+
+```bash
+cd redalert2
+RA2_HTTP=1 bun run dev:bun
+```
+
+Open `http://localhost:4000/?shell=1`. Restart the development server after source
+changes or a commit so its multiplayer build identity matches the packaged app.
+Automated Electron/Chromium smokes are documented in [MULTIPLAYER.md](MULTIPLAYER.md);
+the current scripts default to Arch binary paths and Wayland. Set `RA2_ELECTRON`
+and `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to your installed executables when needed.
+Those smoke scripts have not been validated on Debian or X11.
 
 ## Build options
 
@@ -148,8 +321,16 @@ right-click orders.
 
 - Missing assets or string tables: the build stops with the file it needs;
   rerun setup or copy the files as described above.
-- `error: no Electron found`: install `electron43` (or another Electron
-  package that provides `electron`).
+- `error: no Electron found`: follow step 2 and check `command -v electron43`
+  or `command -v electron`. The launcher's suggested pacman command is Arch-specific.
+- A missing `.so` error: install the corresponding runtime package for your
+  distribution. For the manually downloaded runtime, `ldd ~/.local/share/ra2-electron43/electron` lists its shared-library requirements.
+- Wayland/X11 startup issues: try `build/linux/yr/run.sh --ozone-platform=wayland`
+  in a Wayland session or `--ozone-platform=x11` in X11/XWayland. These are
+  alternatives to test, not a requirement to install Hyprland.
+- A Chromium sandbox startup error: run as your normal user and check your
+  distribution's user-namespace/AppArmor policy or use its packaged Electron.
+  Do not treat `--no-sandbox` as a normal installation step.
 - Changes are not visible: quit, rebuild without `--no-web` after engine or
   CSS edits, and relaunch the correct variant.
 - Blank game or terminated content process: the shell shows an error dialog;

@@ -6,10 +6,11 @@ ARM64 AppKit/WKWebView shell. See the [macOS build guide](docs/MACOS.md)
 for setup, retail icons, controls, troubleshooting, and campaign limitations.
 
 A Linux build is also available, developed on Omarchy (Arch, Hyprland). It
-runs the same web engine in an Electron shell on the system `electron43`
-package, serving the app and assets from the same `ra2app://` layout. See the
-[Linux build guide](docs/LINUX.md) for setup, Hyprland window rules, controls,
-and limitations.
+runs the same web engine in an Electron shell, serving the app and assets
+from the same `ra2app://` layout. The [Linux build guide](docs/LINUX.md) covers
+Arch and Debian/Ubuntu dependencies, prebuilt Electron installation, retail
+asset import, builds and multiplayer testing. Debian/Ubuntu instructions are
+provided but have not yet been validated on those distributions.
 
 Browse the [documentation index](docs/README.md), including [modding units and stats](docs/MODDING.md)
 and [future additions: world and unit editors](docs/FUTURE_ADDITIONS.md).
@@ -301,7 +302,7 @@ cd redalert2 && RA2_HTTP=1 bun run dev
 | `macos/Sources/main.swift` | AppKit shell, native window/menu, trackpad mapping |
 | `scripts/build-macos.sh` | ARM64 macOS build, bundled assets, local signing |
 | `scripts/build-macos-icon.py` | Convert the user's retail ICO artwork to an app ICNS |
-| [`docs/LINUX.md`](docs/LINUX.md) | Linux (Omarchy/Arch) build guide, Hyprland rules, controls, limitations |
+| [`docs/LINUX.md`](docs/LINUX.md) | Linux build guide: Arch and Debian/Ubuntu setup, Electron, asset import, testing |
 | [`docs/MULTIPLAYER.md`](docs/MULTIPLAYER.md) | Direct-IP multiplayer setup, implementation status, and socket/engine/UI smokes |
 | `linux/main.js` | Electron shell: `ra2app://` protocol handler, window, fullscreen, error dialogs |
 | `scripts/build-linux.sh` | Linux build: web build, staged assets, launcher and desktop entry |
