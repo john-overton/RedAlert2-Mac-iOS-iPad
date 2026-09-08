@@ -9,6 +9,7 @@ import { LandType, getLandType } from "@/game/type/LandType";
 import { OccupationBits } from "@/game/rules/TerrainRules";
 import { MapBounds } from "@/game/map/MapBounds";
 import { Rules } from "@/game/rules/Rules";
+import { incrementPerformanceCounter, isPerformanceTelemetryEnabled, measurePerformanceMetric } from "@/performance/PerformanceRuntime";
 interface GameObject {
     tile: Tile;
     onBridge?: boolean;
@@ -146,6 +147,13 @@ export class Terrain {
         });
     }
     computePath(speedType: SpeedType, onBridge: boolean, startTile: Tile, startOnBridge: boolean, endTile: Tile, endOnBridge: boolean, options: PathOptions = {}): PathNode[] {
+        if (!isPerformanceTelemetryEnabled()) {
+            return this.computePathInternal(speedType, onBridge, startTile, startOnBridge, endTile, endOnBridge, options);
+        }
+        incrementPerformanceCounter('terrain.pathRequests');
+        return measurePerformanceMetric('terrain.computePath', () => this.computePathInternal(speedType, onBridge, startTile, startOnBridge, endTile, endOnBridge, options));
+    }
+    private computePathInternal(speedType: SpeedType, onBridge: boolean, startTile: Tile, startOnBridge: boolean, endTile: Tile, endOnBridge: boolean, options: PathOptions): PathNode[] {
         const { maxExpandedNodes = Number.POSITIVE_INFINITY, bestEffort = true, excludeTiles, ignoredBlockers = [] } = options;
         const graph = this.computePassabilityGraph(speedType, onBridge);
         const ignoredTiles = ignoredBlockers
@@ -211,7 +219,9 @@ export class Terrain {
                         graph.addNode(endNodeId, { tile: endTile, onBridge: undefined });
                         addedEndNode = true;
                     }
-                    Math.min(maxExpandedNodes, 500);
+                    // The historical Math.min(maxExpandedNodes, 500) discarded its result.
+                    // Observe this branch without changing best-effort routes or lockstep behavior.
+                    incrementPerformanceCounter('terrain.fallbackCapCandidates');
                 }
             }
             const finalStartId = this.getNodeId(startTile, startOnBridge);
@@ -264,17 +274,26 @@ export class Terrain {
         });
     }
     private computePassabilityGraph(speedType: SpeedType, onBridge: boolean): Graph<NodeData> {
+        if (!isPerformanceTelemetryEnabled()) {
+            return this.computePassabilityGraphInternal(speedType, onBridge);
+        }
+        return measurePerformanceMetric('terrain.graphPreparation', () => this.computePassabilityGraphInternal(speedType, onBridge));
+    }
+    private computePassabilityGraphInternal(speedType: SpeedType, onBridge: boolean): Graph<NodeData> {
         const graphKey = this.getGraphKey(speedType, onBridge);
         let graph = this.passabilityGraphs.get(graphKey);
         if (graph) {
             const invalidatedSet = this.invalidatedTiles.get(graphKey);
             if (invalidatedSet?.size) {
+                incrementPerformanceCounter("terrain.graphUpdates");
+                incrementPerformanceCounter("terrain.invalidatedTiles", invalidatedSet.size);
                 this.updatePassability([...invalidatedSet], speedType, onBridge, graph);
                 invalidatedSet.clear();
                 this.computeIslandIds(graph);
             }
         }
         else {
+            incrementPerformanceCounter("terrain.graphBuilds");
             graph = new Graph<NodeData>();
             this.passabilityGraphs.set(graphKey, graph);
             this.tiles.forEach(tile => {
@@ -379,6 +398,13 @@ export class Terrain {
         return tile.id + (onBridge ? "_bridge" : "");
     }
     private computeIslandIds(graph: Graph<NodeData>): void {
+        if (!isPerformanceTelemetryEnabled()) {
+            return this.computeIslandIdsInternal(graph);
+        }
+        incrementPerformanceCounter('terrain.islandBuilds');
+        return measurePerformanceMetric('terrain.islandRebuild', () => this.computeIslandIdsInternal(graph));
+    }
+    private computeIslandIdsInternal(graph: Graph<NodeData>): void {
         let islandId = 1;
         graph.forEachNode(node => {
             node.data.islandId = undefined;

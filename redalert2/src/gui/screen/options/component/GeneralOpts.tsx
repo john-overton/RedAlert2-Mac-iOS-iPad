@@ -1,3 +1,4 @@
+import { downloadPerformanceReport, resetPerformanceTelemetry } from "@/performance/PerformanceRuntime";
 import React, { useEffect, useState } from "react";
 import { Slider } from "@/gui/component/Slider";
 import { SCROLL_BASE_FACTOR, GeneralOptions } from "@/gui/screen/options/GeneralOptions";
@@ -72,10 +73,6 @@ const performanceOptionItems = [
     {
         key: 'worldSoundLoopCache',
         label: 'World Sound Loop Cache',
-    },
-    {
-        key: 'telemetry',
-        label: 'Telemetry & Benchmarks',
     },
 ] as const;
 export const GeneralOpts: React.FC<GeneralOptsProps> = ({ strings, options, fullScreen, inGame, localPrefs, }) => {
@@ -206,6 +203,21 @@ export const GeneralOpts: React.FC<GeneralOptsProps> = ({ strings, options, full
     </fieldset>
     <fieldset>
       <legend>Performance</legend>
+      <div className="item">
+        <label>
+          <span className="label">Slowdown diagnostics</span>
+          <input type="checkbox" aria-describedby="slowdown-diagnostics-help" defaultChecked={options.performance.telemetry.value}
+            onChange={(event) => (options.performance.telemetry.value = event.target.checked)}/>
+        </label>
+      </div>
+      <p id="slowdown-diagnostics-help">
+        Off by default. Enable to record local performance samples while investigating slowdowns
+        in multiplayer or single player. Only affects this device and can add overhead.
+      </p>
+      <div className="item">
+        <button type="button" onClick={() => downloadPerformanceReport()}>Save slowdown report</button>
+        <button type="button" onClick={() => resetPerformanceTelemetry()}>Clear recorded samples</button>
+      </div>
       {performanceOptionItems.map((item) => (<div className="item" key={item.key}>
           <label>
             <span className="label">{item.label}</span>

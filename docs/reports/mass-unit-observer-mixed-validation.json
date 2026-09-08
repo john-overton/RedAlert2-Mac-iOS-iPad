@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-engine mixed-runtime lockstep correctness validation; not a performance benchmark",
+  "sourceArtifacts": [
+    {
+      "path": "build/mass-unit-observer-mixed.json",
+      "bytes": 2542960,
+      "sha256": "42aeaf28bf9ad6109f87fb4cebaa58f1471132b90dcd7a6d811d04a2144da8c0"
+    },
+    {
+      "path": "build/mass-unit-observer-mixed.log",
+      "bytes": 944,
+      "sha256": "cb02ff3fc224acb8deed5e558b2b144561f438cade3590973fb4e1c19f9ddc42"
+    },
+    {
+      "path": "build/observer-long-smoke.json",
+      "bytes": 205,
+      "sha256": "2429453fb0d7ee42c25092c02812e65cf293d5439a13414aff9de1c600d2752c"
+    }
+  ],
+  "command": "RA2_MIXED_ENGINE_SMOKE=1 RA2_DEV_URL=http://127.0.0.1:4001 bun scripts/observer-engine-smoke.mjs",
+  "buildMode": "development server",
+  "ticks": 10000,
+  "unitsPerClient": 40,
+  "roster": "JUMPJET (rocketeer)",
+  "mapSelection": "first available official Bay of Pigs map in sorted map list",
+  "repeatedOrdersPerClient": 67,
+  "everyTickHashesMatch": true,
+  "clients": [
+    {
+      "role": "player",
+      "engine": "chromium",
+      "telemetryEnabled": true,
+      "tick": 10000,
+      "orders": 67,
+      "units": 40,
+      "acceptedOrders": 2680
+    },
+    {
+      "role": "player",
+      "engine": "webkit",
+      "telemetryEnabled": false,
+      "tick": 10000,
+      "orders": 67,
+      "units": 40,
+      "acceptedOrders": null
+    },
+    {
+      "role": "observer",
+      "engine": "webkit",
+      "telemetryEnabled": true,
+      "tick": 10000,
+      "orders": 67,
+      "units": 40,
+      "acceptedOrders": 2680
+    }
+  ],
+  "lateObserver": {
+    "ticks": 10000,
+    "hash": 4098666184,
+    "errors": [],
+    "peakBufferedFrames": 48,
+    "suppressedTicks": 9998,
+    "crateLifecycle": false,
+    "socketRecovery": false
+  },
+  "verification": "Runner compares complete per-tick arrays for commander/commander and commander/late-observer, verifies 10,000 entries, and fails on browser/session errors; compact raw result records the successful assertion, not those arrays.",
+  "limitations": [
+    "Engine mapping follows the mixed-engine runner boot order.",
+    "Development runtime and concurrent correctness checks do not provide performance acceptance evidence.",
+    "Original raw capture does not embed source/build fingerprints."
+  ]
+}

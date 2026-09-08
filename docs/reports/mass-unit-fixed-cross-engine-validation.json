@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "kind": "cross-engine correctness diagnostic, not performance baseline",
+  "generatedAt": "2026-09-08T22:10:31.170Z",
+  "config": {
+    "map": "bayopigs.map",
+    "timestamp": 1757000000000,
+    "gameSpeed": 5,
+    "repeats": 5,
+    "ticks": 450,
+    "counts": [
+      40
+    ],
+    "scenarios": [
+      {
+        "name": "rocketeer-attack-and-attack-move",
+        "roster": [
+          {
+            "type": 3,
+            "name": "JUMPJET"
+          }
+        ],
+        "targets": [
+          {
+            "type": 7,
+            "name": "HTNK",
+            "offset": [
+              6,
+              0
+            ]
+          },
+          {
+            "type": 7,
+            "name": "HTNK",
+            "offset": [
+              8,
+              0
+            ]
+          },
+          {
+            "type": 7,
+            "name": "HTNK",
+            "offset": [
+              10,
+              0
+            ]
+          }
+        ],
+        "commands": [
+          {
+            "tick": 0,
+            "orderType": 2,
+            "targetIndex": 0
+          },
+          {
+            "tick": 90,
+            "orderType": 4,
+            "destination": [
+              70,
+              70
+            ]
+          },
+          {
+            "tick": 180,
+            "orderType": 4,
+            "destination": [
+              80,
+              70
+            ]
+          },
+          {
+            "tick": 270,
+            "orderType": 4,
+            "destination": [
+              70,
+              80
+            ]
+          }
+        ]
+      }
+    ],
+    "render": false,
+    "deviceScaleFactor": 2
+  },
+  "sourceArtifacts": [
+    {
+      "path": "build/mass-unit-fixed-state-chromium.json",
+      "sha256": "58b4fc2fd08c4d0da7cbcfd8f989ea70dcdc4769bbd78e06bef0ab9c93a77f78",
+      "bytes": 3995395,
+      "provenance": {
+        "sourceCheckoutCommit": "e43a63009f8e9e361598560e93ebf9623ef6eb2c",
+        "sourceCheckoutDirty": true,
+        "sourceMatchesBuild": "unverified; commit/dirty describe the checkout at capture time",
+        "servedBuild": {
+          "sha256": "fee09b9fcf79d932c339d562cc3dd9aa54b4ce88d87d0451d6bf676c650651ab",
+          "files": 207
+        },
+        "runnerSha256": "bdf9cfdf661846a122b5c68d74b19c3893b3c7d076e3c9bdbdd3e21c4de83ebe",
+        "configSha256": "8339fb72296e2d99c11a910375a58000d76f3efc52e8b3781fe9884d223a82d0",
+        "externalUrl": null
+      },
+      "runtime": {
+        "engine": "chromium",
+        "platform": "darwin",
+        "release": "25.6.0",
+        "arch": "arm64",
+        "cpu": "Apple M3",
+        "memory": 25769803776,
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "deviceScaleFactor": 2,
+        "storageContext": "ephemeral Chromium context",
+        "browserVersion": "152.0.7977.77"
+      }
+    },
+    {
+      "path": "build/mass-unit-fixed-state-webkit.json",
+      "sha256": "c84b4c033816b468cf63695c1795135cfb403bf4406f5d96e6a9e3604973fc07",
+      "bytes": 3995327,
+      "provenance": {
+        "sourceCheckoutCommit": "e43a63009f8e9e361598560e93ebf9623ef6eb2c",
+        "sourceCheckoutDirty": true,
+        "sourceMatchesBuild": "unverified; commit/dirty describe the checkout at capture time",
+        "servedBuild": {
+          "sha256": "fee09b9fcf79d932c339d562cc3dd9aa54b4ce88d87d0451d6bf676c650651ab",
+          "files": 207
+        },
+        "runnerSha256": "af586f6eeba728a1ad2f6bcdc3bc50f4760b805f374835aafc150eecc28064b2",
+        "configSha256": "8339fb72296e2d99c11a910375a58000d76f3efc52e8b3781fe9884d223a82d0",
+        "externalUrl": null
+      },
+      "runtime": {
+        "engine": "webkit",
+        "platform": "darwin",
+        "release": "25.6.0",
+        "arch": "arm64",
+        "cpu": "Apple M3",
+        "memory": 25769803776,
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "deviceScaleFactor": 2,
+        "storageContext": "persistent WebKit profile",
+        "browserVersion": "26.0"
+      }
+    }
+  ],
+  "comparedTicks": 450,
+  "allHashesMatch": true,
+  "setupStates": [
+    {
+      "tick": 0,
+      "hash": 4099446186,
+      "otherHash": 4099446186,
+      "fullDebugStateEqual": true,
+      "objectHashesEqual": true,
+      "initialRandom": 0,
+      "otherRandom": 0
+    },
+    {
+      "tick": 1,
+      "hash": 1508933850,
+      "otherHash": 1508933850,
+      "fullDebugStateEqual": true,
+      "objectHashesEqual": true,
+      "initialRandom": 0,
+      "otherRandom": 0
+    }
+  ],
+  "finalPositionsMatch": true,
+  "targetOutcomesMatch": true,
+  "limitation": "One run per engine; concurrent correctness work permitted, so timings are not benchmark evidence."
+}

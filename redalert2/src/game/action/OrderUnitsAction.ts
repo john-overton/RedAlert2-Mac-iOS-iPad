@@ -1,3 +1,4 @@
+import { incrementPerformanceCounter, measurePerformanceMetric, setPerformanceSimulationTick } from "@/performance/PerformanceRuntime";
 import { canControl } from '../campaign/CampaignControl';
 import { DataStream } from "@/data/DataStream";
 import { Action } from "@/game/action/Action";
@@ -113,6 +114,10 @@ export class OrderUnitsAction extends Action {
         return result;
     }
     process(): void {
+        setPerformanceSimulationTick(this.game.currentTick);
+        return measurePerformanceMetric('order.total', () => this.processOrders());
+    }
+    private processOrders(): void {
         if (this.game.campaign?.inputLocked && this.player === this.game.localPlayer) return;
         if (this.isInvalid) {
             return;
@@ -129,7 +134,8 @@ export class OrderUnitsAction extends Action {
                 return;
             }
         }
-        const validatedOrders = this.validateOrders(player).slice(0, ORDER_UNIT_LIMIT);
+        const validatedOrders = measurePerformanceMetric('order.validation', () => this.validateOrders(player)).slice(0, ORDER_UNIT_LIMIT);
+        incrementPerformanceCounter('order.accepted', validatedOrders.length);
         const processedOrders: any[] = [];
         const moveOrders: any[] = [];
         const scatterOrders: any[] = [];
@@ -170,7 +176,7 @@ export class OrderUnitsAction extends Action {
                 }
                 groups.forEach((orders, bridge) => {
                     const units = orders.map((order: any) => order.sourceObject);
-                    const positions = movePositionHelper.findPositions(units, this.target.tile, bridge, forceMove);
+                    const positions = measurePerformanceMetric('order.formation', () => movePositionHelper.findPositions(units, this.target.tile, bridge, forceMove));
                     orders.forEach((order: any) => {
                         // The formation helper only places units; a move order
                         // on an undeployable building (slave miner, MCV'd
@@ -248,12 +254,15 @@ export class OrderUnitsAction extends Action {
                 this.game.events.dispatch(new CheerEvent(player));
             }
         }
-        processedOrders.forEach((order: any) => order.sourceObject.unitOrderTrait.addOrder(order, this.queue));
+        incrementPerformanceCounter('order.dispatched', processedOrders.length);
+        if (this.queue) incrementPerformanceCounter('order.queued', processedOrders.length);
+        measurePerformanceMetric('order.dispatch', () => processedOrders.forEach((order: any) => order.sourceObject.unitOrderTrait.addOrder(order, this.queue)));
         this.updateWaypointPaths(processedOrders);
     }
     private validateOrders(player: any): any[] {
         const selection = this.orderActionContext.getOrCreateSelection(player);
         const selectedUnits = selection.getSelectedUnits();
+        incrementPerformanceCounter('order.selected', selectedUnits.length);
         const baseOrder = this.orderFactory.create(this.orderType, selection);
         baseOrder.target = this.target;
         const validOrders: any[] = [];
@@ -281,6 +290,7 @@ export class OrderUnitsAction extends Action {
             else {
                 let orderFound = false;
                 for (const priorityOrderType of orderPriorities) {
+                    incrementPerformanceCounter('order.fallbackCandidates');
                     const order = this.orderFactory.create(priorityOrderType, selection);
                     order.set(unit, this.target);
                     if (!(order.singleSelectionRequired && selectedUnits.length > 1) &&
@@ -301,6 +311,7 @@ export class OrderUnitsAction extends Action {
                 }
             }
         }
+        incrementPerformanceCounter('order.validatedBeforeCap', validOrders.length);
         return validOrders;
     }
     private updateWaypointPaths(orders: any[]): void {

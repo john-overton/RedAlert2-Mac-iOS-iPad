@@ -2,6 +2,7 @@ import { RadialTileFinder } from '@/game/map/tileFinder/RadialTileFinder';
 import { MovementZone } from '@/game/type/MovementZone';
 import { SpeedType } from '@/game/type/SpeedType';
 import { Target } from '@/game/Target';
+import { incrementPerformanceCounter } from '@/performance/PerformanceRuntime';
 interface GameObject {
     tile: Tile;
     rules: {
@@ -47,6 +48,8 @@ export class MovePositionHelper {
     findPositions(objects: GameObject[], targetTile: Tile, sourceBridge: Bridge | undefined, isSpecialCondition: boolean): Map<GameObject, Tile> {
         const tileAssignments = new Map<Tile, GameObject[]>();
         const clusters = this.clusterObjects(objects);
+        incrementPerformanceCounter('formation.units', objects.length);
+        incrementPerformanceCounter('formation.clusters', clusters.length);
         if (!clusters.length) {
             throw new Error("We should have found at least one cluster");
         }
@@ -54,7 +57,9 @@ export class MovePositionHelper {
         clusters.splice(clusters.indexOf(largestCluster), 1);
         const unplacedObjects: GameObject[] = [];
         const centerTile = this.findCenterTile([...largestCluster.objects]);
+        let candidates = 0;
         largestCluster.objects.forEach(obj => {
+            candidates++;
             const candidateTile = this.map.tiles.getByMapCoords(targetTile.rx + obj.tile.rx - centerTile.rx, targetTile.ry + obj.tile.ry - centerTile.ry);
             const bridge = candidateTile?.onBridgeLandType
                 ? this.map.tileOccupation.getBridgeOnTile(candidateTile)
@@ -84,6 +89,7 @@ export class MovePositionHelper {
         const tileFinder = new RadialTileFinder(this.map.tiles as any, this.map.mapBounds as any, targetTile as any, { width: 1, height: 1 }, 1, 5, () => true);
         let nextTile: Tile | undefined;
         while (unplacedObjects.length && (nextTile = tileFinder.getNextTile() as any)) {
+            candidates++;
             const obj = unplacedObjects[0];
             const bridge = this.map.tileOccupation.getBridgeOnTile(nextTile);
             if ((!tileAssignments.has(nextTile) || this.tileHasRoom(obj, tileAssignments.get(nextTile)!)) &&
@@ -100,6 +106,8 @@ export class MovePositionHelper {
                 assignedObjects.push(unplacedObjects.shift()!);
             }
         }
+        incrementPerformanceCounter('formation.candidates', candidates);
+        incrementPerformanceCounter('formation.fallbackUnits', unplacedObjects.length);
         const result = new Map<GameObject, Tile>();
         tileAssignments.forEach((objects, tile) => {
             objects.forEach(obj => result.set(obj, tile));

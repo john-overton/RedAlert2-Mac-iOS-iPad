@@ -15,6 +15,7 @@ export class NetworkMatchSession {
     private readonly frames = new Map<number, Map<string, Uint8Array>>();
     private readonly aiTakeovers = new Set<string>();
     matchHealth: Extract<ServerMessage, { type: 'matchHealth' }>['players'] = [];
+    private healthReceivedAt?: number;
     controlError?: string;
     private readonly drops = new Map<string, number>();
     private readonly loaded = new Map<string, number>();
@@ -116,6 +117,37 @@ export class NetworkMatchSession {
         return { tick, controlPeerId: this.descriptor.hostPeerId, dropPeerIds: drops, batches: expected.map(peerId => ({
             tick, peerId, turnId: `${peerId}:${frame}`, actionData: packets!.get(peerId)!, dropPeerIds: [], receivedAt: 0,
         })) };
+    }
+    /** Bounded local evidence; missing relayed batches do not identify the cause of delay. */
+    getPerformanceSnapshot(waitingTick?: number) {
+        const frame = waitingTick === undefined ? undefined : waitingTick + 1;
+        const expected = frame === undefined ? [] : this.descriptor.humanAssignments
+            .filter(({ peerId }) => this.active.has(peerId) && (this.drops.get(peerId) ?? Infinity) > frame)
+            .map(({ peerId }) => peerId);
+        const packets = frame === undefined ? undefined : this.frames.get(frame);
+        return {
+            role: this.isObserver() ? 'observer' : 'commander',
+            localPeerId: this.descriptor.localPeerId,
+            waitingTick: waitingTick ?? null,
+            waitingWireFrame: frame ?? null,
+            missingPeerIds: expected.filter(id => !packets?.has(id)).slice(0, 16),
+            receivedPeerIds: expected.filter(id => packets?.has(id)).slice(0, 16),
+            peerDetailsTruncated: expected.length > 16 || this.matchHealth.length > 16,
+            activePeerCount: this.active.size,
+            bufferedFrameCount: this.frames.size,
+            pendingLocalTurnCount: this.submitted.size,
+            lastConsumedFrame: this.lastConsumedFrame,
+            configuredOrderLatencyFrames: this.start.orderLatency,
+            allPeersLoaded: this.areAllPlayersLoaded(),
+            observerHistoryPendingFrame: this.historyPending ?? null,
+            observerLiveFrame: this.isObserver() ? this.liveFrame : null,
+            transport: this.connection.getPerformanceSnapshot?.() ?? null,
+            // These server measurements are currently broadcast only to the host.
+            serverHealthAgeMs: this.healthReceivedAt === undefined ? null : Math.max(0, Date.now() - this.healthReceivedAt),
+            serverReportedPeers: this.matchHealth.slice(0, 16).map(peer => ({
+                peerId: String(peer.clientId), serverRoundTripMs: peer.ping, serverProgressLagMs: peer.lagMs,
+            })),
+        };
     }
     getSnapshot(): LanMatchSnapshotState {
         return {
@@ -233,7 +265,7 @@ export class NetworkMatchSession {
                     && (!('generation' in message) || message.generation !== this.start.generation)) return;
                 if (message.type === 'history') { if (data.length > 65536) throw new Error('Observer history packet too large.'); this.receiveHistory(message); this.onSnapshotChange.dispatch(this, this.getSnapshot()); return; }
                 if (this.isObserver() && ['loaded', 'allLoaded', 'disconnect'].includes(message.type)) return;
-                if (message.type === 'matchHealth') { this.matchHealth = message.players; return; }
+                if (message.type === 'matchHealth') { this.matchHealth = message.players; this.healthReceivedAt = Date.now(); return; }
                 if (message.type === 'error' && message.code === 'invalidCommand') { this.controlError = message.message; return; }
                 if (message.type === 'chat') { this.onChat.dispatch(this, message); return; }
                 if (message.type === 'loaded') this.loaded.set(String(message.clientId), message.percent);

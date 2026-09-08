@@ -1,11 +1,15 @@
 // bun scripts/observer-engine-smoke.mjs — requires an asset-seeded dev server.
 // Three actual engine pages: two commanders, a pregame observer reused for a late join.
-import { chromium } from '../redalert2/node_modules/playwright-core/index.mjs';
+import { chromium, webkit } from '../redalert2/node_modules/playwright-core/index.mjs';
 import { GameServer } from '../redalert2/src/network/server/GameServer.ts';
 import { BunWsTransport } from '../redalert2/server/BunWsTransport.ts';
 import { HANDSHAKE_PROTOCOL, ORDERS_PROTOCOL } from '../redalert2/src/network/server/Protocol.ts';
-import { mkdirSync, writeFileSync } from 'node:fs';
-const longCatchup = process.env.RA2_OBSERVER_LONG_SMOKE === '1';
+import { mkdirSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+const mixedEngines = process.env.RA2_MIXED_ENGINE_SMOKE === '1';
+const massUnits = mixedEngines || process.env.RA2_MASS_UNIT_SMOKE === '1';
+const longCatchup = massUnits || process.env.RA2_OBSERVER_LONG_SMOKE === '1';
 const crateLifecycle = process.env.RA2_CRATE_LIFECYCLE_SMOKE === '1';
 const recoverySmoke = process.env.RA2_RECOVERY_SMOKE === '1';
 const finalTicks = longCatchup ? 10000 : 1200;
@@ -14,10 +18,12 @@ const identity = { protocol: HANDSHAKE_PROTOCOL, ordersProtocol: ORDERS_PROTOCOL
 const transport = new BunWsTransport(0, '127.0.0.1');
 const browser = await chromium.launch({headless:true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE} : {}), args:['--disable-dev-shm-usage']});
 const context = await browser.newContext({viewport:{width:1280,height:900}});
+const webkitProfile = mixedEngines ? mkdtempSync(join(tmpdir(), 'ra2-mixed-observer-')) : undefined;
+const webkitContext = mixedEngines ? await webkit.launchPersistentContext(webkitProfile, { headless:true, viewport:{width:1280,height:900} }) : undefined;
 const pages = [], errors = [];
 let core, timer, progress;
 async function boot() {
-  const page = await context.newPage();
+  const page = await (webkitContext && pages.length > 0 ? webkitContext : context).newPage();
   pages.push(page);
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(`${base}/?shell=1`);
@@ -27,7 +33,7 @@ async function boot() {
   return page;
 }
 async function connect(page, name, role, cap = 600) {
-  await page.evaluate(async ({identity,address,name,role,cap,crateLifecycle}) => {
+  await page.evaluate(async ({identity,address,name,role,cap,crateLifecycle,massUnits}) => {
     const { LobbyClient } = await import('/src/network/client/LobbyClient.ts');
     const controller = window.__ra2debug.mainMenuController.getCurrentScreen().rootController;
     const probe = window.__observerSmoke = {cap,role,hashes:[],chat:[],errors:[],paused:false,peakBufferedFrames:0,suppressedTicks:0};
@@ -49,6 +55,38 @@ async function connect(page, name, role, cap = 600) {
     const { PowerupType } = await import('/src/game/type/PowerupType.ts');
     const update = Game.prototype.update;
     Game.prototype.update = function(...args) {
+      if (massUnits) {
+        const debug = window.__ra2debug;
+        // Same deterministic fixture on both commanders and history replay. One
+        // commander profiles while the other does not; no timing drives orders.
+        if (this.currentTick === 50) {
+          debug.performance.setEnabled('telemetry', name !== 'Commander 2');
+          debug.performance.reset();
+          const owner = this.getPlayerByName('Commander 1');
+          const origin = this.map.startingLocations[owner.startLocation];
+          const tiles = this.map.tiles.getAll().slice().sort((a,b) =>
+            (Math.abs(a.rx-origin.x)+Math.abs(a.ry-origin.y)) -
+            (Math.abs(b.rx-origin.x)+Math.abs(b.ry-origin.y)) || a.ry-b.ry || a.rx-b.rx);
+          probe.massUnits = [];
+          for (let i=0;i<40;i++) {
+            const unit = this.createObject(3, 'JUMPJET');
+            const tile = tiles.find(t => this.map.terrain.getPassableSpeed(t,unit.rules.speedType,false,false)>0 &&
+              !this.map.tileOccupation.getObjectsOnTile(t).some(o=>o.isUnit()||o.isBuilding()));
+            if (!tile) throw new Error('No mass-unit fixture spawn tile');
+            this.changeObjectOwner(unit,owner); this.spawnObject(unit,tile); probe.massUnits.push(unit);
+          }
+          probe.massDestinations = [probe.massUnits[0].tile, probe.massUnits[39].tile];
+          probe.massOrders = 0;
+        }
+        if (this.currentTick >= 50 && (this.currentTick-50)%150===0) {
+          const owner = this.getPlayerByName('Commander 1');
+          const selection = debug.actionFactory.create(8); selection.player=owner;
+          selection.unitIds=probe.massUnits.filter(u=>!u.isDestroyed).map(u=>u.id); selection.process();
+          const order=debug.actionFactory.create(9); order.player=owner; order.orderType=0;
+          order.target=this.createTarget(undefined,probe.massDestinations[probe.massOrders%2]); order.process();
+          probe.massOrders++;
+        }
+      }
       // Repeat the same deterministic lifecycle on every engine, including a
       // late observer replaying from tick zero. Before the fix tick 300 crashes.
       if (crateLifecycle && this.currentTick === 50) {
@@ -85,7 +123,7 @@ async function connect(page, name, role, cap = 600) {
       client.command('player',{slotIndex:self.slotIndex,teamId:self.slotIndex,colorId:self.slotIndex,countryId:0,startPos:self.slotIndex});
       client.command('state',{ready:true,mapDigest:client.session.gameOpts.mapDigest});
     } else if (client.session.state === 'started') client.observeGame();
-  },{identity,address:`127.0.0.1:${transport.port}`,name,role,cap,crateLifecycle});
+  },{identity,address:`127.0.0.1:${transport.port}`,name,role,cap,crateLifecycle,massUnits});
 }
 async function drive(page) {
   await page.waitForFunction(() => window.__ra2debug?.gameScreen?.gameTurnMgr && (window.__observerSmoke.role!=='observer' || window.__ra2debug.gameScreen.gameAnimationLoop?.isStarted),undefined,{timeout:180000});
@@ -114,17 +152,17 @@ try {
   progress = setInterval(async () => console.log('[observer smoke]', await Promise.all(pages.filter(p=>!p.isClosed()).map(p=>p.evaluate(()=>({tick:window.__ra2debug?.game?.currentTick,fatal:window.__observerSmoke?.match?.fatalError,errors:window.__observerSmoke?.errors}))))),30000);
   const host = await boot(), guest = await boot();
   let observer = await boot();
-  const gameOpts = await host.evaluate(async (longCatchup) => {
+  const gameOpts = await host.evaluate(async ({longCatchup,massUnits}) => {
     const screen=window.__ra2debug.mainMenuController.getCurrentScreen();
     const {Engine}=await import('/src/engine/Engine.ts');
-    const map=screen.mapList.getAll().filter(map=>map.official&&map.maxSlots>=4&&Engine.vfs.fileExists(map.fileName)).sort((a,b)=>a.fileName.localeCompare(b.fileName))[0];
+    const map=screen.mapList.getAll().filter(map=>map.official&&map.maxSlots>=4&&(!massUnits||map.fileName.toLowerCase().includes('bayopigs'))&&Engine.vfs.fileExists(map.fileName)).sort((a,b)=>a.fileName.localeCompare(b.fileName))[0];
     if (!map) throw new Error('No official four-slot map');
     screen.pregameController.applyMapSelection({gameMode:screen.gameModes.getById(screen.pregameController.getGameOpts().gameMode),mapName:map.fileName,changedMapFile:await Engine.vfs.openFileWithRfs(map.fileName)});
     const opts=screen.pregameController.getGameOpts();
     opts.aiPlayers=Array.from({length:opts.maxSlots},(_,i)=>!longCatchup&&i>=2?{difficulty:2,countryId:-2,colorId:-2,startPos:-2,teamId:-2}:undefined);
     opts.disconnectAi=true;
     return opts;
-  },longCatchup);
+  },{longCatchup,massUnits});
   core=new GameServer({identity,gameOpts,allowSpectators:true,slotsInfo:Array.from({length:gameOpts.maxSlots},(_,i)=>({type:i<2?1:longCatchup?0:4})),orderLatency:2,now:Date.now,random:()=>0.125},transport);
   await core.start(); timer=setInterval(()=>core.tick(),1000);
   await connect(host,'Commander 1','player');
@@ -227,7 +265,21 @@ try {
   if (!result.suppressedTicks || result.peakBufferedFrames>64) throw new Error(`Catch-up did not suppress gameplay sound or exceeded frame budget: ${JSON.stringify(result)}`);
   if (result.errors.length||result.fatal) throw new Error(`Observer errors: ${JSON.stringify(result)}`);
   mkdirSync('build',{recursive:true});writeFileSync(longCatchup?'build/observer-long-smoke.json':'build/observer-engine-smoke.json',JSON.stringify(result,null,2));
+  if (massUnits) {
+    const results = await Promise.all([host,guest,observer].map(page=>page.evaluate(()=>({
+      role:window.__observerSmoke.role, orders:window.__observerSmoke.massOrders,
+      units:window.__observerSmoke.massUnits.length, tick:window.__ra2debug.game.currentTick,
+      telemetry:window.__ra2debug.performance.snapshot(),
+    }))));
+    if (results.some(r=>r.units!==40||r.orders!==67||r.tick!==10000)) throw new Error('Incomplete mass-unit observer workload');
+    if (!results[0].telemetry.enabled || results[1].telemetry.enabled || !results[2].telemetry.enabled) throw new Error('Profiling on/off coverage missing');
+    mkdirSync('build',{recursive:true});
+    writeFileSync(mixedEngines ? 'build/mass-unit-observer-mixed.json' : 'build/mass-unit-observer.json',JSON.stringify({ticks:10000,hashesMatch:true,mixedEngines,results},null,2));
+    console.log((mixedEngines ? 'Chrome/WebKit: ' : '') + '40 rocketeers, 67 repeated orders: profiling on/off commanders and late observer match every hash through 10,000 ticks');
+  }
   console.log(`Observer pregame, chat badges/isolation, paused-observer independence, late history${longCatchup?'':' and AI takeover'} passed through ${finalTicks} ticks`);
 } finally {
   clearInterval(progress);clearInterval(timer);core?.stop();transport.close();await browser.close();
+  await webkitContext?.close();
+  if (webkitProfile) rmSync(webkitProfile,{recursive:true,force:true});
 }

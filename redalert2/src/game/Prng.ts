@@ -3,7 +3,10 @@ import { Crc32 } from "@/data/Crc32";
 import { binaryStringToUint8Array } from "@/util/string";
 export class Prng {
     private prng: MersenneTwister;
-    private lastRandom: number;
+    // Game hashes this value before the first draw. Undefined becomes a NaN
+    // with engine-dependent Float64 bytes; a finite sentinel keeps that hash
+    // deterministic without advancing the Mersenne Twister sequence.
+    private lastRandom: number = 0;
     static factory(seed: number | string, sequence: number): Prng {
         const numericSeed = Number.isNaN(Number(seed))
             ? Crc32.calculateCrc(binaryStringToUint8Array(seed as string))

@@ -1,5 +1,5 @@
 import { IrcConnection } from "@/network/IrcConnection";
-import { recordGamePerformanceFrame } from "@/performance/PerformanceRuntime";
+import { recordGamePerformanceFrame, isPerformanceTelemetryEnabled, recordSchedulerPerformanceFrame, measurePerformanceMetric, setPerformanceContext } from "@/performance/PerformanceRuntime";
 interface LocalPlayer {
     isObserver: boolean;
 }
@@ -78,6 +78,16 @@ export class GameAnimationLoop {
     };
     private doFrame = (timestamp: number): void => {
         if (this.isStarted && !this.paused) {
+            if (isPerformanceTelemetryEnabled()) {
+                recordSchedulerPerformanceFrame(timestamp);
+                setPerformanceContext('gameLoop', {
+                    hidden: document.hidden, waitingForTurn: this.turnMgrIsWaiting,
+                    turnMillis: this.gameTurnMgr.getTurnMillis(),
+                    frameLimit: this.options.frameLimit?.value ?? 0,
+                    frameLimitOverride: this.options.frameLimitOverride?.value ?? 0,
+                    catchingUp: Boolean(this.options.isCatchingUp?.()),
+                });
+            }
             let deltaFrames = this.updateDeltaGameFrames(timestamp);
             const catchingUp = Boolean(this.options.isCatchingUp?.());
             if (catchingUp) {
@@ -155,6 +165,7 @@ export class GameAnimationLoop {
     }
     private handleVisibilityChange = (): void => {
         const isHidden = document.hidden;
+        setPerformanceContext('visibility', { hidden: isHidden, atMs: performance.now() });
         if (this.paused !== isHidden) {
             if (this.localPlayer &&
                 !this.localPlayer.isObserver &&
@@ -233,10 +244,10 @@ export class GameAnimationLoop {
     }
     private tickGame(timestamp: number): boolean {
         if (!this.options.onError) {
-            return this.gameTurnMgr.doGameTurn(timestamp);
+            return measurePerformanceMetric('simulation.turn', () => this.gameTurnMgr.doGameTurn(timestamp));
         }
         try {
-            return this.gameTurnMgr.doGameTurn(timestamp);
+            return measurePerformanceMetric('simulation.turn', () => this.gameTurnMgr.doGameTurn(timestamp));
         }
         catch (error) {
             this.gameTurnMgr.setErrorState();

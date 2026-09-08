@@ -1,3 +1,4 @@
+import { incrementPerformanceCounter, measurePerformanceMetric } from "@/performance/PerformanceRuntime";
 import { Task } from "@/game/gameobject/task/system/Task";
 import { Infantry } from "@/game/gameobject/Infantry";
 import { MovementZone } from "@/game/type/MovementZone";
@@ -113,6 +114,7 @@ export class MoveTask extends Task {
         }
     }
     onStart(unit: Unit): void {
+        incrementPerformanceCounter('movement.tasksStarted');
         if (unit.moveTrait.currentWaypoint) {
             throw new Error("Nested move tasks are not supported");
         }
@@ -135,11 +137,13 @@ export class MoveTask extends Task {
                     this.path = this.applyGroundPathPlan(this.groundPathPlan);
                 }
                 else {
+                    incrementPerformanceCounter('movement.plan.initial');
                     this.computePath(unit, unit.moveTrait.locomotor);
                 }
                 this.groundPathPlan = undefined;
             }
             else {
+                incrementPerformanceCounter('movement.plan.initial');
                 this.computePath(unit, unit.moveTrait.locomotor);
             }
             this.targetLinesConfig.isRecalc = false;
@@ -157,6 +161,9 @@ export class MoveTask extends Task {
                 : unit.position.computeSubCellOffset(0));
     }
     private computePath(unit: Unit, locomotor: Locomotor): void {
+        return measurePerformanceMetric('movement.plan', () => this.computePathInternal(unit, locomotor));
+    }
+    private computePathInternal(unit: Unit, locomotor: Locomotor): void {
         let path: PathNode[];
         if (!this.options?.allowOutOfBoundsTarget &&
             !this.game.map.mapBounds.isWithinBounds(this.targetTile)) {
@@ -448,6 +455,7 @@ export class MoveTask extends Task {
                 unit.moveTrait.moveState = MoveState.ReachedNextWaypoint;
                 unit.moveTrait.velocity.set(0, 0, 0);
             }
+            incrementPerformanceCounter(this.targetChangeRequested ? 'movement.replan.targetChanged' : 'movement.replan.pathInvalidated');
             this.computePath(unit, unit.moveTrait.locomotor);
             if (!this.path!.length) {
                 this.unreachableTargets.push({
@@ -714,6 +722,7 @@ export class MoveTask extends Task {
                             if (freeWaypointIndex !== -1) {
                                 const targetWaypoint = this.path![freeWaypointIndex];
                                 const forceGroundLayer = Target.usesGroundLayerUnderBridge(unit);
+                                incrementPerformanceCounter('movement.replan.alternate');
                                 alternatePath = map.terrain.computePath(unit.rules.speedType, unit.isInfantry(), unit.tile, forceGroundLayer ? false : unit.onBridge, targetWaypoint.tile, forceGroundLayer ? false : !!targetWaypoint.onBridge, {
                                     maxExpandedNodes: 15,
                                     bestEffort: false,
@@ -820,6 +829,7 @@ export class MoveTask extends Task {
                                 if (backtrackIndex !== -1) {
                                     const backtrackTarget = this.path![backtrackIndex];
                                     const forceGroundLayer = Target.usesGroundLayerUnderBridge(unit);
+                                    incrementPerformanceCounter('movement.replan.backtrack');
                                     const backtrackPath = map.terrain.computePath(unit.rules.speedType, unit.isInfantry(), unit.tile, forceGroundLayer ? false : unit.onBridge, backtrackTarget.tile, forceGroundLayer ? false : !!backtrackTarget.onBridge, {
                                         maxExpandedNodes: 15,
                                         bestEffort: false,

@@ -13,6 +13,7 @@ import { SidebarPower } from "@/gui/screen/game/component/hud/SidebarPower";
 import { SidebarCredits } from "@/gui/screen/game/component/hud/SidebarCredits";
 import { SidebarRadar } from "@/gui/screen/game/component/hud/SidebarRadar";
 import { CombatantSidebarModel } from "@/gui/screen/game/component/hud/viewmodel/CombatantSidebarModel";
+import { GameElapsedTime } from "@/gui/screen/game/component/hud/GameElapsedTime";
 import { SidebarGameTime } from "@/gui/screen/game/component/hud/SidebarGameTime";
 import { Messages } from "@/gui/screen/game/component/hud/Messages";
 import { SuperWeaponTimers } from "@/gui/screen/game/component/hud/SuperWeaponTimers";
@@ -454,6 +455,13 @@ export class Hud extends UiObject {
             onMessageTick: () => this._onMessagesTick.dispatch(this),
             onMessageSubmit: (message: any) => this._onMessageSubmit.dispatch(this, message),
             onMessageCancel: () => this._onMessageCancel.dispatch(this),
+        }), jsx.jsx(GameElapsedTime, {
+            sidebarModel: this.sidebarModel,
+            x: Math.max(0, sidebarBounds.x - 128),
+            y: 6,
+            width: 120,
+            height: 28,
+            zIndex: 6,
         }), jsx.jsx(DebugText, {
             text: this.debugTextValue,
             visible: this.debugTextEnabled,

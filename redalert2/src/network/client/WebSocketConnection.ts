@@ -36,6 +36,16 @@ export class WebSocketConnection {
     private intentionalClose = false;
     get isReconnecting(): boolean { return this.recoveryDeadline > 0; }
 
+    /** Local transport state only; bufferedAmount is not a latency measurement. */
+    getPerformanceSnapshot() {
+        return {
+            reconnecting: this.isReconnecting,
+            ready: this.ready,
+            socketReadyState: this.socket?.readyState ?? null,
+            browserSendQueueBytes: this.socket?.bufferedAmount ?? 0,
+        };
+    }
+
     constructor(private readonly createSocket: (url: string) => WebSocket = url => new WebSocket(url)) {}
 
     connect(address: string): Promise<void> {

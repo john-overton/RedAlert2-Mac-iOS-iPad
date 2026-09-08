@@ -1,0 +1,57 @@
+{
+  "kind": "Production browser functional validation, intentional 150 ms main-thread stall; single-player fixture, not performance acceptance or native-device validation",
+  "reports": [
+    {
+      "engine": "chromium",
+      "rawArtifact": "build/slowdown-live-chromium-validation.json",
+      "sha256": "47e5a1152ff326c874541860443ffe92b76c8e0bf1526503507bd6dedadc4c3f",
+      "defaultOff": true,
+      "disabledMetricsEmpty": true,
+      "downloadName": "ra2-slowdown-2026-09-08T22-30-15-965Z.json",
+      "pageErrors": [],
+      "gpuTimer": {
+        "status": "active",
+        "pendingQueries": 2,
+        "maxPendingQueries": 8,
+        "droppedQueries": 0
+      },
+      "longTasks": {
+        "supported": true
+      },
+      "maxFrameIntervalMs": 133.39999999999964,
+      "measuredPhases": [
+        "render.sceneUpdate",
+        "render.frameCallbacks",
+        "render.submit",
+        "gpu.render",
+        "browser.longTask"
+      ],
+      "slowEventCount": 3
+    },
+    {
+      "engine": "webkit",
+      "rawArtifact": "build/slowdown-live-webkit-validation.json",
+      "sha256": "dab023756dd2ecd13e4b97bfe6d133d0db5d7e3d4f4f77bdeb6c3498315c4a8e",
+      "defaultOff": true,
+      "disabledMetricsEmpty": true,
+      "downloadName": "ra2-slowdown-2026-09-08T22-30-37-447Z.json",
+      "pageErrors": [],
+      "gpuTimer": {
+        "status": "unsupported",
+        "pendingQueries": 0,
+        "maxPendingQueries": 8,
+        "droppedQueries": 0
+      },
+      "longTasks": {
+        "supported": false
+      },
+      "maxFrameIntervalMs": 160,
+      "measuredPhases": [
+        "render.sceneUpdate",
+        "render.frameCallbacks",
+        "render.submit"
+      ],
+      "slowEventCount": 2
+    }
+  ]
+}

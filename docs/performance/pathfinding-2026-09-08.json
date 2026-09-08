@@ -1,0 +1,1360 @@
+{
+  "baseCommit": "e43a63009f8e9e361598560e93ebf9623ef6eb2c",
+  "scope": "Component-only diagnostic, separate sequential processes; not a production game benchmark. Seven measured repetitions after ten warm-ups; one first-case run retained separately. Other development work was running concurrently.",
+  "runs": {
+    "baseline": {
+      "diagnostic": "Direct PathFinder with fresh finder per query as Terrain currently uses. No rendering, networking, formations, real map, or game ticks.",
+      "variant": "e43a63009f8e9e361598560e93ebf9623ef6eb2c uninstrumented PathFinder/NodeHeap/SearchStatePool",
+      "runtime": "Bun 1.4.2",
+      "machine": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "cpu": "Apple M3"
+      },
+      "graphNodes": 4097,
+      "repetitions": 7,
+      "rows": [
+        {
+          "destination": "63,0",
+          "count": 1,
+          "cold": {
+            "ms": 1.7850830000000002,
+            "pathChecksum": 2919607633
+          },
+          "samples": [
+            {
+              "ms": 0.49995800000000123,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.39654200000000017,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.3844999999999992,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.3717499999999987,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.3804160000000003,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.3835419999999985,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.39358299999999957,
+              "pathChecksum": 2919607633
+            }
+          ],
+          "medianMs": 0.3844999999999992,
+          "p95Ms": 0.49995800000000123
+        },
+        {
+          "destination": "63,0",
+          "count": 10,
+          "cold": {
+            "ms": 4.94425,
+            "pathChecksum": 3357981847
+          },
+          "samples": [
+            {
+              "ms": 3.8989579999999933,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 3.992166999999995,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 4.245415999999992,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 3.712417000000002,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 4.575958,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 3.9400830000000013,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 3.6882499999999965,
+              "pathChecksum": 3357981847
+            }
+          ],
+          "medianMs": 3.9400830000000013,
+          "p95Ms": 4.575958
+        },
+        {
+          "destination": "63,0",
+          "count": 30,
+          "cold": {
+            "ms": 12.46391700000001,
+            "pathChecksum": 450751213
+          },
+          "samples": [
+            {
+              "ms": 12.246334000000019,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 12.221749999999986,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 11.961457999999993,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 12.002582999999959,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 12.229083000000003,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 11.891916999999978,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 12.619250000000022,
+              "pathChecksum": 450751213
+            }
+          ],
+          "medianMs": 12.221749999999986,
+          "p95Ms": 12.619250000000022
+        },
+        {
+          "destination": "63,0",
+          "count": 60,
+          "cold": {
+            "ms": 24.808625000000006,
+            "pathChecksum": 3248857607
+          },
+          "samples": [
+            {
+              "ms": 25.423291999999947,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 24.55291699999998,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 25.554125,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 24.820333000000005,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 25.63733400000001,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 25.347624999999994,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 25.022625000000062,
+              "pathChecksum": 3248857607
+            }
+          ],
+          "medianMs": 25.347624999999994,
+          "p95Ms": 25.63733400000001
+        },
+        {
+          "destination": "63,0",
+          "count": 128,
+          "cold": {
+            "ms": 53.35095799999999,
+            "pathChecksum": 3579279141
+          },
+          "samples": [
+            {
+              "ms": 53.522459000000026,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 53.966499999999996,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 53.77074999999991,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 54.23066700000004,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 53.69187499999998,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 55.14295799999991,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 53.366583999999875,
+              "pathChecksum": 3579279141
+            }
+          ],
+          "medianMs": 53.77074999999991,
+          "p95Ms": 55.14295799999991
+        },
+        {
+          "destination": "unreachable",
+          "count": 1,
+          "cold": {
+            "ms": 0.6498340000000553,
+            "pathChecksum": 3305552109
+          },
+          "samples": [
+            {
+              "ms": 0.634708000000046,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.6257090000001426,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.6113330000000587,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.60024999999996,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.6029170000001614,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.5952079999999569,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.5994579999999132,
+              "pathChecksum": 3305552109
+            }
+          ],
+          "medianMs": 0.6029170000001614,
+          "p95Ms": 0.634708000000046
+        },
+        {
+          "destination": "unreachable",
+          "count": 10,
+          "cold": {
+            "ms": 6.894249999999829,
+            "pathChecksum": 1268002738
+          },
+          "samples": [
+            {
+              "ms": 7.212582999999995,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 8.20008400000006,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.054541999999856,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 6.954457999999931,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.2690000000000055,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.880040999999892,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.296666999999843,
+              "pathChecksum": 1268002738
+            }
+          ],
+          "medianMs": 7.2690000000000055,
+          "p95Ms": 8.20008400000006
+        },
+        {
+          "destination": "unreachable",
+          "count": 30,
+          "cold": {
+            "ms": 20.454958000000033,
+            "pathChecksum": 2303663027
+          },
+          "samples": [
+            {
+              "ms": 21.08837500000027,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 20.809582999999748,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 21.631832999999915,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 86.91487499999994,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 23.17666700000018,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 21.50720799999999,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 22.487249999999676,
+              "pathChecksum": 2303663027
+            }
+          ],
+          "medianMs": 21.631832999999915,
+          "p95Ms": 86.91487499999994
+        },
+        {
+          "destination": "unreachable",
+          "count": 60,
+          "cold": {
+            "ms": 42.17166600000019,
+            "pathChecksum": 1812698481
+          },
+          "samples": [
+            {
+              "ms": 42.865416000000096,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 44.58470800000032,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 46.80495800000017,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 43.77504199999976,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 44.775082999999995,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 42.85679200000004,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 43.89954099999977,
+              "pathChecksum": 1812698481
+            }
+          ],
+          "medianMs": 43.89954099999977,
+          "p95Ms": 46.80495800000017
+        },
+        {
+          "destination": "unreachable",
+          "count": 128,
+          "cold": {
+            "ms": 93.62462499999992,
+            "pathChecksum": 2562180011
+          },
+          "samples": [
+            {
+              "ms": 96.55220800000006,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 103.27795800000058,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 93.1528330000001,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 93.92391600000064,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 96.09900000000016,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 98.02674999999999,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 94.27112500000021,
+              "pathChecksum": 2562180011
+            }
+          ],
+          "medianMs": 96.09900000000016,
+          "p95Ms": 103.27795800000058
+        }
+      ]
+    },
+    "instrumented-disabled": {
+      "diagnostic": "Direct PathFinder with fresh finder per query as Terrain currently uses. No rendering, networking, formations, real map, or game ticks.",
+      "variant": "working-tree",
+      "telemetry": false,
+      "runtime": "Bun 1.4.2",
+      "machine": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "cpu": "Apple M3"
+      },
+      "graphNodes": 4097,
+      "repetitions": 7,
+      "rows": [
+        {
+          "destination": "63,0",
+          "count": 1,
+          "cold": {
+            "ms": 2.0184580000000008,
+            "pathChecksum": 2919607633
+          },
+          "samples": [
+            {
+              "ms": 0.41883299999999934,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.49504199999999976,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.4249590000000012,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.4059589999999993,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.5338750000000019,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.3913340000000005,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.4005420000000015,
+              "pathChecksum": 2919607633
+            }
+          ],
+          "medianMs": 0.41883299999999934,
+          "p95Ms": 0.5338750000000019,
+          "counters": {}
+        },
+        {
+          "destination": "63,0",
+          "count": 10,
+          "cold": {
+            "ms": 4.767458000000001,
+            "pathChecksum": 3357981847
+          },
+          "samples": [
+            {
+              "ms": 4.167375000000007,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 4.275332999999989,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 4.678167000000002,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 3.936334000000002,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 4.155167000000006,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 4.271583000000007,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 5.041250000000005,
+              "pathChecksum": 3357981847
+            }
+          ],
+          "medianMs": 4.271583000000007,
+          "p95Ms": 5.041250000000005,
+          "counters": {}
+        },
+        {
+          "destination": "63,0",
+          "count": 30,
+          "cold": {
+            "ms": 13.734542000000005,
+            "pathChecksum": 450751213
+          },
+          "samples": [
+            {
+              "ms": 12.726291000000003,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 13.163208999999995,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 12.95558299999999,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 12.234499999999969,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 14.099958000000015,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 13.117957999999987,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 13.011624999999981,
+              "pathChecksum": 450751213
+            }
+          ],
+          "medianMs": 13.011624999999981,
+          "p95Ms": 14.099958000000015,
+          "counters": {}
+        },
+        {
+          "destination": "63,0",
+          "count": 60,
+          "cold": {
+            "ms": 100.65254199999998,
+            "pathChecksum": 3248857607
+          },
+          "samples": [
+            {
+              "ms": 29.818583999999987,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 28.21545900000001,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 27.639499999999998,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 30.021416000000045,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 31.55012499999998,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 32.87454200000002,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 31.66729200000009,
+              "pathChecksum": 3248857607
+            }
+          ],
+          "medianMs": 30.021416000000045,
+          "p95Ms": 32.87454200000002,
+          "counters": {}
+        },
+        {
+          "destination": "63,0",
+          "count": 128,
+          "cold": {
+            "ms": 61.646625000000085,
+            "pathChecksum": 3579279141
+          },
+          "samples": [
+            {
+              "ms": 56.94374999999991,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 55.237249999999904,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 55.80454200000008,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 55.57708300000013,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 56.60520799999995,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 54.50150000000008,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 59.69766600000003,
+              "pathChecksum": 3579279141
+            }
+          ],
+          "medianMs": 55.80454200000008,
+          "p95Ms": 59.69766600000003,
+          "counters": {}
+        },
+        {
+          "destination": "unreachable",
+          "count": 1,
+          "cold": {
+            "ms": 0.9102080000002388,
+            "pathChecksum": 3305552109
+          },
+          "samples": [
+            {
+              "ms": 0.6703749999996944,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.5809590000003482,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.5910829999997986,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.5902089999999589,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.603708000000097,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.5843340000001263,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.5850000000000364,
+              "pathChecksum": 3305552109
+            }
+          ],
+          "medianMs": 0.5902089999999589,
+          "p95Ms": 0.6703749999996944,
+          "counters": {}
+        },
+        {
+          "destination": "unreachable",
+          "count": 10,
+          "cold": {
+            "ms": 8.138124999999945,
+            "pathChecksum": 1268002738
+          },
+          "samples": [
+            {
+              "ms": 7.032249999999749,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.163499999999658,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.278874999999971,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.490167000000383,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.139874999999847,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.033625000000029,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.726208000000042,
+              "pathChecksum": 1268002738
+            }
+          ],
+          "medianMs": 7.163499999999658,
+          "p95Ms": 7.726208000000042,
+          "counters": {}
+        },
+        {
+          "destination": "unreachable",
+          "count": 30,
+          "cold": {
+            "ms": 21.504459000000224,
+            "pathChecksum": 2303663027
+          },
+          "samples": [
+            {
+              "ms": 20.301958000000013,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 20.50387499999988,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 19.979041999999936,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 20.99437500000022,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 22.30500000000029,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 19.997667000000092,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 20.199125000000095,
+              "pathChecksum": 2303663027
+            }
+          ],
+          "medianMs": 20.301958000000013,
+          "p95Ms": 22.30500000000029,
+          "counters": {}
+        },
+        {
+          "destination": "unreachable",
+          "count": 60,
+          "cold": {
+            "ms": 41.044916000000285,
+            "pathChecksum": 1812698481
+          },
+          "samples": [
+            {
+              "ms": 43.12808300000006,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 40.50958400000036,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 42.96841699999959,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 40.65212500000007,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 44.846000000000004,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 41.86708300000009,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 41.889042000000245,
+              "pathChecksum": 1812698481
+            }
+          ],
+          "medianMs": 41.889042000000245,
+          "p95Ms": 44.846000000000004,
+          "counters": {}
+        },
+        {
+          "destination": "unreachable",
+          "count": 128,
+          "cold": {
+            "ms": 87.16212499999983,
+            "pathChecksum": 2562180011
+          },
+          "samples": [
+            {
+              "ms": 91.89779099999942,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 90.89666699999998,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 92.5000829999999,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 92.55795799999942,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 91.56520799999998,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 104.96875,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 105.93950000000041,
+              "pathChecksum": 2562180011
+            }
+          ],
+          "medianMs": 92.5000829999999,
+          "p95Ms": 105.93950000000041,
+          "counters": {}
+        }
+      ]
+    },
+    "instrumented-enabled": {
+      "diagnostic": "Direct PathFinder with fresh finder per query as Terrain currently uses. No rendering, networking, formations, real map, or game ticks.",
+      "variant": "working-tree",
+      "telemetry": true,
+      "runtime": "Bun 1.4.2",
+      "machine": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "cpu": "Apple M3"
+      },
+      "graphNodes": 4097,
+      "repetitions": 7,
+      "rows": [
+        {
+          "destination": "63,0",
+          "count": 1,
+          "cold": {
+            "ms": 2.202750000000001,
+            "pathChecksum": 2919607633
+          },
+          "samples": [
+            {
+              "ms": 0.43770800000000065,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.41491700000000087,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.4135420000000032,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.41595799999999983,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.4080420000000018,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.4936669999999985,
+              "pathChecksum": 2919607633
+            },
+            {
+              "ms": 0.40070799999999807,
+              "pathChecksum": 2919607633
+            }
+          ],
+          "medianMs": 0.41491700000000087,
+          "p95Ms": 0.4936669999999985,
+          "counters": {
+            "path.searches": 18,
+            "path.expanded": 42840,
+            "path.discovered": 47664,
+            "path.heapPushes": 47664,
+            "path.heapPops": 42858,
+            "path.heapUpdates": 48186,
+            "path.capped": 0,
+            "path.stateAllocations": 47664
+          }
+        },
+        {
+          "destination": "63,0",
+          "count": 10,
+          "cold": {
+            "ms": 8.339208000000003,
+            "pathChecksum": 3357981847
+          },
+          "samples": [
+            {
+              "ms": 4.088999999999999,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 4.645583000000002,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 4.954750000000004,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 3.976541999999995,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 4.274250000000009,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 4.24837500000001,
+              "pathChecksum": 3357981847
+            },
+            {
+              "ms": 4.180291999999994,
+              "pathChecksum": 3357981847
+            }
+          ],
+          "medianMs": 4.24837500000001,
+          "p95Ms": 4.954750000000004,
+          "counters": {
+            "path.searches": 180,
+            "path.expanded": 464814,
+            "path.discovered": 511344,
+            "path.heapPushes": 511344,
+            "path.heapPops": 464994,
+            "path.heapUpdates": 541692,
+            "path.capped": 0,
+            "path.stateAllocations": 511344
+          }
+        },
+        {
+          "destination": "63,0",
+          "count": 30,
+          "cold": {
+            "ms": 14.446584000000001,
+            "pathChecksum": 450751213
+          },
+          "samples": [
+            {
+              "ms": 16.104375000000005,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 15.904667000000018,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 15.12870799999996,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 14.523791000000017,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 17.35645900000003,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 14.770624999999995,
+              "pathChecksum": 450751213
+            },
+            {
+              "ms": 13.739458000000013,
+              "pathChecksum": 450751213
+            }
+          ],
+          "medianMs": 15.12870799999996,
+          "p95Ms": 17.35645900000003,
+          "counters": {
+            "path.searches": 540,
+            "path.expanded": 1405602,
+            "path.discovered": 1547280,
+            "path.heapPushes": 1547280,
+            "path.heapPops": 1406142,
+            "path.heapUpdates": 1680048,
+            "path.capped": 0,
+            "path.stateAllocations": 1547280
+          }
+        },
+        {
+          "destination": "63,0",
+          "count": 60,
+          "cold": {
+            "ms": 27.732665999999995,
+            "pathChecksum": 3248857607
+          },
+          "samples": [
+            {
+              "ms": 28.284082999999896,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 28.338666999999987,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 27.17483399999992,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 27.90154199999995,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 31.756708000000003,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 33.851958999999965,
+              "pathChecksum": 3248857607
+            },
+            {
+              "ms": 30.01241600000003,
+              "pathChecksum": 3248857607
+            }
+          ],
+          "medianMs": 28.338666999999987,
+          "p95Ms": 33.851958999999965,
+          "counters": {
+            "path.searches": 1080,
+            "path.expanded": 2804202,
+            "path.discovered": 3093840,
+            "path.heapPushes": 3093840,
+            "path.heapPops": 2805282,
+            "path.heapUpdates": 3503448,
+            "path.capped": 0,
+            "path.stateAllocations": 3093840
+          }
+        },
+        {
+          "destination": "63,0",
+          "count": 128,
+          "cold": {
+            "ms": 56.03829100000007,
+            "pathChecksum": 3579279141
+          },
+          "samples": [
+            {
+              "ms": 56.465417000000116,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 54.19520800000009,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 62.06033300000013,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 55.38870799999995,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 56.29845900000009,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 56.0568330000001,
+              "pathChecksum": 3579279141
+            },
+            {
+              "ms": 55.846250000000055,
+              "pathChecksum": 3579279141
+            }
+          ],
+          "medianMs": 56.0568330000001,
+          "p95Ms": 62.06033300000013,
+          "counters": {
+            "path.searches": 2304,
+            "path.expanded": 5865588,
+            "path.discovered": 6502320,
+            "path.heapPushes": 6502320,
+            "path.heapPops": 5867892,
+            "path.heapUpdates": 7376760,
+            "path.capped": 0,
+            "path.stateAllocations": 6502320
+          }
+        },
+        {
+          "destination": "unreachable",
+          "count": 1,
+          "cold": {
+            "ms": 0.8257920000000922,
+            "pathChecksum": 3305552109
+          },
+          "samples": [
+            {
+              "ms": 0.6307080000001406,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.6140420000001541,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.7903329999999187,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.5949999999997999,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.5984579999999369,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.590125000000171,
+              "pathChecksum": 3305552109
+            },
+            {
+              "ms": 0.5896250000000691,
+              "pathChecksum": 3305552109
+            }
+          ],
+          "medianMs": 0.5984579999999369,
+          "p95Ms": 0.7903329999999187,
+          "counters": {
+            "path.searches": 18,
+            "path.expanded": 73728,
+            "path.discovered": 73728,
+            "path.heapPushes": 73728,
+            "path.heapPops": 73728,
+            "path.heapUpdates": 82332,
+            "path.capped": 0,
+            "path.stateAllocations": 73728
+          }
+        },
+        {
+          "destination": "unreachable",
+          "count": 10,
+          "cold": {
+            "ms": 6.998916000000008,
+            "pathChecksum": 1268002738
+          },
+          "samples": [
+            {
+              "ms": 7.861249999999927,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 8.072667000000365,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.256457999999839,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.359375,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.178040999999666,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 8.400500000000193,
+              "pathChecksum": 1268002738
+            },
+            {
+              "ms": 7.709249999999884,
+              "pathChecksum": 1268002738
+            }
+          ],
+          "medianMs": 7.709249999999884,
+          "p95Ms": 8.400500000000193,
+          "counters": {
+            "path.searches": 180,
+            "path.expanded": 737280,
+            "path.discovered": 737280,
+            "path.heapPushes": 737280,
+            "path.heapPops": 737280,
+            "path.heapUpdates": 817308,
+            "path.capped": 0,
+            "path.stateAllocations": 737280
+          }
+        },
+        {
+          "destination": "unreachable",
+          "count": 30,
+          "cold": {
+            "ms": 20.804791000000023,
+            "pathChecksum": 2303663027
+          },
+          "samples": [
+            {
+              "ms": 20.891791000000012,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 20.766375000000153,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 21.537874999999985,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 20.272207999999864,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 20.507750000000215,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 20.601166000000376,
+              "pathChecksum": 2303663027
+            },
+            {
+              "ms": 20.449416000000383,
+              "pathChecksum": 2303663027
+            }
+          ],
+          "medianMs": 20.601166000000376,
+          "p95Ms": 21.537874999999985,
+          "counters": {
+            "path.searches": 540,
+            "path.expanded": 2211840,
+            "path.discovered": 2211840,
+            "path.heapPushes": 2211840,
+            "path.heapPops": 2211840,
+            "path.heapUpdates": 2409984,
+            "path.capped": 0,
+            "path.stateAllocations": 2211840
+          }
+        },
+        {
+          "destination": "unreachable",
+          "count": 60,
+          "cold": {
+            "ms": 42.5152079999998,
+            "pathChecksum": 1812698481
+          },
+          "samples": [
+            {
+              "ms": 51.2651249999999,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 40.97841700000026,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 41.711333000000195,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 41.937625000000025,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 41.73854200000005,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 41.95750000000044,
+              "pathChecksum": 1812698481
+            },
+            {
+              "ms": 41.45966700000008,
+              "pathChecksum": 1812698481
+            }
+          ],
+          "medianMs": 41.73854200000005,
+          "p95Ms": 51.2651249999999,
+          "counters": {
+            "path.searches": 1080,
+            "path.expanded": 4423680,
+            "path.discovered": 4423680,
+            "path.heapPushes": 4423680,
+            "path.heapPops": 4423680,
+            "path.heapUpdates": 4797072,
+            "path.capped": 0,
+            "path.stateAllocations": 4423680
+          }
+        },
+        {
+          "destination": "unreachable",
+          "count": 128,
+          "cold": {
+            "ms": 89.95425000000023,
+            "pathChecksum": 2562180011
+          },
+          "samples": [
+            {
+              "ms": 103.88941699999941,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 105.84995799999979,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 100.71341699999994,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 101.54037499999959,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 166.3637090000002,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 93.7495829999998,
+              "pathChecksum": 2562180011
+            },
+            {
+              "ms": 95.56329199999982,
+              "pathChecksum": 2562180011
+            }
+          ],
+          "medianMs": 101.54037499999959,
+          "p95Ms": 166.3637090000002,
+          "counters": {
+            "path.searches": 2304,
+            "path.expanded": 9437184,
+            "path.discovered": 9437184,
+            "path.heapPushes": 9437184,
+            "path.heapPops": 9437184,
+            "path.heapUpdates": 10249380,
+            "path.capped": 0,
+            "path.stateAllocations": 9437184
+          }
+        }
+      ]
+    }
+  }
+}

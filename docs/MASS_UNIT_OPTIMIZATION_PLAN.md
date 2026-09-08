@@ -1,7 +1,40 @@
 # Mass-unit order and movement optimization
 
-Status: proposed; code inspected 2026-09-08. No performance capture or optimization
-has been performed for this report yet.
+Status: Phase 1 implemented in part, with production scenario captures and focused
+regression tests on 2026-09-08. See [measured results](MASS_UNIT_RESULTS.md),
+[runner instructions](MASS_UNIT_BENCHMARK.md)
+and [pathfinding diagnostics](performance/PATHFINDING_BASELINE.md). Performance
+acceptance and the complete platform/scenario matrix remain open; no simulation
+optimization or route-budget change has been applied.
+
+## Investigation updates — 2026-09-08
+
+- Reported reproduction narrowed to **Bay of Pigs, about 30–40 rocketeers**;
+  follow-up coverage includes 100 and 1,000 units. Rocketeers use the infantry rule
+  ID `JUMPJET`, and `MoveTask.computeAirPath()` bypasses ground graph search.
+  Ground-search findings alone therefore cannot explain this reported case.
+- Extended the existing opt-in performance runtime with bounded duration samples,
+  percentiles, tick-aligned traces and counters for orders, formation, movement,
+  terrain, pathfinding and multiplayer waiting/hash phases. Profiling clocks do
+  not decide simulation outcomes.
+- Added a fixed-map/seed production browser runner with five measured repetitions,
+  separate first/warmup samples, profiling on/off hash checks and JSON/CSV capture.
+  The tank comparison is supplementary; the Bay of Pigs fixture is the relevant
+  reproduction. Rendering and network latency require separate measurements.
+- Confirmed the ineffective fallback cap with a focused Terrain fixture. Enforcing
+  it changes the best-effort endpoint; retained the existing route behavior and
+  added a diagnostic counter instead.
+- Cross-engine validation found an uninitialized PRNG last-value field entering
+  the hash as browser-dependent NaN bytes. It now starts at finite zero without
+  consuming a draw. Pre-first-draw hashes intentionally change; the existing
+  source-derived build identity gates old/new clients and replays.
+- Selection semantics differ: ordinary selection caps at 128, but the existing
+  oversized wire deserializer can retain more. Order processing still validates
+  the full received selection before dispatching at most 128. Tests preserve both
+  behaviors; a 1,000-unit all-army workload must issue multiple groups explicitly.
+
+The remainder of this document retains the proposed acceptance criteria. Completed
+measurement infrastructure does not imply that the original symptom is fixed.
 
 ## Problem and working hypothesis
 

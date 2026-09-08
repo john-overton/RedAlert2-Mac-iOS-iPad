@@ -1,0 +1,744 @@
+{
+  "schemaVersion": 1,
+  "captureGeneratedAt": "2026-09-08T21:50:43.757Z",
+  "rawArtifact": {
+    "path": "build/mass-unit-bay-of-pigs-render-chromium.json",
+    "bytes": 6045278,
+    "sha256": "a72a92250dfdc11a95c8db925d8ff404ca6454db9074657099036af5849fef8d"
+  },
+  "provenance": {
+    "sourceCheckoutCommit": "e43a63009f8e9e361598560e93ebf9623ef6eb2c",
+    "sourceCheckoutDirty": true,
+    "sourceMatchesBuild": "unverified; commit/dirty describe the checkout at capture time",
+    "servedBuild": {
+      "sha256": "87103cb48c6195c31a5e390917444bb83f01c43d5d6931d5e2da12d6a57980ac",
+      "files": 207
+    },
+    "runnerSha256": "8d0b03da54bc58609371edd18b68c4b6f3cd086fc711e95e4ed51c597e098801",
+    "configSha256": "3ca316e6bcaf0718237b7a2a83cde7e036bb800162af4096792f62dac1102fd9",
+    "externalUrl": null
+  },
+  "buildMode": "production",
+  "runtime": {
+    "engine": "chromium",
+    "platform": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M3",
+    "memory": 25769803776,
+    "viewport": {
+      "width": 1280,
+      "height": 900
+    },
+    "browserVersion": "152.0.7977.77"
+  },
+  "config": {
+    "map": "bayopigs.map",
+    "timestamp": 1757000000000,
+    "gameSpeed": 5,
+    "repeats": 5,
+    "ticks": 450,
+    "counts": [
+      40
+    ],
+    "scenarios": [
+      {
+        "name": "rocketeer-attack-and-attack-move",
+        "roster": [
+          {
+            "type": 3,
+            "name": "JUMPJET"
+          }
+        ],
+        "targets": [
+          {
+            "type": 7,
+            "name": "HTNK",
+            "offset": [
+              6,
+              0
+            ]
+          },
+          {
+            "type": 7,
+            "name": "HTNK",
+            "offset": [
+              8,
+              0
+            ]
+          },
+          {
+            "type": 7,
+            "name": "HTNK",
+            "offset": [
+              10,
+              0
+            ]
+          }
+        ],
+        "commands": [
+          {
+            "tick": 0,
+            "orderType": 2,
+            "targetIndex": 0
+          },
+          {
+            "tick": 90,
+            "orderType": 4,
+            "destination": [
+              70,
+              70
+            ]
+          },
+          {
+            "tick": 180,
+            "orderType": 4,
+            "destination": [
+              80,
+              70
+            ]
+          },
+          {
+            "tick": 270,
+            "orderType": 4,
+            "destination": [
+              70,
+              80
+            ]
+          }
+        ]
+      }
+    ],
+    "render": true
+  },
+  "hashValidation": {
+    "passed": true,
+    "comparedRuns": 14,
+    "ticksPerRun": 450,
+    "scope": "Every tick compared across all repetitions and both profiling states per scenario/count; no cross-build or network assertion."
+  },
+  "aggregation": "Median of per-run statistics from numeric measured repetitions only; min/max describe between-run variation. Quantiles are not pooled across runs. Telemetry percentiles describe bounded retained samples; totals/counters cover the run. Timings rounded to six decimals in ms.",
+  "limitations": [
+    "Controlled render probe: one simulation tick per RAF, camera follows first unit. Submit timings measure CPU submission, not GPU completion; RAF includes waiting and hash overhead. No network or production frame scheduler conclusions.",
+    "Single commander, AI disabled; fixed fixture placement is measured, not the complete terrain/roster matrix.",
+    "Cold labels only the first fixture execution in the browser process. Engine loading and game initialization have already run; later cases share warmed JIT and asset caches. First/warmup samples are excluded from measured aggregates.",
+    "Ordinary selection uses SelectUnitsAction setter and caps at 128. The explicitly labeled oversized-wire fixture exercises the existing uncapped deserialization path."
+  ],
+  "groups": [
+    {
+      "case": "rocketeer-attack-and-attack-move",
+      "count": 40,
+      "profiling": false,
+      "measuredRepetitions": 5,
+      "normalTargetingDelay": 27,
+      "render": {
+        "update": {
+          "mediansAcrossRuns": {
+            "above16_7": 0,
+            "above33_3": 0,
+            "above50": 0,
+            "count": 450,
+            "max": 7.235,
+            "median": 2.555,
+            "p95": 4.01,
+            "p99": 4.8
+          },
+          "worstRunMax": 8.305
+        },
+        "submit": {
+          "mediansAcrossRuns": {
+            "above16_7": 0,
+            "above33_3": 0,
+            "above50": 0,
+            "count": 450,
+            "max": 6.055,
+            "median": 1.735,
+            "p95": 2.57,
+            "p99": 3
+          },
+          "worstRunMax": 6.66
+        },
+        "frameInterval": {
+          "mediansAcrossRuns": {
+            "above16_7": 1,
+            "above33_3": 1,
+            "above50": 0,
+            "count": 449,
+            "max": 49.995,
+            "median": 16.665,
+            "p95": 16.67,
+            "p99": 16.67
+          },
+          "worstRunMax": 50
+        },
+        "drawCalls": {
+          "mediansAcrossRuns": {
+            "count": 450,
+            "max": 227,
+            "median": 177,
+            "p95": 227,
+            "p99": 227
+          },
+          "worstRunMax": 227
+        },
+        "graphics": {
+          "canvasWidth": 1280,
+          "canvasHeight": 900,
+          "devicePixelRatio": 1,
+          "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3, Unspecified Version)",
+          "vendor": "Google Inc. (Apple)"
+        },
+        "camera": "follows first unit; camera pan included in update CPU time",
+        "pacing": "one simulation tick per RAF; not production game-speed scheduling"
+      },
+      "commandTicks": [
+        {
+          "tick": 0,
+          "orderMs": {
+            "median": 0.135,
+            "min": 0.1,
+            "max": 0.145
+          },
+          "receivingTickMs": {
+            "median": 0.77,
+            "min": 0.605,
+            "max": 0.86
+          }
+        },
+        {
+          "tick": 90,
+          "orderMs": {
+            "median": 0.145,
+            "min": 0.135,
+            "max": 0.225
+          },
+          "receivingTickMs": {
+            "median": 0.86,
+            "min": 0.705,
+            "max": 1.26
+          }
+        },
+        {
+          "tick": 180,
+          "orderMs": {
+            "median": 0.175,
+            "min": 0.135,
+            "max": 0.185
+          },
+          "receivingTickMs": {
+            "median": 0.88,
+            "min": 0.76,
+            "max": 1.515
+          }
+        },
+        {
+          "tick": 270,
+          "orderMs": {
+            "median": 0.115,
+            "min": 0.095,
+            "max": 0.155
+          },
+          "receivingTickMs": {
+            "median": 0.545,
+            "min": 0.385,
+            "max": 0.905
+          }
+        }
+      ],
+      "tickBudget": {
+        "ms": 22.222222,
+        "aboveBudgetPerRun": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "firstMeasuredRunAboveBudgetTickIndices": []
+      },
+      "selected": {
+        "median": 40,
+        "min": 40,
+        "max": 40
+      },
+      "moved": {
+        "median": 40,
+        "min": 40,
+        "max": 40
+      },
+      "combat": {
+        "targetCounts": {
+          "median": 3,
+          "min": 3,
+          "max": 3
+        },
+        "damagedTargetCounts": {
+          "median": 1,
+          "min": 1,
+          "max": 1
+        },
+        "destroyedTargetCounts": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        }
+      },
+      "order": {
+        "mediansAcrossRuns": {
+          "above16_7": 0,
+          "above33_3": 0,
+          "above50": 0,
+          "count": 4,
+          "max": 0.18,
+          "median": 0.135,
+          "p95": 0.18,
+          "p99": 0.18
+        },
+        "p95AcrossRuns": {
+          "median": 0.18,
+          "min": 0.16,
+          "max": 0.225
+        },
+        "worstRunMaxMs": 0.225
+      },
+      "tick": {
+        "mediansAcrossRuns": {
+          "above16_7": 0,
+          "above33_3": 0,
+          "above50": 0,
+          "count": 450,
+          "max": 1.675,
+          "median": 0.52,
+          "p95": 0.8,
+          "p99": 1.025
+        },
+        "p95AcrossRuns": {
+          "median": 0.8,
+          "min": 0.76,
+          "max": 0.965
+        },
+        "worstRunMaxMs": 1.95
+      },
+      "metrics": {},
+      "counters": {},
+      "excludedSamples": [
+        {
+          "label": "cold",
+          "orderP95Ms": 0.99,
+          "tickP95Ms": 0.925,
+          "tickMaxMs": 5.73
+        },
+        {
+          "label": "warmup",
+          "orderP95Ms": 0.25,
+          "tickP95Ms": 0.81,
+          "tickMaxMs": 1.25
+        }
+      ]
+    },
+    {
+      "case": "rocketeer-attack-and-attack-move",
+      "count": 40,
+      "profiling": true,
+      "measuredRepetitions": 5,
+      "normalTargetingDelay": 27,
+      "render": {
+        "update": {
+          "mediansAcrossRuns": {
+            "above16_7": 0,
+            "above33_3": 0,
+            "above50": 0,
+            "count": 450,
+            "max": 7.54,
+            "median": 2.365,
+            "p95": 3.63,
+            "p99": 4.38
+          },
+          "worstRunMax": 8.57
+        },
+        "submit": {
+          "mediansAcrossRuns": {
+            "above16_7": 0,
+            "above33_3": 0,
+            "above50": 0,
+            "count": 450,
+            "max": 5.91,
+            "median": 1.43,
+            "p95": 2.44,
+            "p99": 2.985
+          },
+          "worstRunMax": 10.725
+        },
+        "frameInterval": {
+          "mediansAcrossRuns": {
+            "above16_7": 1,
+            "above33_3": 1,
+            "above50": 0,
+            "count": 449,
+            "max": 33.33,
+            "median": 16.665,
+            "p95": 16.67,
+            "p99": 16.67
+          },
+          "worstRunMax": 50
+        },
+        "drawCalls": {
+          "mediansAcrossRuns": {
+            "count": 450,
+            "max": 227,
+            "median": 177,
+            "p95": 227,
+            "p99": 227
+          },
+          "worstRunMax": 227
+        },
+        "graphics": {
+          "canvasWidth": 1280,
+          "canvasHeight": 900,
+          "devicePixelRatio": 1,
+          "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3, Unspecified Version)",
+          "vendor": "Google Inc. (Apple)"
+        },
+        "camera": "follows first unit; camera pan included in update CPU time",
+        "pacing": "one simulation tick per RAF; not production game-speed scheduling"
+      },
+      "commandTicks": [
+        {
+          "tick": 0,
+          "orderMs": {
+            "median": 0.115,
+            "min": 0.09,
+            "max": 0.155
+          },
+          "receivingTickMs": {
+            "median": 0.685,
+            "min": 0.595,
+            "max": 1.25
+          }
+        },
+        {
+          "tick": 90,
+          "orderMs": {
+            "median": 0.14,
+            "min": 0.105,
+            "max": 0.285
+          },
+          "receivingTickMs": {
+            "median": 0.965,
+            "min": 0.895,
+            "max": 1.18
+          }
+        },
+        {
+          "tick": 180,
+          "orderMs": {
+            "median": 0.075,
+            "min": 0.06,
+            "max": 0.1
+          },
+          "receivingTickMs": {
+            "median": 0.57,
+            "min": 0.405,
+            "max": 0.6
+          }
+        },
+        {
+          "tick": 270,
+          "orderMs": {
+            "median": 0.095,
+            "min": 0.08,
+            "max": 0.145
+          },
+          "receivingTickMs": {
+            "median": 0.595,
+            "min": 0.355,
+            "max": 0.645
+          }
+        }
+      ],
+      "tickBudget": {
+        "ms": 22.222222,
+        "aboveBudgetPerRun": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "firstMeasuredRunAboveBudgetTickIndices": []
+      },
+      "selected": {
+        "median": 40,
+        "min": 40,
+        "max": 40
+      },
+      "moved": {
+        "median": 40,
+        "min": 40,
+        "max": 40
+      },
+      "combat": {
+        "targetCounts": {
+          "median": 3,
+          "min": 3,
+          "max": 3
+        },
+        "damagedTargetCounts": {
+          "median": 1,
+          "min": 1,
+          "max": 1
+        },
+        "destroyedTargetCounts": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        }
+      },
+      "order": {
+        "mediansAcrossRuns": {
+          "above16_7": 0,
+          "above33_3": 0,
+          "above50": 0,
+          "count": 4,
+          "max": 0.155,
+          "median": 0.095,
+          "p95": 0.155,
+          "p99": 0.155
+        },
+        "p95AcrossRuns": {
+          "median": 0.155,
+          "min": 0.105,
+          "max": 0.285
+        },
+        "worstRunMaxMs": 0.285
+      },
+      "tick": {
+        "mediansAcrossRuns": {
+          "above16_7": 0,
+          "above33_3": 0,
+          "above50": 0,
+          "count": 450,
+          "max": 1.585,
+          "median": 0.465,
+          "p95": 0.825,
+          "p99": 1.065
+        },
+        "p95AcrossRuns": {
+          "median": 0.825,
+          "min": 0.73,
+          "max": 1.015
+        },
+        "worstRunMaxMs": 1.72
+      },
+      "metrics": {
+        "mapTileHitTest": {
+          "mediansAcrossRuns": {
+            "above16_7Ms": 0,
+            "above33_3Ms": 0,
+            "above50Ms": 0,
+            "avgMs": 0.036,
+            "calls": 35,
+            "maxMs": 0.065,
+            "medianMs": 0.035,
+            "p95Ms": 0.065,
+            "p99Ms": 0.065,
+            "retainedSamples": 35,
+            "totalMs": 1.26
+          },
+          "worstRunMaxMs": 0.07
+        },
+        "movement.plan": {
+          "mediansAcrossRuns": {
+            "above16_7Ms": 0,
+            "above33_3Ms": 0,
+            "above50Ms": 0,
+            "avgMs": 0.000896,
+            "calls": 251,
+            "maxMs": 0.015,
+            "medianMs": 0,
+            "p95Ms": 0.005,
+            "p99Ms": 0.01,
+            "retainedSamples": 251,
+            "totalMs": 0.225
+          },
+          "worstRunMaxMs": 0.015
+        },
+        "order.dispatch": {
+          "mediansAcrossRuns": {
+            "above16_7Ms": 0,
+            "above33_3Ms": 0,
+            "above50Ms": 0,
+            "avgMs": 0.0425,
+            "calls": 4,
+            "maxMs": 0.07,
+            "medianMs": 0.03,
+            "p95Ms": 0.07,
+            "p99Ms": 0.07,
+            "retainedSamples": 4,
+            "totalMs": 0.17
+          },
+          "worstRunMaxMs": 0.13
+        },
+        "order.total": {
+          "mediansAcrossRuns": {
+            "above16_7Ms": 0,
+            "above33_3Ms": 0,
+            "above50Ms": 0,
+            "avgMs": 0.0975,
+            "calls": 4,
+            "maxMs": 0.145,
+            "medianMs": 0.075,
+            "p95Ms": 0.145,
+            "p99Ms": 0.145,
+            "retainedSamples": 4,
+            "totalMs": 0.39
+          },
+          "worstRunMaxMs": 0.255
+        },
+        "order.validation": {
+          "mediansAcrossRuns": {
+            "above16_7Ms": 0,
+            "above33_3Ms": 0,
+            "above50Ms": 0,
+            "avgMs": 0.04625,
+            "calls": 4,
+            "maxMs": 0.085,
+            "medianMs": 0.035,
+            "p95Ms": 0.085,
+            "p99Ms": 0.085,
+            "retainedSamples": 4,
+            "totalMs": 0.185
+          },
+          "worstRunMaxMs": 0.09
+        },
+        "simulation.ai": {
+          "mediansAcrossRuns": {
+            "above16_7Ms": 0,
+            "above33_3Ms": 0,
+            "above50Ms": 0,
+            "avgMs": 0.003733,
+            "calls": 450,
+            "maxMs": 0.015,
+            "medianMs": 0.005,
+            "p95Ms": 0.01,
+            "p99Ms": 0.01,
+            "retainedSamples": 450,
+            "totalMs": 1.68
+          },
+          "worstRunMaxMs": 0.055
+        },
+        "simulation.objects": {
+          "mediansAcrossRuns": {
+            "above16_7Ms": 0,
+            "above33_3Ms": 0,
+            "above50Ms": 0,
+            "avgMs": 0.463456,
+            "calls": 450,
+            "maxMs": 1.39,
+            "medianMs": 0.43,
+            "p95Ms": 0.755,
+            "p99Ms": 0.97,
+            "retainedSamples": 450,
+            "totalMs": 208.555
+          },
+          "worstRunMaxMs": 1.485
+        },
+        "simulation.tick": {
+          "mediansAcrossRuns": {
+            "above16_7Ms": 0,
+            "above33_3Ms": 0,
+            "above50Ms": 0,
+            "avgMs": 0.500911,
+            "calls": 450,
+            "maxMs": 1.58,
+            "medianMs": 0.465,
+            "p95Ms": 0.8,
+            "p99Ms": 1.055,
+            "retainedSamples": 450,
+            "totalMs": 225.41
+          },
+          "worstRunMaxMs": 1.71
+        },
+        "worldSoundLoopCache": {
+          "mediansAcrossRuns": {
+            "above16_7Ms": 0,
+            "above33_3Ms": 0,
+            "above50Ms": 0,
+            "avgMs": 0.307143,
+            "calls": 35,
+            "maxMs": 0.565,
+            "medianMs": 0.275,
+            "p95Ms": 0.53,
+            "p99Ms": 0.565,
+            "retainedSamples": 35,
+            "totalMs": 10.75
+          },
+          "worstRunMaxMs": 0.65
+        },
+        "worldViewportCache": {
+          "mediansAcrossRuns": {
+            "above16_7Ms": 0,
+            "above33_3Ms": 0,
+            "above50Ms": 0,
+            "avgMs": 0.000406,
+            "calls": 2870,
+            "maxMs": 0.045,
+            "medianMs": 0,
+            "p95Ms": 0.005,
+            "p99Ms": 0.005,
+            "retainedSamples": 2048,
+            "totalMs": 1.165
+          },
+          "worstRunMaxMs": 0.055
+        }
+      },
+      "counters": {
+        "movement.plan.initial": {
+          "median": 101,
+          "min": 101,
+          "max": 101
+        },
+        "movement.replan.targetChanged": {
+          "median": 150,
+          "min": 150,
+          "max": 150
+        },
+        "movement.tasksStarted": {
+          "median": 101,
+          "min": 101,
+          "max": 101
+        },
+        "order.accepted": {
+          "median": 160,
+          "min": 160,
+          "max": 160
+        },
+        "order.dispatched": {
+          "median": 160,
+          "min": 160,
+          "max": 160
+        },
+        "order.selected": {
+          "median": 160,
+          "min": 160,
+          "max": 160
+        },
+        "order.validatedBeforeCap": {
+          "median": 160,
+          "min": 160,
+          "max": 160
+        }
+      },
+      "excludedSamples": [
+        {
+          "label": "first",
+          "orderP95Ms": 0.245,
+          "tickP95Ms": 0.925,
+          "tickMaxMs": 1.845
+        },
+        {
+          "label": "warmup",
+          "orderP95Ms": 0.155,
+          "tickP95Ms": 0.91,
+          "tickMaxMs": 2.08
+        }
+      ]
+    }
+  ]
+}

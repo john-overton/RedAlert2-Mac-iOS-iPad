@@ -1,0 +1,37 @@
+{
+  "map": "bayopigs.map",
+  "roster": {
+    "type": 3,
+    "name": "JUMPJET",
+    "count": 1000
+  },
+  "ticks": 450,
+  "rawArtifact": {
+    "path": "build/mass-unit-1000.cpuprofile",
+    "sha256": "9f627df8941aeb1cac1df827db886f146e295b2b3b5e5e3ec3949dd5b97e1405"
+  },
+  "scope": "Single diagnostic production Chromium CPU profile. Orders, Game.update and per-tick state hashing included; fixture setup and rendering excluded. Not a performance acceptance run.",
+  "sampledDurationMs": 2598.167,
+  "inclusiveSampleMs": {
+    "updateSimulation": 1397.706,
+    "scanForTarget": 458.122,
+    "selectWeaponFromList": 165.126,
+    "scanTechnosAround": 63.547,
+    "queryRange": 62.253,
+    "getHash": 690.773
+  },
+  "selfSampleMs": {
+    "updateSimulation": 0.0,
+    "scanForTarget": 220.645,
+    "selectWeaponFromList": 63.449,
+    "scanTechnosAround": 1.294,
+    "queryRange": 42.172,
+    "getHash": 459.393
+  },
+  "notes": [
+    "Inclusive categories overlap; do not sum them.",
+    "getHash is outside the benchmark simulation tick timer, but used by multiplayer.",
+    "The minified math function l is fnv32a, a hashing function.",
+    "All fixture units spawn together, which can synchronize passive target scans."
+  ]
+}

@@ -10,6 +10,9 @@ interface SearchState {
 class SearchStatePool {
     private index: number = 0;
     private pool: SearchState[] = [];
+    get allocatedCount(): number {
+        return this.pool.length;
+    }
     createNewState(node: any): SearchState {
         let state = this.pool[this.index];
         if (state) {

@@ -1,0 +1,137 @@
+{
+  "map": "mp03t4.map",
+  "timestamp": 1757000000000,
+  "gameSpeed": 5,
+  "repeats": 5,
+  "ticks": 450,
+  "counts": [
+    1,
+    10,
+    30,
+    60,
+    128,
+    160
+  ],
+  "scenarios": [
+    {
+      "name": "vehicle-repeated-move",
+      "roster": [
+        {
+          "type": 7,
+          "name": "MTNK"
+        }
+      ],
+      "commands": [
+        {
+          "tick": 0,
+          "orderType": 0,
+          "destination": [
+            70,
+            70
+          ]
+        },
+        {
+          "tick": 90,
+          "orderType": 0,
+          "destination": [
+            80,
+            70
+          ]
+        },
+        {
+          "tick": 180,
+          "orderType": 0,
+          "destination": [
+            70,
+            80
+          ]
+        },
+        {
+          "tick": 270,
+          "orderType": 0,
+          "destination": [
+            70,
+            70
+          ]
+        }
+      ]
+    },
+    {
+      "name": "vehicle-idle",
+      "roster": [
+        {
+          "type": 7,
+          "name": "MTNK"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "vehicle-occupied-endpoint",
+      "roster": [
+        {
+          "type": 7,
+          "name": "MTNK"
+        }
+      ],
+      "buildings": [
+        {
+          "name": "GAPOWR",
+          "position": [
+            70,
+            70
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "tick": 0,
+          "orderType": 0,
+          "destination": [
+            70,
+            70
+          ]
+        },
+        {
+          "tick": 90,
+          "orderType": 0,
+          "destination": [
+            70,
+            70
+          ]
+        },
+        {
+          "tick": 180,
+          "orderType": 0,
+          "destination": [
+            70,
+            70
+          ]
+        }
+      ]
+    },
+    {
+      "name": "vehicle-oversized-wire-selection",
+      "counts": [
+        160
+      ],
+      "selection": "oversized-wire",
+      "roster": [
+        {
+          "type": 7,
+          "name": "MTNK"
+        }
+      ],
+      "commands": [
+        {
+          "tick": 0,
+          "orderType": 0,
+          "destination": [
+            70,
+            70
+          ]
+        }
+      ]
+    }
+  ]
+}

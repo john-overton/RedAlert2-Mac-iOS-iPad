@@ -1,3 +1,4 @@
+import { measurePerformanceMetric, setPerformanceSimulationTick } from "@/performance/PerformanceRuntime";
 import { ConstructionWorker } from "./ConstructionWorker";
 import { GameOpts, isHumanPlayerInfo } from "./gameopts/GameOpts";
 import { ObjectType } from "../engine/type/ObjectType";
@@ -762,21 +763,27 @@ export class Game {
         });
     }
     update() {
+        setPerformanceSimulationTick(this.currentTick);
+        return measurePerformanceMetric('simulation.tick', () => this.updateSimulation());
+    }
+    private updateSimulation() {
         if (this.status === GameStatus.NotStarted) {
             return;
         }
-        this.botManager.update(this);
+        measurePerformanceMetric('simulation.ai', () => this.botManager.update(this));
         if (this.status !== GameStatus.Ended) {
             if (this.lastGameEndCheck === undefined || this.currentTime - this.lastGameEndCheck >= 1000) {
                 this.checkGameEndConditions();
                 this.lastGameEndCheck = this.currentTime;
             }
         }
-        for (const obj of [...this.updatableObjects]) {
-            if (obj.isSpawned) {
-                obj.update(this);
+        measurePerformanceMetric('simulation.objects', () => {
+            for (const obj of [...this.updatableObjects]) {
+                if (obj.isSpawned) {
+                    obj.update(this);
+                }
             }
-        }
+        });
         this.playerList.getCombatants().forEach((player: any) => {
             player.cheerCooldownTicks = Math.max(0, player.cheerCooldownTicks - 1);
         });

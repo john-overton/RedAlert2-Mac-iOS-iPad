@@ -320,3 +320,42 @@ describe('observer history', () => {
         }
     });
 });
+
+describe('bounded local performance evidence', () => {
+    test('identifies missing relayed batches without consuming turns or treating scheduled drops as missing', () => {
+        const { match, receive, frame } = fixture();
+        receive({ type: 'allLoaded' });
+        receive({ type: 'disconnect', clientId: 2, frame: 2 });
+        frame(1, 1); frame(1, 2);
+        const before = match.getSnapshot();
+        expect(match.getPerformanceSnapshot(0).missingPeerIds).toEqual(['2']);
+        expect(match.getPerformanceSnapshot(0).receivedPeerIds).toEqual(['1']);
+        expect(match.getPerformanceSnapshot(1).missingPeerIds).toEqual([]);
+        expect(match.getPerformanceSnapshot(0).waitingWireFrame).toBe(1);
+        expect(match.getPerformanceSnapshot().missingPeerIds).toEqual([]);
+        expect(match.getSnapshot()).toEqual(before);
+        frame(2, 1);
+        expect(match.tryConsumeTurn(0)?.batches.map(batch => batch.peerId)).toEqual(['1', '2']);
+    });
+    test('reports unavailable health as unknown and bounds/copies server round-trip evidence', () => {
+        const { match, receive } = fixture();
+        expect(match.getPerformanceSnapshot().serverHealthAgeMs).toBeNull();
+        expect(match.getPerformanceSnapshot().serverReportedPeers).toEqual([]);
+        receive({ type: 'matchHealth', players: Array.from({ length: 20 }, (_, i) => ({ clientId: i + 1, ping: i === 0 ? null : 17, lagMs: 200 })) });
+        const snapshot = match.getPerformanceSnapshot();
+        expect(snapshot.serverReportedPeers.length).toBe(16);
+        expect(snapshot.peerDetailsTruncated).toBe(true);
+        expect(snapshot.serverReportedPeers[0]).toEqual({ peerId: '1', serverRoundTripMs: null, serverProgressLagMs: 200 });
+        expect(snapshot.serverHealthAgeMs).toBeGreaterThanOrEqual(0);
+        snapshot.serverReportedPeers[0].serverProgressLagMs = 999;
+        expect(match.matchHealth[0].lagMs).toBe(200);
+    });
+    test('reports browser send queue separately from reconnect state without sending a packet', () => {
+        const connection = new WebSocketConnection();
+        expect(connection.getPerformanceSnapshot()).toEqual({ reconnecting: false, ready: false, socketReadyState: null, browserSendQueueBytes: 0 });
+        (connection as any).socket = { readyState: 1, bufferedAmount: 8192 };
+        (connection as any).ready = true;
+        (connection as any).recoveryDeadline = 100;
+        expect(connection.getPerformanceSnapshot()).toEqual({ reconnecting: true, ready: true, socketReadyState: 1, browserSendQueueBytes: 8192 });
+    });
+});

@@ -1,3 +1,4 @@
+import { incrementPerformanceCounter, isPerformanceTelemetryEnabled, measurePerformanceMetric, recordPerformanceDuration, setPerformanceContext, setPerformanceSimulationTick } from "@/performance/PerformanceRuntime";
 import { GameStatus } from '@/game/Game';
 import { GameSpeed } from '@/game/GameSpeed';
 import { ActionType } from '@/game/action/ActionType';
@@ -19,6 +20,8 @@ export class NetworkTurnManager {
     private waitingSince?: number;
     getStallDuration(): number { return this.errorState || !this.waitingSince ? 0 : Date.now() - this.waitingSince; }
     private matchDisposed = false;
+    private waitingPeerIds: string[] = [];
+    private lastWait?: { tick: number; elapsedMs: number; initiallyMissingPeerIds: string[] };
 
     public readonly onActionsSent = new EventDispatcher<this, string>();
     public readonly onActionsReceived = new EventDispatcher<this, string>();
@@ -60,10 +63,12 @@ export class NetworkTurnManager {
 
     doGameTurn(_timestamp: number): boolean {
         if (this.errorState || !this.matchSession.areAllPlayersLoaded()) {
+            this.publishPerformanceContext(this.game.currentTick, this.errorState ? 'error' : 'loading');
             return false;
         }
 
         const tick = this.game.currentTick;
+        setPerformanceSimulationTick(tick);
         const wasEnded = this.game.status === GameStatus.Ended;
         if (!wasEnded) {
             const localTurnId = this.submitLocalTurn(tick);
@@ -74,12 +79,15 @@ export class NetworkTurnManager {
             if (this.errorState) return false;
             const resolvedTurn = this.matchSession.tryConsumeTurn(tick);
             if (!resolvedTurn) {
+                incrementPerformanceCounter('network.pendingTurnPolls');
                 this.updateLagState(true, tick);
+                this.publishPerformanceContext(tick, 'waiting-for-relayed-turn');
                 return false;
             }
 
             this.updateLagState(false, tick);
-            const processedActions = this.processResolvedTurn(tick, resolvedTurn);
+            this.publishPerformanceContext(tick, 'running');
+            const processedActions = measurePerformanceMetric('network.actions', () => this.processResolvedTurn(tick, resolvedTurn));
             if (processedActions.length) {
                 this.replayRecorder?.recordActions?.(tick, processedActions);
             }
@@ -91,11 +99,12 @@ export class NetworkTurnManager {
         this.game.update();
         this.submittedTicks.delete(tick);
         // Game end callbacks can stop the turn manager and leave the room inside update().
-        if (!wasEnded && !this.errorState && !this.matchDisposed) this.matchSession.sendSync(tick, this.game.getHash());
+        if (!wasEnded && !this.errorState && !this.matchDisposed) this.matchSession.sendSync(tick, measurePerformanceMetric('network.hash', () => this.game.getHash()));
         return true;
     }
 
     dispose(): void {
+        this.publishPerformanceContext(this.game.currentTick, 'disposed');
         this.matchSession.onActionsReceived.unsubscribe(this.handleActionsReceived);
         this.matchSession.onFatalError.unsubscribe(this.handleFatalError);
         if (!this.matchDisposed) {
@@ -196,14 +205,38 @@ export class NetworkTurnManager {
         return processedActions;
     }
 
+    private publishPerformanceContext(tick: number, state: string): void {
+        if (!isPerformanceTelemetryEnabled()) return;
+        setPerformanceContext('network', {
+            ...this.matchSession.getPerformanceSnapshot(state === 'waiting-for-relayed-turn' ? tick : undefined),
+            state,
+            simulationTick: tick,
+            waitingMs: state === 'waiting-for-relayed-turn' && this.waitingSince !== undefined ? Math.max(0, Date.now() - this.waitingSince) : 0,
+            lastWait: this.lastWait ?? null,
+        });
+    }
+
     private updateLagState(nextLagState: boolean, tick: number): void {
         if (this.lagState === nextLagState) {
             return;
+        }
+        if (!nextLagState && this.waitingSince !== undefined) {
+            const elapsedMs = Math.max(0, Date.now() - this.waitingSince);
+            if (isPerformanceTelemetryEnabled()) {
+                this.lastWait = { tick, elapsedMs, initiallyMissingPeerIds: this.waitingPeerIds };
+                this.publishPerformanceContext(tick, 'running');
+            }
+            recordPerformanceDuration('network.wait', elapsedMs);
+            this.waitingPeerIds = [];
         }
         this.lagState = nextLagState;
         this.waitingSince = nextLagState ? Date.now() : undefined;
         this.onLagStateChange.dispatch(this, nextLagState);
         if (nextLagState) {
+            incrementPerformanceCounter('network.waitEpisodes');
+            if (isPerformanceTelemetryEnabled()) {
+                this.waitingPeerIds = this.matchSession.getPerformanceSnapshot(tick).missingPeerIds;
+            }
             this.lockstepLogger?.warn?.(`[network] waiting for turn ${tick}${this.passiveMode ? ' (passive)' : ''}`);
         }
     }
