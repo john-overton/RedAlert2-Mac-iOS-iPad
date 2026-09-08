@@ -147,3 +147,44 @@ rebuilt and their nested helper/app signatures verified. Native UI checks use
 a separate persistent test profile because WebKit ephemeral storage does not
 support the game's OPFS asset import. Logs are in ignored `build/macos/hosting-*.log`.
 These do not constitute physical two-machine or full-skirmish acceptance.
+
+
+## Lobby resilience and visible ping (September 8, 2026)
+
+Fixed a reproducible false `invalidPacket`: an old pong was rejected after the
+next five-second probe replaced its timestamp. GameServer now tracks bounded
+outstanding probes, ignores duplicate/stale replies without refreshing liveness,
+and publishes lobby RTT/idle state separately from full session updates. Lobby
+UI shows measured milliseconds, stalled-player warnings and slot grace time.
+Connection/handshake limits are 30 seconds, established-peer timeout 120 seconds,
+and individual content request timeout 60 seconds. Concurrent content requests
+receive an error without being kicked. Client errors retain server details after
+socket close. No automatic session reconnect or frame-validation relaxation was
+added.
+
+Validation: 123 tests pass; entry typecheck retains 42 baseline diagnostics. The
+native built-game lobby test delays guest heartbeat replies for 16 seconds,
+requires the stalled warning, then verifies recovery, measured ping and continued
+membership before testing leave/rehost. The Node/ws transport lockstep test still
+matches 100 frames with delayed delivery and the expected mismatch at frame 101.
+Logs: ignored `build/macos/resilience-*.log`. Both Mac variants rebuilt; a physical
+Mac/Linux session with the user's friend remains the next manual check.
+
+### Match shutdown crash follow-up
+
+- Fixed trailing sync sends after game-end callbacks close the connection inside
+  the current simulation tick. A departed/disposed session stops accepting work.
+- Convert transport send failures into a single match error and notify the match
+  before lobby close listeners can dispose it. Preserve server rejection details.
+- Send desync evidence before notifying fatal-error listeners that may close the
+  transport; keep diagnostic export failure from hiding the original error.
+- Regression coverage includes late sends after leaving, failure before the socket
+  close event, synchronous desync cleanup, and lobby cleanup listener ordering.
+- Unit tests: 127 passed. Node transport smoke: 100 matched frames with delayed
+  delivery, then the expected mismatch at frame 101. Native macOS helper hosting
+  smoke passed. Both Mac variants rebuilt and signatures verified. Entry typecheck
+  retains the 42 existing errors, with none in the changed networking modules.
+- Real Chromium engine smoke on a fresh development server: two clients and two
+  bots matched all 150 ticks; injected divergence stopped both at mismatch frame
+  151. Production turn-manager shutdown and diagnostic-export regressions passed
+  in the browser. The smoke now rejects missing tick instrumentation after HMR.

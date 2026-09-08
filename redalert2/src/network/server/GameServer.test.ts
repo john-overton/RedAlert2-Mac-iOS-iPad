@@ -1,3 +1,4 @@
+import { CONNECTION_TIMEOUT_MS, HANDSHAKE_TIMEOUT_MS } from '../ConnectionHealth';
 import { expect, test } from 'bun:test';
 import { GameServer } from './GameServer';
 import { decodePacket, encodeOrderPacket, encodeSyncPacket, encodeRelayedSyncPacket } from './Protocol';
@@ -103,13 +104,13 @@ test('timeouts warn, ping, drop and transfer lobby administration', () => {
     advance(5000); expect(a.all('ping')).toHaveLength(1);
     advance(5000); expect(b.all('message').some(m => m.key === 'connectionProblems')).toBe(true);
     b.json({ type: 'ping', t: 11000 }); advance(49000);
-    b.json({ type: 'ping', t: 60000 }); advance(1000);
+    b.json({ type: 'ping', t: 60000 }); advance(CONNECTION_TIMEOUT_MS - 59000);
     expect(a.closed).toBe('timeout'); expect(b.closed).toBeUndefined();
     expect(server.session.clients[0].admin).toBe(true);
 });
 
 test('pending handshakes and oversized or malformed packets are bounded', () => {
-    const { server, advance, join } = setup(); const pending = new Connection(); server.accept(pending); advance(10000);
+    const { server, advance, join } = setup(); const pending = new Connection(); server.accept(pending); advance(HANDSHAKE_TIMEOUT_MS);
     expect(pending.closed).toBe('timeout');
     const a = join('a'); a.receive(new Uint8Array(128 * 1024 + 1)); expect(a.closed).toBe('packetTooLarge');
     const b = join('b'); b.receive('{'); expect(b.closed).toBe('invalidPacket');
@@ -301,4 +302,59 @@ test('upload expires and uploader departure releases pending package without pub
     await content(host,{action:'begin',manifest});host.close('left');
     expect(server.session.content).toBeUndefined();expect(server.session.clients[0].admin).toBe(true);
     expect((await content(guest,{action:'begin',manifest})).error).toBeUndefined();
+});
+
+
+test('delayed heartbeat replies survive newer probes and publish measured RTT', () => {
+    const {server,join,advance}=setup(); const host=join('Host'),guest=join('Guest');
+    advance(5000); const first=guest.all('ping').at(-1).t;
+    advance(5000); const second=guest.all('ping').at(-1).t;
+    advance(7000); guest.json({type:'pong',t:first});
+    expect(guest.closed).toBeUndefined();
+    expect(server.session.clients.find(c=>c.name==='Guest')!.ping).toBe(12000);
+    advance(1000);
+    const health=host.all('connectionHealth').at(-1);
+    expect(health.players.find((p:any)=>p.clientId===2)).toEqual({clientId:2,ping:12000,idleMs:1000});
+    guest.json({type:'pong',t:second});
+    expect(guest.closed).toBeUndefined();
+    expect(server.session.clients.find(c=>c.name==='Guest')!.ping).toBe(8000);
+});
+
+test('long lobby stalls warn, retain the slot and recover on an outstanding heartbeat', () => {
+    const {server,join,advance}=setup(); const guest=join('Guest');
+    advance(5000); const first=guest.all('ping').at(-1).t;
+    advance(65000);
+    expect(guest.closed).toBeUndefined();
+    const health=guest.all('connectionHealth').at(-1);
+    expect(health.timeoutMs).toBe(CONNECTION_TIMEOUT_MS);
+    expect(health.players[0]).toEqual({clientId:1,ping:null,idleMs:70000});
+    guest.json({type:'pong',t:first});advance(1000);
+    expect(server.session.clients).toHaveLength(1);
+    expect(guest.all('connectionHealth').at(-1).players[0].idleMs).toBe(1000);
+    expect(guest.all('error')).toEqual([]);
+});
+
+test('duplicate or unsent stale pongs cannot keep a dead peer alive', () => {
+    const {join,advance}=setup();const guest=join('Guest');
+    advance(5000);const t=guest.all('ping').at(-1).t;guest.json({type:'pong',t});
+    advance(CONNECTION_TIMEOUT_MS-1);guest.json({type:'pong',t});guest.json({type:'pong',t:t-1});
+    expect(guest.closed).toBeUndefined();
+    advance(1);expect(guest.closed).toBe('timeout');
+});
+
+test('invalid heartbeat rejection includes an actionable reason', () => {
+    const {join}=setup();const guest=join('Guest');
+    guest.json({type:'pong',t:Infinity});
+    expect(guest.closed).toBe('invalidPacket');
+    expect(guest.all('error').at(-1).message).toBe('Invalid heartbeat reply');
+});
+
+test('an overlapping content request returns an error without kicking the player', async () => {
+    const {join}=setup();const host=join('Host');
+    host.json({type:'content',requestId:1,action:'begin',manifest:await createContentManifest([])});
+    host.json({type:'content',requestId:2,action:'get',id:'pending',path:'map.map',offset:0});
+    expect(host.closed).toBeUndefined();
+    expect(host.all('contentResult').find((m:any)=>m.requestId===2).error).toMatch(/still in progress/);
+    await new Promise(resolve=>setTimeout(resolve,0));
+    expect(host.all('contentResult').some((m:any)=>m.requestId===1&&!m.error)).toBe(true);
 });

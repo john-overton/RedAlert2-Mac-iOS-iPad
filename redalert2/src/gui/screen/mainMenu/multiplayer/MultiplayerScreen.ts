@@ -145,6 +145,11 @@ export class MultiplayerScreen extends MainMenuScreen {
             const client = new LobbyClient();
             this.client = client;
             client.onSession.subscribe(this.onSession);
+            client.onConnectionHealth.subscribe(health => {
+                // Ping updates must not rehydrate map content, close selectors,
+                // or rebuild the sidebar while a commander edits the lobby.
+                if (this.active && client === this.client) this.form?.applyOptions((options: any) => { options.connectionHealth = health; });
+            });
             client.onChat.subscribe(message => {
                 const name = client.session?.clients.find(member => member.id === message.clientId)?.name || 'Commander';
                 const recipient = typeof message.to === 'number' ? client.session?.clients.find(member => member.id === message.to)?.name || 'Commander' : message.to === 'team' ? RECIPIENT_TEAM : RECIPIENT_ALL;
@@ -153,7 +158,7 @@ export class MultiplayerScreen extends MainMenuScreen {
             });
             client.onError.subscribe(error => {
                 if (client !== this.client) return;
-                if (error.code === 'disconnected' || error.code === 'kicked') {
+                if (error.disconnected || error.code === 'disconnected' || error.code === 'kicked') {
                     void this.disconnect().then(() => this.report(error));
                 } else this.report(error);
             });
@@ -471,6 +476,7 @@ export class MultiplayerScreen extends MainMenuScreen {
             onContentFiles: (files: File[]) => void this.importContent(files), onRemoveContent: () => void this.removeContent(),
             onRetryContent: () => session && void this.checkContent(session, true), onCancelContent: () => this.cancelContent(),
             ready: self?.ready, canReady, recent: this.recent(), onField: (key: keyof ConnectionFields, value: string) => { this.fields = { ...this.fields, [key]: value }; this.render(); },
+            connectionHealth: this.client?.getConnectionHealth(), connectionPlayers: session?.clients.map(({id,name}) => ({id,name})),
             managedPlayers: self?.admin && !self.ready ? session?.clients.filter(member => member.id !== self.id) : [],
             onKick: (clientId: number) => this.send('kick', { clientId }), onMakeAdmin: (clientId: number) => this.send('make_admin', { clientId }),
             onHost: () => void this.connect(true), onJoin: () => void this.connect(false), onReady: ready };

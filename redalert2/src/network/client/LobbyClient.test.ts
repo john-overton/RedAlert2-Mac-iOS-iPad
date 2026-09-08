@@ -114,3 +114,51 @@ test('download cancellation, socket close and corrupted data settle without read
     const closing=lobby.downloadContent(manifest);await new Promise(resolve=>setTimeout(resolve,0));lobby.close();await expect(closing).rejects.toThrow('cancelled');
     expect(socket.sent.some(data=>JSON.parse(data).name==='content_ready')).toBe(false);
 });
+
+
+test('server rejection details survive the socket close notification', async () => {
+    const socket=new FakeSocket();const lobby=new LobbyClient(new WebSocketConnection(()=>socket as any));
+    const connecting=lobby.connect('host',hello);socket.open();await Promise.resolve();
+    socket.receive({type:'welcome',clientId:1,session:{state:'waiting',clients:[]}});await connecting;
+    const errors:any[]=[];lobby.onError.subscribe(error=>errors.push(error));
+    socket.receive({type:'error',code:'invalidPacket',message:'Invalid heartbeat reply'});
+    socket.close();
+    expect(errors.at(-1)).toMatchObject({code:'invalidPacket',disconnected:true});
+    expect(errors.at(-1).message).toContain('Invalid heartbeat reply');
+    expect(errors.at(-1).message).not.toBe('closed');
+    lobby.close();
+});
+
+test('ping updates have their own event and do not replace lobby options or readiness', async () => {
+    const socket=new FakeSocket();const lobby=new LobbyClient(new WebSocketConnection(()=>socket as any));
+    const connecting=lobby.connect('host',hello);socket.open();await Promise.resolve();
+    const session={state:'waiting',clients:[{id:1,name:'Alice',ready:true,ping:0}],gameOpts:{mapDigest:'keep'}};
+    socket.receive({type:'welcome',clientId:1,session});await connecting;
+    const updates:any[]=[];lobby.onConnectionHealth.subscribe(value=>updates.push(value));
+    let sessions=0;lobby.onSession.subscribe(()=>sessions++);
+    socket.receive({type:'connectionHealth',timeoutMs:120000,players:[{clientId:1,ping:234,idleMs:0}]});
+    expect(updates[0]).toMatchObject({players:[{clientId:1,ping:234,idleMs:0}],timeoutMs:120000});
+    expect(lobby.session!.clients[0]).toMatchObject({ready:true,ping:234});
+    expect(lobby.session!.gameOpts.mapDigest).toBe('keep');expect(sessions).toBe(0);
+    lobby.close();expect(lobby.getConnectionHealth()).toBeUndefined();
+});
+
+
+test('match receives the original disconnect before lobby cleanup disposes it', async () => {
+    const socket = new FakeSocket();
+    const connection = new WebSocketConnection(() => socket as any);
+    const lobby = new LobbyClient(connection);
+    const connecting = lobby.connect('host', hello);
+    socket.open(); await Promise.resolve();
+    socket.receive({ type: 'welcome', clientId: 1, session: { state: 'waiting', clients: [{ id: 1, admin: true }] } });
+    await connecting;
+    socket.receive({ type: 'startGame', gameId: 'test', timestamp: 1, gameOpts: {}, clientIds: [1],
+        humanAssignments: [{ clientId: 1, slotIndex: 0, name: 'Alice' }], orderLatency: 2, netFrameInterval: 1 });
+    const match = lobby.getMatchSession();
+    const errors: string[] = [];
+    match.onFatalError.subscribe(error => errors.push(error.message));
+    lobby.onError.subscribe(() => lobby.close());
+    socket.close();
+    expect(errors).toEqual(['closed']);
+    expect(match.fatalError?.message).toBe('closed');
+});

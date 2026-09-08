@@ -1,3 +1,4 @@
+import { HEARTBEAT_INTERVAL_MS, CONNECTION_WARNING_MS, CONNECTION_TIMEOUT_MS, HANDSHAKE_TIMEOUT_MS } from '../ConnectionHealth';
 import { CONTENT_CHUNK_BYTES, decodeContentBytes, encodeContentBytes, validateContentManifest, verifyContentFiles } from '../content/ContentPackage';
 import type { ContentManifest } from '../content/ContentPackage';
 import type { ContentRequest } from './Protocol';
@@ -29,6 +30,8 @@ interface Peer {
     connectedAt: number;
     lastSeen: number;
     lastPing: number;
+    pendingPings: Set<number>;
+    lastPong?: number;
     lastFrame: number;
     lastSync: number;
     floodAt: number;
@@ -55,6 +58,7 @@ export class GameServer {
     private nextId = 1;
     private allLoaded = false;
     private embeddedHostId?: number;
+    private lastHealthBroadcast = -Infinity;
     private stopped = false;
     private contentFiles = new Map<string, Uint8Array>();
     private upload?: { owner: Peer; manifest: ContentManifest; files: Map<string, Uint8Array>; offsets: Map<string, number>; updatedAt: number };
@@ -84,7 +88,7 @@ export class GameServer {
     accept(connection: ServerConnection): void {
         if (this.stopped || this.peers.size >= 24) { connection.close('Server unavailable'); return; }
         const now = this.now();
-        const peer: Peer = { connection, connectedAt: now, lastSeen: now, lastPing: now, lastFrame: 0, lastSync: 0, floodAt: now, floodCount: 0, warned: false };
+        const peer: Peer = { connection, connectedAt: now, lastSeen: now, lastPing: now, pendingPings: new Set(), lastFrame: 0, lastSync: 0, floodAt: now, floodCount: 0, warned: false };
         this.peers.add(peer);
         connection.onMessage(data => this.receive(peer, data));
         connection.onClose(() => this.drop(peer));
@@ -101,12 +105,25 @@ export class GameServer {
     tick(now = this.now()): void {
         if (this.upload && now - this.upload.updatedAt > 60000) this.upload = undefined;
         for (const peer of [...this.peers]) {
-            if ((!peer.client && now - peer.connectedAt >= 10000) || now - peer.lastSeen >= 60000) { this.reject(peer, 'timeout'); continue; }
-            if (peer.client && now - peer.lastSeen >= 10000 && !peer.warned) {
+            if ((!peer.client && now - peer.connectedAt >= HANDSHAKE_TIMEOUT_MS) || now - peer.lastSeen >= CONNECTION_TIMEOUT_MS) { this.reject(peer, 'timeout'); continue; }
+            if (peer.client && now - peer.lastSeen >= CONNECTION_WARNING_MS && !peer.warned) {
                 peer.warned = true;
                 this.broadcast({ type: 'message', key: 'connectionProblems', args: { clientId: peer.client.id } });
             }
-            if (peer.client && now - peer.lastPing >= 5000) { peer.lastPing = now; this.send(peer, { type: 'ping', t: now }); }
+            if (peer.client && now - peer.lastPing >= HEARTBEAT_INTERVAL_MS) {
+                for (const sent of peer.pendingPings) if (now - sent >= CONNECTION_TIMEOUT_MS) peer.pendingPings.delete(sent);
+                peer.lastPing = now;
+                peer.pendingPings.add(now);
+                this.send(peer, { type: 'ping', t: now });
+            }
+        }
+        if (this.model.state === 'waiting' && now - this.lastHealthBroadcast >= 1000) {
+            this.lastHealthBroadcast = now;
+            this.broadcast({ type: 'connectionHealth', timeoutMs: CONNECTION_TIMEOUT_MS,
+                players: [...this.peers].filter(peer => peer.client).map(peer => ({
+                    clientId: peer.client!.id, ping: peer.lastPong === undefined ? null : peer.client!.ping,
+                    idleMs: Math.max(0, now - peer.lastSeen),
+                })) });
         }
     }
     private send(peer: Peer, message: ServerMessage | Uint8Array): void {
@@ -118,7 +135,7 @@ export class GameServer {
     private updatePlayers(): void {
         this.model.gameOpts.humanPlayers = this.model.clients.filter(c => c.slotIndex !== null).sort((a, b) => a.slotIndex! - b.slotIndex!).map(c => ({ name: c.name, countryId: c.countryId, colorId: c.colorId, startPos: c.startPos, teamId: c.teamId }));
     }
-    private reject(peer: Peer, code: string): void { this.send(peer, { type: 'error', code }); this.drop(peer); peer.connection.close(code); }
+    private reject(peer: Peer, code: string, message?: string): void { this.send(peer, { type: 'error', code, ...(message ? {message} : {}) }); this.drop(peer); peer.connection.close(code); }
     private fail(peer: Peer, message: string): void { this.send(peer, { type: 'error', code: 'invalidCommand', message }); }
     private receive(peer: Peer, data: WireData): void {
         if (!this.peers.has(peer)) return;
@@ -131,10 +148,21 @@ export class GameServer {
                 if (!peer.client || this.model.state !== 'started' || !this.allLoaded) throw new Error('Unexpected orders');
                 this.receivePacket(peer, data);
             } else {
-                const message = JSON.parse(data);
+                let message: any;
+                try { message = JSON.parse(data); } catch { throw new Error('Malformed JSON message'); }
                 if (!message || typeof message !== 'object' || Array.isArray(message)) throw new Error('Invalid message');
                 if (!peer.client) { if (message.type !== 'hello') throw new Error('Handshake required'); this.hello(peer, message); }
-                else if (message.type === 'pong') { if (typeof message.t !== 'number' || message.t !== peer.lastPing) throw new Error('Invalid pong'); peer.client.ping = Math.max(0, this.now() - message.t); }
+                else if (message.type === 'pong') {
+                    if (typeof message.t !== 'number' || !Number.isFinite(message.t) || message.t > peer.lastPing || message.t < peer.connectedAt) throw new Error('Invalid heartbeat reply');
+                    // A stalled link can deliver replies after newer probes have
+                    // been sent. Match outstanding probes, not only the last one.
+                    // Ignore duplicates/expired replies without refreshing liveness.
+                    if (!peer.pendingPings.delete(message.t)) return;
+                    if (peer.lastPong === undefined || message.t > peer.lastPong) {
+                        peer.lastPong = message.t;
+                        peer.client.ping = Math.max(0, this.now() - message.t);
+                    }
+                }
                 else if (message.type === 'ping') { if (typeof message.t !== 'number' || !Number.isFinite(message.t)) throw new Error('Invalid ping'); this.send(peer, { type: 'pong', t: message.t }); }
                 else if (message.type === 'content') {
                     if (message.action === 'cancel' && peer.client.admin && integer(message.requestId,1,0xffffffff)) {
@@ -144,7 +172,11 @@ export class GameServer {
                         peer.lastSeen=this.now();peer.warned=false;
                         return;
                     }
-                    if (peer.contentBusy) throw new Error('Concurrent content request');
+                    if (peer.contentBusy) {
+                        if (!integer(message.requestId, 1, 0xffffffff)) throw new Error('Invalid content request ID');
+                        this.send(peer, {type:'contentResult', requestId:message.requestId, error:'A content request is still in progress. Please retry.'});
+                        return;
+                    }
                     peer.contentBusy = true;
                     void this.contentRequest(peer, message).finally(() => { peer.contentBusy = false; });
                 }
@@ -159,7 +191,7 @@ export class GameServer {
                 }
             }
             peer.lastSeen = this.now(); peer.warned = false;
-        } catch { this.reject(peer, 'invalidPacket'); }
+        } catch (error) { this.reject(peer, 'invalidPacket', error instanceof Error ? error.message : 'Malformed packet'); }
     }
     private hello(peer: Peer, hello: HelloMessage): void {
         const expected = this.options.identity;

@@ -1,4 +1,6 @@
 import React from 'react';
+import { ConnectionStatus } from './ConnectionStatus';
+import type { ConnectionHealth } from '@/network/ConnectionHealth';
 import { LobbyForm } from '@/gui/screen/mainMenu/lobby/component/LobbyForm';
 import './multiplayer.css';
 
@@ -21,6 +23,8 @@ export interface MultiplayerProps {
     status?: string;
     ready?: boolean;
     canReady?: boolean;
+    connectionHealth?: ConnectionHealth & {serverIdleMs:number};
+    connectionPlayers?: {id:number; name:string}[];
     managedPlayers?: { id: number; name: string }[];
     contentStatus?: string;
     contentBusy?: boolean;
@@ -51,6 +55,7 @@ export function Multiplayer(props: MultiplayerProps) {
         return <div className="multiplayer-lobby">
             <div className="mp-room-heading"><strong>{props.serverName}</strong><span>{props.status}</span></div>
             {props.addresses.length > 0 && <div className="mp-addresses">Join by address: {props.addresses.join(' · ')}</div>}
+            <ConnectionStatus health={props.connectionHealth} players={props.connectionPlayers ?? []}/>
             {props.error && <div className="mp-error" role="alert">{props.error}</div>}
             <details className="mp-content" open={Boolean(props.contentStatus)}><summary>Maps and Custom Units</summary>
                 {props.canManageContent && <label>Host content files<input aria-label="Host content files" type="file" multiple

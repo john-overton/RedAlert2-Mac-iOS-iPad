@@ -80,14 +80,52 @@ try {
   })));
   await Promise.all(pages.map(page => page.waitForFunction(ticks => window.__ra2debug?.game?.currentTick >= ticks, targetTicks, { timeout: 180000 })));
   const matching = await Promise.all(pages.map(page => page.evaluate(() => ({ hashes: window.__networkSmoke.hashes, errors: window.__networkSmoke.errors, objects: window.__ra2debug.game.world.getAllObjects().length, bots: window.__ra2debug.game.gameOpts.aiPlayers.filter(Boolean).length }))));
+  if (matching.some(result => result.hashes.length !== targetTicks)) throw new Error('Turn instrumentation did not capture every tick. Run against a fresh dev server after source changes.');
   if (JSON.stringify(matching[0].hashes) !== JSON.stringify(matching[1].hashes)) throw new Error('Real engine hashes diverged before fault injection.');
   console.log(`Both clients match every frame through ${targetTicks} ticks, bots=${matching[0].bots}, objects=${matching[0].objects}`);
   await pages[1].evaluate(() => { window.__networkSmoke.inject = true; });
   await Promise.all(pages.map(page => page.evaluate(ticks => { window.__networkSmoke.cap = ticks + 10; }, targetTicks)));
-  await Promise.all(pages.map(page => page.waitForFunction(() => window.__RA2_NETWORK_SYNC_REPORT__, undefined, { timeout: 30000 })));
+  try {
+    await Promise.all(pages.map(page => page.waitForFunction(() => window.__RA2_NETWORK_SYNC_REPORT__, undefined, { timeout: 30000 })));
+  } catch (error) {
+    console.error('Mismatch diagnostics', await Promise.all(pages.map(page => page.evaluate(() => ({ tick: window.__ra2debug.game.currentTick, fatal: window.__networkSmoke.client.getMatchSession().fatalError, errorState: window.__ra2debug.gameScreen.gameTurnMgr.getErrorState(), report: window.__RA2_NETWORK_SYNC_REPORT__?.message, errors: window.__networkSmoke.errors })))));
+    throw error;
+  }
   const reports = await Promise.all(pages.map(page => page.evaluate(() => { const report = window.__RA2_NETWORK_SYNC_REPORT__; return { frame: report.frame, tick: report.tick, stateTick: report.state.currentTick, errors: window.__networkSmoke.errors }; })));
   if (reports.some(report => report.frame !== targetTicks + 1)) throw new Error(`Wrong mismatch frame: ${JSON.stringify(reports)}`);
   if (errors.length || matching.some(result => result.errors.length) || reports.some(report => report.errors.length)) throw new Error(`Unexpected errors: ${JSON.stringify({ errors, matching: matching.map(result => result.errors), reports })}`);
+  // Load the production turn manager in the browser, where the engine's module
+  // initialization order is supported, and reproduce shutdown inside update().
+  await pages[0].evaluate(async () => {
+    const { NetworkTurnManager } = await import('/src/network/client/NetworkTurnManager.ts');
+    const { NetworkMatchSession } = await import('/src/network/client/NetworkMatchSession.ts');
+    const { EventDispatcher } = await import('/src/util/event.ts');
+    const { encodeOrderPacket } = await import('/src/network/server/Protocol.ts');
+    const original = window.__networkSmoke.client.getMatchSession();
+    let closed = false;
+    let sent = 0;
+    const connection = {
+      onMessage: new EventDispatcher(), onClose: new EventDispatcher(),
+      sendRaw() { if (closed) throw new Error('Not connected to the game server.'); sent++; },
+      close() { closed = true; },
+    };
+    const match = new NetworkMatchSession(connection, original.start, original.descriptor);
+    connection.onMessage.dispatch(connection, JSON.stringify({ type: 'allLoaded' }));
+    for (const id of original.start.clientIds) connection.onMessage.dispatch(connection, encodeOrderPacket(id, 1, new Uint8Array()));
+    const game = { currentTick: 0, speed: { value: 1 }, getHash: () => 123, getPlayerByName: name => ({ name }),
+      update() { manager.setErrorState(); match.leaveRoom(); },
+      debugGetState() { throw new Error('Deliberately failed diagnostic snapshot'); },
+    };
+    const manager = new NetworkTurnManager(game, {}, { dequeueAll: () => [] }, {}, match);
+    manager.init();
+    if (!manager.doGameTurn(0) || sent !== 1 || match.fatalError) throw new Error('Game-end shutdown regression');
+    let reported;
+    manager.onFatalError.subscribe(error => { reported = error.message; });
+    match.fail('Original connection failure');
+    if (reported !== 'Original connection failure') throw new Error('Diagnostics masked the original error');
+    manager.dispose();
+  });
+  console.log('Game-end shutdown and failed diagnostic export regressions passed');
   mkdirSync('build', { recursive: true });
   writeFileSync('build/lockstep-engine-smoke.json', JSON.stringify({ targetTicks, map: gameOpts.mapName, orderLatency: 2, clients: matching, divergence: reports }, null, 2));
   console.log(`Injected PRNG divergence stopped both clients; mismatch frame=${reports[0].frame}, stopped ticks=${reports.map(report => report.tick).join('/')}. Report: build/lockstep-engine-smoke.json`);

@@ -164,3 +164,49 @@ describe('independent client sync comparison', () => {
         expect(match.fatalError?.message).toBe('Too many pending sync frames.');
     });
 });
+
+
+describe('match shutdown and transport failures', () => {
+    test('leaving during a simulation tick prevents trailing sync, orders and load messages', () => {
+        const { match, connection, outgoing } = fixture();
+        match.submitLocalTurn(0, new Uint8Array());
+        connection.close = () => {
+            connection.sendRaw = connection.sendImmediate = () => { throw new Error('Not connected to the game server.'); };
+        };
+        match.leaveRoom();
+        expect(() => {
+            match.sendSync(0, 123);
+            match.submitLocalTurn(1, new Uint8Array());
+            match.reportLoadProgress(100);
+        }).not.toThrow();
+        expect(outgoing).toHaveLength(1);
+        expect(match.fatalError).toBeUndefined();
+    });
+    test('transport loss before close notification becomes a match error for every send path', () => {
+        for (const operation of ['orders', 'sync', 'load']) {
+            const { match, connection } = fixture();
+            connection.sendRaw = connection.sendImmediate = () => { throw new Error('Not connected to the game server.'); };
+            const errors: string[] = [];
+            match.onFatalError.subscribe(error => errors.push(error.message));
+            expect(() => {
+                if (operation === 'orders') match.submitLocalTurn(0, new Uint8Array());
+                if (operation === 'sync') match.sendSync(0, 123);
+                if (operation === 'load') match.reportLoadProgress(100);
+            }).not.toThrow();
+            connection.onClose.dispatch(connection, 'Later close reason');
+            expect(errors).toHaveLength(1);
+            expect(errors[0]).toContain('Connection to the game server was lost');
+        }
+    });
+    test('sync evidence is sent before a fatal listener closes the transport', () => {
+        const { match, receive, connection, outgoing } = fixture();
+        receive(encodeRelayedSyncPacket(2, 1, 456));
+        match.onFatalError.subscribe(() => {
+            match.leaveRoom();
+            connection.sendRaw = () => { throw new Error('Not connected'); };
+        });
+        expect(() => match.sendSync(0, 123)).not.toThrow();
+        expect(outgoing).toHaveLength(1);
+        expect(match.fatalError?.message).toContain('out of sync at frame 1');
+    });
+});

@@ -1,3 +1,4 @@
+import { HANDSHAKE_TIMEOUT_MS, type ConnectionHealth } from '../ConnectionHealth';
 import { CONTENT_CHUNK_BYTES, MAX_CONTENT_BYTES, sha256, contentPath, createContentManifest, decodeContentBytes, encodeContentBytes, validateContentManifest, verifyContentFiles } from '../content/ContentPackage';
 import type { ContentFile, ContentManifest } from '../content/ContentPackage';
 import type { ContentRequest, ContentResponse } from '../server/Protocol';
@@ -8,7 +9,7 @@ import { WebSocketConnection } from './WebSocketConnection';
 import { NetworkMatchSession } from './NetworkMatchSession';
 
 export class LobbyConnectionError extends Error {
-    constructor(readonly code: string, message: string) { super(message); this.name = 'LobbyConnectionError'; }
+    constructor(readonly code: string, message: string, readonly disconnected = false) { super(message); this.name = 'LobbyConnectionError'; }
 }
 
 const ERRORS: Record<string, string> = {
@@ -17,10 +18,14 @@ const ERRORS: Record<string, string> = {
     modMismatch: 'The server uses different rules or a different mod.',
     assetMismatch: 'Your retail asset import differs from the server. Each player must import matching assets; retail files are never transferred.',
     protocolMismatch: 'The server uses an incompatible multiplayer protocol.', full: 'The game is full.',
+    timeout: 'The server stopped receiving replies. Rejoin when your connection is stable.',
+    invalidPacket: 'The server rejected a network message.',
+    packetTooLarge: 'A network message exceeded the server limit.',
     banned: 'You are banned from this server.', kicked: 'You were removed from the game.',
 };
 
 export class LobbyClient {
+    readonly onConnectionHealth = new EventDispatcher<this, ConnectionHealth & { serverIdleMs: number }>();
     readonly onSession = new EventDispatcher<this, Session>();
     readonly onChat = new EventDispatcher<this, Extract<ServerMessage, { type: 'chat' }>>();
     readonly onStartGame = new EventDispatcher<this, StartGameMessage>();
@@ -32,6 +37,17 @@ export class LobbyClient {
     private handshakeResolve?: () => void;
     private handshakeReject?: (error: Error) => void;
     private intentionalClose = false;
+    private disconnectError?: LobbyConnectionError;
+    private health?: ConnectionHealth;
+    private lastReceivedAt = 0;
+    private healthTimer?: ReturnType<typeof setInterval>;
+    getConnectionHealth(): (ConnectionHealth & {serverIdleMs:number}) | undefined {
+        return this.health && {...this.health, serverIdleMs:Math.max(0, Date.now() - this.lastReceivedAt)};
+    }
+    private emitConnectionHealth(): void {
+        const health = this.getConnectionHealth();
+        if (health) this.onConnectionHealth.dispatch(this, health);
+    }
     private nextContentRequest = 1;
     private readonly contentRequests = new Map<number, {resolve:(response:ContentResponse)=>void; reject:(error:Error)=>void}>();
     private publishingContent = false;
@@ -44,13 +60,13 @@ export class LobbyClient {
         connection.onClose.subscribe(this.closed);
     }
     async connect(address: string, hello: HelloMessage): Promise<void> {
-        this.intentionalClose = false;
+        this.intentionalClose = false; this.disconnectError = undefined; this.health = undefined;
         await this.connection.connect(address);
         return new Promise<void>((resolve, reject) => {
             const timer = setTimeout(() => {
                 const error = new LobbyConnectionError('timeout', 'The server did not complete the handshake.');
                 this.handshakeReject?.(error); this.close();
-            }, 15000);
+            }, HANDSHAKE_TIMEOUT_MS);
             this.handshakeResolve = () => { clearTimeout(timer); this.handshakeResolve = undefined; this.handshakeReject = undefined; resolve(); };
             this.handshakeReject = error => { clearTimeout(timer); this.handshakeResolve = undefined; this.handshakeReject = undefined; reject(error); };
             try { this.connection.sendImmediate({ ...hello, type: 'hello' }); }
@@ -66,7 +82,7 @@ export class LobbyClient {
             const requestId = this.nextContentRequest++;
             const cleanup = () => { clearTimeout(timer); signal?.removeEventListener('abort',abort); this.contentRequests.delete(requestId); };
             const abort = () => { cleanup(); reject(new Error('Content transfer cancelled')); };
-            const timer = setTimeout(() => { cleanup(); reject(new Error('Content transfer timed out')); },30000);
+            const timer = setTimeout(() => { cleanup(); reject(new Error('Content transfer timed out')); },60000);
             this.contentRequests.set(requestId,{resolve:response => {cleanup(); response.error ? reject(new Error(response.error)) : resolve(response);},reject:error=>{cleanup();reject(error);}});
             signal?.addEventListener('abort',abort,{once:true});
             try { this.connection.sendImmediate({type:'content',requestId,...message}); }
@@ -131,18 +147,26 @@ export class LobbyClient {
     }
     close(): void {
         this.intentionalClose = true;
+        clearInterval(this.healthTimer); this.healthTimer = undefined; this.health = undefined;
         this.cancelContentRequests(new Error('Connection cancelled.'));
         this.handshakeReject?.(new Error('Connection cancelled.'));
         this.match?.dispose(); this.match = undefined;
         this.connection.close(); this.session = undefined; this.clientId = undefined;
     }
     private readonly closed = (reason: string) => {
-        const error = new LobbyConnectionError('disconnected', reason);
+        clearInterval(this.healthTimer); this.healthTimer = undefined;
+        const error = new LobbyConnectionError(this.disconnectError?.code ?? 'disconnected',
+            this.disconnectError?.message ?? ERRORS[reason] ?? reason, true);
         this.cancelContentRequests(error);
         this.handshakeReject?.(error);
-        if (!this.intentionalClose) this.onError.dispatch(this, error);
+        if (!this.intentionalClose) {
+            // Lobby listeners can dispose the match while this close event is dispatching.
+            this.match?.fail(error.message);
+            this.onError.dispatch(this, error);
+        }
     };
     private readonly receive = (data: string | Uint8Array) => {
+        this.lastReceivedAt = Date.now();
         if (typeof data !== 'string') return;
         try {
             const message: ServerMessage = JSON.parse(data);
@@ -150,19 +174,36 @@ export class LobbyClient {
                 case 'contentResult': this.contentRequests.get(message.requestId)?.resolve(message); break;
                 case 'welcome':
                     this.clientId = message.clientId; this.session = message.session;
+                    clearInterval(this.healthTimer);
+                    this.healthTimer = setInterval(() => this.emitConnectionHealth(), 1000);
                     this.handshakeResolve?.(); this.onSession.dispatch(this, message.session); break;
                 case 'session': this.session = message.session; this.onSession.dispatch(this, message.session); break;
+                case 'connectionHealth':
+                    this.health = {players:message.players, timeoutMs:message.timeoutMs};
+                    for (const value of message.players) {
+                        const client = this.session?.clients.find(client => client.id === value.clientId);
+                        if (client && value.ping !== null) client.ping = value.ping;
+                    }
+                    this.emitConnectionHealth(); break;
                 case 'chat': this.onChat.dispatch(this, message); break;
                 case 'message': this.onMessage.dispatch(this, message); break;
                 case 'ping': this.connection.sendImmediate({ type: 'pong', t: message.t }); break;
                 case 'error': {
-                    const error = new LobbyConnectionError(message.code, ERRORS[message.code] ?? message.message ?? message.code);
+                    const description = ERRORS[message.code];
+                    const error = new LobbyConnectionError(message.code, message.code === 'invalidPacket' && message.message
+                        ? `${description} ${message.message}. Please report this detail if it repeats.`
+                        : description ?? message.message ?? message.code);
+                    if (message.code !== 'invalidCommand') {
+                        this.disconnectError = error;
+                        this.match?.fail(error.message);
+                    }
                     const handshaking = Boolean(this.handshakeReject);
                     this.handshakeReject?.(error);
                     if (handshaking) this.close();
                     this.onError.dispatch(this, error); break;
                 }
                 case 'startGame': {
+                    clearInterval(this.healthTimer); this.healthTimer = undefined;
                     if (this.clientId === undefined || !this.session || this.match) throw new Error('Unexpected game start.');
                     const local = message.humanAssignments.find(item => item.clientId === this.clientId);
                     if (!local) throw new Error('The server did not assign a local player.');

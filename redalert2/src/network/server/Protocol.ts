@@ -1,3 +1,4 @@
+import type { ConnectionHealth } from '../ConnectionHealth';
 import type { GameOpts } from '../../game/gameopts/GameOpts';
 import type { Session } from './Session';
 
@@ -41,6 +42,7 @@ export type ClientMessage = ContentRequest | HelloMessage
 export type ContentRequest = { type: 'content'; requestId: number; action: 'begin' | 'put' | 'commit' | 'get' | 'cancel'; manifest?: import('../content/ContentPackage').ContentManifest; id?: string; path?: string; offset?: number; data?: string };
 export type ContentResponse = { type: 'contentResult'; requestId: number; error?: string; data?: string };
 export type ServerMessage = ContentResponse
+    | ({ type: 'connectionHealth' } & ConnectionHealth)
     | { type: 'welcome'; clientId: number; session: Session }
     | { type: 'session'; session: Session }
     | { type: 'error'; code: string; message?: string }

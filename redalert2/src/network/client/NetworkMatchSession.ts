@@ -20,6 +20,7 @@ export class NetworkMatchSession {
     private lastConsumedFrame = 0;
     private allLoaded = false;
     private disposed = false;
+    private leftRoom = false;
     fatalError?: { message: string; frame?: number };
 
     constructor(readonly connection: WebSocketConnection, readonly start: StartGameMessage, readonly descriptor: LanLaunchDescriptor) {
@@ -33,19 +34,21 @@ export class NetworkMatchSession {
     getHumanAssignment(peerId: string) { return this.descriptor.humanAssignments.find(item => item.peerId === peerId); }
     areAllPlayersLoaded(): boolean { return this.allLoaded; }
     reportLoadProgress(percent: number): void {
-        this.connection.sendImmediate({ type: 'loaded', percent: Math.max(0, Math.min(100, Math.floor(percent))) });
+        this.send(() => this.connection.sendImmediate({ type: 'loaded', percent: Math.max(0, Math.min(100, Math.floor(percent))) }));
     }
-    submitLocalTurn(tick: number, actions: Uint8Array): string {
+    submitLocalTurn(tick: number, actions: Uint8Array): string | undefined {
+        if (this.fatalError || this.disposed || this.leftRoom) return;
         const frame = tick + 1;
         const existing = this.submitted.get(frame);
         if (existing) return existing;
         const id = `${this.descriptor.localPeerId}:${frame}`;
+        const packet = encodeOrderPacket(Number(this.descriptor.localPeerId), frame, actions);
+        if (!this.send(() => this.connection.sendRaw(packet))) return;
         this.submitted.set(frame, id);
-        this.connection.sendRaw(encodeOrderPacket(Number(this.descriptor.localPeerId), frame, actions));
         return id;
     }
     sendSync(tick: number, hash: number, defeatMask = 0n): void {
-        if (this.fatalError || this.disposed) return;
+        if (this.fatalError || this.disposed || this.leftRoom) return;
         const frame = tick + 1;
         const packet = encodeSyncPacket(frame, hash, defeatMask);
         // Compare the wire-normalized local value, independently of the server's echo.
@@ -55,12 +58,11 @@ export class NetworkMatchSession {
         const reports = this.getSyncReports(frame);
         if (!reports) return;
         reports.local = value;
-        this.checkSync(frame, reports);
-        // Still send a newly detected mismatch so other clients receive our evidence.
-        this.connection.sendRaw(packet);
+        // Send evidence before notifying listeners: fatal-error handlers may close the session.
+        if (this.send(() => this.connection.sendRaw(packet))) this.checkSync(frame, reports);
     }
     tryConsumeTurn(tick: number): LanResolvedTurn | undefined {
-        if (!this.allLoaded || this.fatalError) return;
+        if (!this.allLoaded || this.fatalError || this.disposed || this.leftRoom) return;
         const frame = tick + 1;
         const drops = [...this.drops].filter(([id, at]) => at <= frame && this.active.has(id)).map(([id]) => id);
         const expected = this.descriptor.humanAssignments.map(item => item.peerId).filter(id => this.active.has(id) && !drops.includes(id));
@@ -120,9 +122,19 @@ export class NetworkMatchSession {
         reports.relayed.set(id, `${packet.hash}:${packet.defeatMask}`);
         this.checkSync(packet.frame, reports);
     }
-    private readonly closed = (reason: string) => this.fail(reason);
+    private send(write: () => void): boolean {
+        if (this.fatalError || this.disposed || this.leftRoom) return false;
+        try { write(); return true; }
+        catch (error) {
+            this.fail(`Connection to the game server was lost. ${error instanceof Error ? error.message : String(error)}`);
+            return false;
+        }
+    }
+    private readonly closed = (reason: string) => {
+        if (!this.leftRoom && !this.disposed) this.fail(reason);
+    };
     private readonly receive = (data: string | Uint8Array) => {
-        if (this.fatalError || this.disposed) return;
+        if (this.fatalError || this.disposed || this.leftRoom) return;
         try {
             if (typeof data !== 'string') {
                 const packet = decodePacket(data);
@@ -147,7 +159,7 @@ export class NetworkMatchSession {
             this.onSnapshotChange.dispatch(this, this.getSnapshot());
         } catch (error) { this.fail(error instanceof Error ? error.message : String(error)); }
     };
-    leaveRoom(): void { this.connection.close(); }
+    leaveRoom(): void { this.leftRoom = true; this.connection.close(); }
     dispose(): void {
         if (this.disposed) return;
         this.disposed = true;

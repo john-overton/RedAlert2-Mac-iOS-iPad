@@ -69,6 +69,7 @@ export class NetworkTurnManager {
                 this.onActionsSent.dispatch(this, localTurnId);
             }
 
+            if (this.errorState) return false;
             const resolvedTurn = this.matchSession.tryConsumeTurn(tick);
             if (!resolvedTurn) {
                 this.updateLagState(true, tick);
@@ -87,7 +88,8 @@ export class NetworkTurnManager {
 
         this.game.update();
         this.submittedTicks.delete(tick);
-        if (!wasEnded) this.matchSession.sendSync(tick, this.game.getHash());
+        // Game end callbacks can stop the turn manager and leave the room inside update().
+        if (!wasEnded && !this.errorState && !this.matchDisposed) this.matchSession.sendSync(tick, this.game.getHash());
         return true;
     }
 
@@ -103,16 +105,20 @@ export class NetworkTurnManager {
     readonly onFatalError = new EventDispatcher<this, { message: string; frame?: number }>();
     private readonly handleFatalError = (error: { message: string; frame?: number }) => {
         this.errorState = true;
-        const report = { ...error, gameId: this.matchSession.start.gameId, tick: this.game.currentTick, state: this.game.debugGetState?.() };
-        (globalThis as any).__RA2_NETWORK_SYNC_REPORT__ = report;
-        console.error('[network] Match stopped', report);
-        if (typeof document !== 'undefined') {
-            const url = URL.createObjectURL(new Blob([JSON.stringify(report)], { type: 'application/json' }));
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = `ra2-sync-${this.matchSession.start.gameId}-${error.frame ?? this.game.currentTick}.json`;
-            anchor.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        try {
+            const report = { ...error, gameId: this.matchSession.start.gameId, tick: this.game.currentTick, state: this.game.debugGetState?.() };
+            (globalThis as any).__RA2_NETWORK_SYNC_REPORT__ = report;
+            console.error('[network] Match stopped', report);
+            if (typeof document !== 'undefined') {
+                const url = URL.createObjectURL(new Blob([JSON.stringify(report)], { type: 'application/json' }));
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = `ra2-sync-${this.matchSession.start.gameId}-${error.frame ?? this.game.currentTick}.json`;
+                anchor.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
+        } catch (reportError) {
+            console.warn('[network] Could not export match diagnostics', reportError);
         }
         this.onFatalError.dispatch(this, error);
     };

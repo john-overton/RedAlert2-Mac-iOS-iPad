@@ -206,3 +206,35 @@ clients must use the same build; restart Vite after rebuilding changed source.
 
 No OpenRA source was copied. The implementation follows the recorded design;
 `THIRD-PARTY-NOTICES.md` records the new ws dependency.
+
+
+## Lobby ping and stalled connections
+
+The lobby shows each player's round-trip ping to the host in milliseconds.
+`Measuring…` appears before the first reply. Probes are sent every five seconds;
+health updates do not replace lobby options, map verification or readiness.
+After ten seconds without player traffic, the host reports a stalled connection
+and the remaining slot-hold time. Slots are retained for up to two minutes without
+traffic. A guest also sees a warning if it stops hearing from the host. Initial
+connection/handshake attempts allow 30 seconds; individual content requests allow
+60 seconds.
+
+Delayed pong replies are matched against a bounded set of outstanding probes.
+Previously, sending the next ping invalidated the preceding one, so a browser
+stall or delayed connection could produce `invalidPacket` and an unnecessary
+kick. Duplicate/stale replies are ignored without extending liveness. Malformed
+packets, oversized messages and invalid game-frame sequences are still rejected.
+An overlapping content request now returns a retryable transfer error instead
+of disconnecting the player. Rejection details survive the subsequent socket
+close, so an unexplained code is no longer the only diagnostic shown.
+
+This preserves existing connections through temporary stalls. It does not resume
+a fully closed WebSocket session; return to Join Game if the connection is lost.
+Both host and guest must rebuild from the same commit to use these changes.
+
+Match shutdown handling: leaving a room during victory/defeat stops subsequent
+sync/order/load sends, including the remainder of the current simulation tick.
+Unexpected send failures enter the match error path; lobby cleanup forwards the
+original server rejection or close reason before disposing the match. Diagnostic
+export failures cannot suppress the error dialog. These changes do not reconnect
+a closed WebSocket or resume an interrupted match.

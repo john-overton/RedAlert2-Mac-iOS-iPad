@@ -1,3 +1,4 @@
+import { HANDSHAKE_TIMEOUT_MS } from '../ConnectionHealth';
 import { EventDispatcher } from '@/util/event';
 
 export const DEFAULT_GAME_PORT = 1620;
@@ -36,7 +37,7 @@ export class WebSocketConnection {
             const timer = setTimeout(() => {
                 reject(new Error('Connection timed out. Check the address and port.'));
                 this.close();
-            }, 15000);
+            }, HANDSHAKE_TIMEOUT_MS);
             socket.onopen = () => {
                 if (this.socket !== socket) return;
                 opened = true; this.cancelConnect = undefined; clearTimeout(timer); resolve();

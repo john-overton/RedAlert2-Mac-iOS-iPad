@@ -46,3 +46,12 @@
 #ra2web-root .mp-content label { display: flex; gap: 12px; align-items: center; margin: 8px 0; }
 #ra2web-root .mp-content input { min-width: 0; max-width: 340px; }
 #ra2web-root .mp-content button { margin: 6px 8px 0 0; }
+
+
+#ra2web-root .mp-connections { margin: 8px 10px; font-size: 12px; }
+#ra2web-root .mp-ping-label { opacity: .8; }
+#ra2web-root .mp-pings { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 4px; }
+#ra2web-root .mp-ping { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+#ra2web-root .mp-ping strong { font-variant-numeric: tabular-nums; color: #b5d99b; }
+#ra2web-root .mp-ping-slow strong { color: #ffd17d; }
+#ra2web-root .mp-ping-stalled, #ra2web-root .mp-ping-stalled strong, #ra2web-root .mp-connections p { color: #ffae91; }

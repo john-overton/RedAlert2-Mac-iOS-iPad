@@ -27,6 +27,7 @@ const create=document.querySelector('.multiplayer-entry button[type=submit]');
 if(create.disabled)throw Error('Native Create Game is disabled');
 create.click();
 await until(()=>document.querySelector('.multiplayer-lobby'),'host lobby');
+const recoverAt=Date.now()+16000;
 const guest=await new Promise((resolve,reject)=>{
     const socket=new WebSocket('ws://127.0.0.1:19722');
     socket.onopen=()=>socket.send(JSON.stringify({...options.identity,type:'hello',name:'Native UI Guest',password:options.password}));
@@ -35,10 +36,13 @@ const guest=await new Promise((resolve,reject)=>{
         const message=JSON.parse(event.data);
         if(message.type==='welcome')resolve(socket);
         if(message.type==='error')reject(Error(JSON.stringify(message)));
-        if(message.type==='ping')socket.send(JSON.stringify({type:'pong',t:message.t}));
+        if(message.type==='ping')setTimeout(()=>{if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'pong',t:message.t}));},Math.max(0,recoverAt-Date.now()));
     };
 });
 await until(()=>textElement('Native UI Guest'),'guest in host lobby');
+await until(()=>[...document.querySelectorAll('.mp-ping')].some(el=>el.textContent.includes('Native UI Guest')&&el.textContent.includes('No reply')),'slow guest warning');
+await until(()=>[...document.querySelectorAll('.mp-ping')].some(el=>el.textContent.includes('Native UI Guest')&&/\d+ ms/.test(el.textContent)&&!el.textContent.includes('No reply')),'delayed heartbeat recovery and ping display');
+if(!document.querySelector('.multiplayer-lobby'))throw Error('Delayed pongs disconnected the lobby');
 const closed=new Promise(resolve=>guest.onclose=resolve);
 textElement('Leave Game').click();
 await closed;
@@ -47,4 +51,4 @@ document.querySelector('.multiplayer-entry button[type=submit]').click();
 await until(()=>document.querySelector('.multiplayer-lobby'),'rehost on same port');
 textElement('Leave Game').click();
 await until(()=>document.querySelector('.multiplayer-entry'),'final leave');
-return 'Native game UI: Create Game enabled, host lobby, guest join, Leave Game and same-port rehost passed';
+return 'Native game UI: Create Game enabled, host lobby, guest join, ping display, 16-second heartbeat stall/recovery, Leave Game and same-port rehost passed';
