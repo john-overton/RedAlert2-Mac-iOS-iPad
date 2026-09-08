@@ -51,11 +51,27 @@ export class MenuVideo extends React.Component<MenuVideoProps, MenuVideoState> {
     componentDidMount() {
         const src = this.props.src;
         const video = this.el?.querySelector("video");
-        const logo = this.el?.querySelector("div");
-        if (!src || !video || !logo) {
+        // The markup no longer contains a logo <div>; treating it as required
+        // made this whole method return early, so no listener below ever ran.
+        const logo = this.el?.querySelector<HTMLElement>(".logo");
+        if (!src || !video) {
             console.log('[MenuVideo] No video source provided or elements not found');
             return;
         }
+        // The `autoplay` attribute is not enough on Chromium: the element is
+        // parsed from innerHTML into a container that starts display:none, and
+        // it stayed paused at t=0 in the Electron/Linux shell and in a desktop
+        // browser alike (WebKit happened to start it). Ask for playback
+        // explicitly once data is available; the video is muted, so autoplay
+        // policy never blocks this, and a rejected promise is harmless.
+        const tryPlay = () => {
+            if (video.paused) {
+                video.play()?.catch(() => { });
+            }
+        };
+        video.addEventListener("loadeddata", tryPlay);
+        video.addEventListener("canplay", tryPlay, { once: true });
+        tryPlay();
         if (src instanceof File && window.MediaSource) {
             const errorHandler = async () => {
                 console.log('[MenuVideo] Video source error, trying MediaSource fallback');
@@ -71,8 +87,10 @@ export class MenuVideo extends React.Component<MenuVideoProps, MenuVideoState> {
             }
         }
         video.addEventListener("loadeddata", () => {
-            logo.style.opacity = "";
-            console.log('[MenuVideo] Video data loaded, showing logo');
+            if (logo) {
+                logo.style.opacity = "";
+            }
+            console.log('[MenuVideo] Video data loaded');
         });
         video.addEventListener("error", (e) => {
             console.error('[MenuVideo] Video error:', e);

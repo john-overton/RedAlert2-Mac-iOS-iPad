@@ -206,7 +206,7 @@ export class MainMenuRootScreen extends RootScreen {
             const engineModHash = Engine.getActiveMod?.() ?? '';
             screen = new screenClass(engineVersion, engineModHash, undefined, undefined, this.rootController, this.strings, this.jsxRenderer, errorHandler, this.messageBoxApi, replayManager, undefined, rules);
         }
-        else if (screenType === MainMenuScreenType.LanSetup) {
+        else if (screenType === MainMenuScreenType.LanSetup || screenType === MainMenuScreenType.Multiplayer) {
             const { ErrorHandler } = await import('../../../ErrorHandler.js');
             const { Rules } = await import('../../../game/rules/Rules.js');
             const { MapFileLoader } = await import('../game/MapFileLoader.js');
@@ -229,7 +229,7 @@ export class MainMenuRootScreen extends RootScreen {
             catch (error) {
                 console.error("[MainMenuRootScreen] Couldn't get map dir for LAN setup", error);
             }
-            screen = new screenClass(this.rootController, this.strings, this.jsxRenderer, rules, mapFileLoader, mapList, gameModes, this.localPrefs, this.messageBoxApi, mapDir);
+            screen = new screenClass(this.rootController, this.strings, this.jsxRenderer, rules, mapFileLoader, mapList, gameModes, this.localPrefs, this.messageBoxApi, mapDir, this.config.engine);
         }
         else if (screenType === MainMenuScreenType.Campaign) {
             screen = new screenClass(this.jsxRenderer, this.messageBoxApi);

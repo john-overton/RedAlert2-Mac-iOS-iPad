@@ -8,6 +8,12 @@ The Apple Silicon macOS wrapper reuses the bundle resource handler and web
 engine described here. See the [macOS build guide](MACOS.md) for its AppKit
 shell, build commands, desktop controls, and current limitations.
 
+The Linux build (developed on Omarchy/Arch under Hyprland) reuses the same
+pieces again: the `ra2app://app/…` and `…/gameres/…` layout, the first-launch
+seeder, and the shell marker. Electron's `protocol.handle` stands in for the
+`WKURLSchemeHandler`, streaming files from disk with the same traversal check
+and MIME table. See the [Linux build guide](LINUX.md).
+
 ---
 
 ## 1. The premise: no engine to compile

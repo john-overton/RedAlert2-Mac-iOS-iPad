@@ -31,8 +31,11 @@ import { Minimap } from '@/gui/screen/game/component/Minimap';
 import { Replay } from '@/network/gamestate/Replay';
 import { ReplayRecorder } from '@/network/gamestate/ReplayRecorder';
 import { SoloPlayTurnManager } from '@/network/gamestate/SoloPlayTurnManager';
+import { NetworkTurnManager } from '@/network/client/NetworkTurnManager';
 import { LanLockstepTurnManager } from '@/network/lan/LanLockstepTurnManager';
 import { LanMatchSession } from '@/network/lan/LanMatchSession';
+import { NetworkMatchSession } from '@/network/client/NetworkMatchSession';
+import { hasSessionContent, restoreSessionContent } from '@/network/content/SessionContentResources';
 import { CombatantSidebarModel } from '@/gui/screen/game/component/hud/viewmodel/CombatantSidebarModel';
 import { ActionFactoryReg } from '@/game/action/ActionFactoryReg';
 import { MessageList } from '@/gui/screen/game/component/hud/viewmodel/MessageList';
@@ -101,7 +104,7 @@ export class GameScreen extends RootScreen {
     private lagState = false;
     private chatTypingHandler?: any;
     private chatNetHandler?: any;
-    private lanMatchSession?: LanMatchSession;
+    private lanMatchSession?: LanMatchSession | NetworkMatchSession;
     private isSinglePlayer = false;
     private isLanGame = false;
     private isTournament = false;
@@ -135,6 +138,10 @@ export class GameScreen extends RootScreen {
         return !this.isSinglePlayer && !this.isLanGame;
     }
     async onEnter(params: any): Promise<void> {
+        if (hasSessionContent()) {
+            this.vxlGeometryPool?.clear();
+            this.buildingImageDataCache?.clear();
+        }
         this.gameEndHandled = false;
         inGameViewportActive.value = true;
         this.pointer.lock();
@@ -378,6 +385,9 @@ export class GameScreen extends RootScreen {
 
     private async waitForLanPlayersLoaded(cancellationToken: any): Promise<void> {
         while (!cancellationToken.isCancelled() && this.lanMatchSession && !this.lanMatchSession.areAllPlayersLoaded()) {
+            if (this.lanMatchSession instanceof NetworkMatchSession && this.lanMatchSession.fatalError) {
+                throw new Error(this.lanMatchSession.fatalError.message);
+            }
             await sleep(50);
         }
     }
@@ -403,6 +413,11 @@ export class GameScreen extends RootScreen {
         this.lanMatchSession?.dispose();
         this.lanMatchSession = undefined;
         this.disposables.dispose();
+        if (hasSessionContent()) {
+            this.vxlGeometryPool?.clear();
+            this.buildingImageDataCache?.clear();
+            restoreSessionContent();
+        }
         this.activeWorldScene = undefined;
         if (hadGameAnimationLoop) {
             this.uiAnimationLoop.start();
@@ -706,8 +721,15 @@ export class GameScreen extends RootScreen {
             minimap
         };
     }
-    private initLockstep(game: any, localPlayer: any, actionFactory: any, actionQueue: any, replayRecorder: any, lanMatchSession: LanMatchSession): any {
-        const lockstepManager = new LanLockstepTurnManager(game, localPlayer, actionQueue, actionFactory, lanMatchSession, this.actionLogger, this.lockstepLogger, replayRecorder);
+    private initLockstep(game: any, localPlayer: any, actionFactory: any, actionQueue: any, replayRecorder: any, lanMatchSession: LanMatchSession | NetworkMatchSession): any {
+        const lockstepManager = lanMatchSession instanceof NetworkMatchSession
+            ? new NetworkTurnManager(game, localPlayer, actionQueue, actionFactory, lanMatchSession, this.actionLogger, this.lockstepLogger, replayRecorder)
+            : new LanLockstepTurnManager(game, localPlayer, actionQueue, actionFactory, lanMatchSession, this.actionLogger, this.lockstepLogger, replayRecorder);
+        if (lockstepManager instanceof NetworkTurnManager) {
+            const onFatalError = (error: { message: string }) => this.handleError(new Error(error.message), error.message);
+            lockstepManager.onFatalError.subscribe(onFatalError);
+            this.disposables.add(() => lockstepManager.onFatalError.unsubscribe(onFatalError));
+        }
         const onLagStateChange = (lagState: boolean) => {
             this.lagState = lagState;
         };

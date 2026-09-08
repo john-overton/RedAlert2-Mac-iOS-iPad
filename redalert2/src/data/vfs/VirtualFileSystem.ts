@@ -21,6 +21,7 @@ export class VirtualFileSystem {
     private logger: VfsLogger;
     private allArchives: Map<string, Archive>;
     private archivesByPriority: Archive[];
+    private overridingArchives = new Set<Archive>();
     constructor(rfs: RealFileSystem, logger: VfsLogger) {
         this.rfs = rfs;
         this.logger = logger;
@@ -43,10 +44,14 @@ export class VirtualFileSystem {
         }
         throw new FileNotFoundError(`File "${filename}" not found in VFS`);
     }
-    addArchive(archive: Archive, name: string): void {
+    addArchive(archive: Archive, name: string, highestPriority = false): void {
         if (!this.allArchives.has(name)) {
             this.allArchives.set(name, archive);
-            this.archivesByPriority.push(archive);
+            if (highestPriority) {
+                this.archivesByPriority.unshift(archive);
+                this.overridingArchives.add(archive);
+            }
+            else this.archivesByPriority.push(archive);
             this.logger.info(`Added archive "${name}" to VFS`);
         }
     }
@@ -60,6 +65,7 @@ export class VirtualFileSystem {
         const archive = this.allArchives.get(name);
         if (archive) {
             this.allArchives.delete(name);
+            this.overridingArchives.delete(archive);
             const index = this.archivesByPriority.indexOf(archive);
             if (index > -1) {
                 this.archivesByPriority.splice(index, 1);
@@ -82,7 +88,16 @@ export class VirtualFileSystem {
         });
         return owners;
     }
-    private async openFileWithRfs(filename: string): Promise<VirtualFile | undefined> {
+    /** Session overlays also precede loose imports and packaged campaign maps. */
+    openOverrideFile(filename: string): VirtualFile | undefined {
+        for (const archive of this.archivesByPriority) {
+            if (this.overridingArchives.has(archive) && archive.containsFile(filename)) return archive.openFile(filename);
+        }
+        return undefined;
+    }
+    async openFileWithRfs(filename: string): Promise<VirtualFile | undefined> {
+        const override = this.openOverrideFile(filename);
+        if (override) return override;
         let file: VirtualFile | undefined;
         try {
             file = await this.rfs.openFile(filename);

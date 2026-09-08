@@ -66,4 +66,15 @@ export class LazyResourceCollection<T> {
     clearAll(): void {
         this.resources.clear();
     }
+    /** Isolate temporary VFS replacements while preserving preloaded retail resources. */
+    beginOverlay(filenames: ReadonlySet<string>): () => void {
+        const previous = this.resources;
+        this.resources = new Map([...previous].filter(([name]) => !filenames.has(name.toLowerCase())));
+        let restored = false;
+        return () => {
+            if (restored) return;
+            restored = true;
+            this.resources = previous;
+        };
+    }
 }
