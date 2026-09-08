@@ -1,9 +1,15 @@
-# Command & Conquer Red Alert 2 + Yuri's Revenge — Apple Silicon Mac, iPhone & iPad
+# Command & Conquer Red Alert 2 + Yuri's Revenge — Apple Silicon Mac, Linux, iPhone & iPad
 
 An Apple Silicon macOS app is now available alongside the iPhone/iPad port.
 It targets macOS 14 or later and runs the existing web engine in a native
 ARM64 AppKit/WKWebView shell. See the [macOS build guide](docs/MACOS.md)
 for setup, retail icons, controls, troubleshooting, and campaign limitations.
+
+A Linux build is also available, developed on Omarchy (Arch, Hyprland). It
+runs the same web engine in an Electron shell on the system `electron43`
+package, serving the app and assets from the same `ra2app://` layout. See the
+[Linux build guide](docs/LINUX.md) for setup, Hyprland window rules, controls,
+and limitations.
 
 <img width="800" height="450" alt="0808" src="https://github.com/user-attachments/assets/c8efcdb7-72c4-47b8-86a7-cecd25eb4ace" />
 
@@ -257,6 +263,7 @@ copy), and tells you what to run next:
 
 ```sh
 bash scripts/build-macos.sh             # Apple Silicon Mac (macOS 14+)
+bash scripts/build-linux.sh             # Linux (Arch/Omarchy, system electron43)
 ./scripts/build-ios.sh                  # build + iPhone simulator
 RA2_TEAM_ID=<your-team-id> ./scripts/build-ios.sh --device   # iPhone/iPad
 ```
@@ -287,6 +294,10 @@ cd redalert2 && RA2_HTTP=1 bun run dev
 | `macos/Sources/main.swift` | AppKit shell, native window/menu, trackpad mapping |
 | `scripts/build-macos.sh` | ARM64 macOS build, bundled assets, local signing |
 | `scripts/build-macos-icon.py` | Convert the user's retail ICO artwork to an app ICNS |
+| [`docs/LINUX.md`](docs/LINUX.md) | Linux (Omarchy/Arch) build guide, Hyprland rules, controls, limitations |
+| `linux/main.js` | Electron shell: `ra2app://` protocol handler, window, fullscreen, error dialogs |
+| `scripts/build-linux.sh` | Linux build: web build, staged assets, launcher and desktop entry |
+| `scripts/install-linux.sh` | Install a built variant under `~/.local/share/ra2` with a desktop entry |
 | `scripts/setup.sh` | One-shot setup: deps + retail import + next steps |
 | `scripts/prepare-gameres.ts` | The asset importer (what `setup.sh` runs for you) |
 | `scripts/build-ios.sh` | Web build → asset staging → xcodegen → xcodebuild |
@@ -307,6 +318,7 @@ diff -rq /tmp/upstream/src redalert2/src | wc -l
 | `redalert2/**` (engine, 1,300 files) | ~127,000 | Chrono Divide → RA2WEB → [huangkaoya/redalert2](https://github.com/huangkaoya/redalert2) @ `8c07f10` |
 | `redalert2/src/game/ai/thirdpartbot/**` | 7,367 upstream + ~4,400 here | [Supalosa's bot](https://github.com/Supalosa/supalosa-chronodivide-bot) — **no licence declared**, see Licence |
 | `ios/**` (Swift shell) | 444 lines of Swift | this repo |
+| `linux/**` (Electron shell) | 187 lines of JavaScript | this repo |
 | `scripts/**` (import, build, probes) | ~2,600 | this repo |
 
 Most of the port work is not in those two directories. Roughly 9,800 of the
