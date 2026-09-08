@@ -15,6 +15,11 @@ provided but have not yet been validated on those distributions.
 Browse the [documentation index](docs/README.md), including [modding units and stats](docs/MODDING.md)
 and [future additions: world and unit editors](docs/FUTURE_ADDITIONS.md).
 
+The main Mac development build uses Yuri’s Revenge rules and assets, with the
+first two original RA2 Allied missions available through **Campaign**. Training,
+RA2 Soviet, the remaining Allied missions, and YR campaigns are planned. Normal
+Mac rebuilds include existing campaign imports and retain the retail Yuri icon.
+
 For campaign development, start with the [agent implementation guide](docs/CAMPAIGN_AGENT_GUIDE.md),
 [mission-one status](docs/CAMPAIGN_MISSION_ONE.md), and
 [mission two and the transition](docs/CAMPAIGN_MISSION_TWO.md).

@@ -1,3 +1,4 @@
+import { campaignTestConfig } from './campaign-test-config.mjs';
 // Requires the local Vite dev server and imported mission-one assets.
 import { chromium } from '../redalert2/node_modules/playwright-core/index.mjs';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -9,7 +10,7 @@ try {
  const page = await browser.newPage();
  let errors = 0;
  page.on('pageerror', e => { if (++errors < 5) console.error(e.message); });
- await page.route('**/config.ini*', route => route.fulfill({body:readFileSync(join(root, 'redalert2/public/config.ini'),'utf8').replace('engine = yr','engine = ra2').replace('generalmd.csf','general.csf'), contentType:'text/plain'}));
+ await page.route('**/config.ini*', route => route.fulfill({body:campaignTestConfig(), contentType:'text/plain'}));
  await page.goto(`${process.env.RA2_DEV_URL ?? 'http://127.0.0.1:4000'}/?shell=1`);
  await page.waitForFunction(() => window.__ra2debug?.keyBinds, undefined, {timeout:120000});
  console.log('Engine booted');
@@ -79,6 +80,7 @@ try {
       for(let i=0;i<1800&&!ship.isDestroyed&&!tanya.isDestroyed;i++)tick(1);
       if (!ship.isDestroyed) throw new Error('Tanya could not destroy Dreadnought');
     }
+    for(let i=0;i<180&&!game.campaign.firedTriggers.has('07B92F3C');i++)tick(1);
     if(!game.campaign.firedTriggers.has('07B92F3C')) throw new Error('Objective 1 did not fire');
     order(OrderType.Move,undefined,game.map.getTileAtWaypoint(16));
     tick(2500);
@@ -113,7 +115,7 @@ try {
     if(!repair.isValid()||!repair.isAllowed())throw new Error('Engineer cannot repair mission bridge '+JSON.stringify({valid:repair.isValid(),allowed:repair.isAllowed(),bridge:hut.cabHutTrait.closestBridge,engineer:engineer.name,allied:game.areFriendly(engineer,hut), bridgeStart:[hut.cabHutTrait.closestBridge?.start.rx,hut.cabHutTrait.closestBridge?.start.ry], damageWaypoints:[79,80].map(w=>{const t=game.map.getTileAtWaypoint(w);const b=game.map.tileOccupation.getBridgeOnTile(t);return {w,x:t.rx,y:t.ry,bridge:b?.name,hp:b?.healthTrait?.health,max:b?.healthTrait?.maxHitPoints}}),HE:game.rules.getWarhead('HE').wall},(k,v)=>['obj','tile','start','end'].includes(k)?undefined:v));
     engineer.unitOrderTrait.addOrder(repair);
     tick(1200);
-    if(!game.campaign.productionHouses.has(14))throw new Error('Bridge repair did not enable enemy production');
+    if(!game.campaign.productionHouses.has(game.getPlayerByName('BadGuy1 House').country.id))throw new Error('Bridge repair did not enable enemy production');
     order(OrderType.Move,undefined,game.map.getTileAtWaypoint(16));
     const enemy=game.getPlayerByName('BadGuy1 House');
     const reinforcements=[];

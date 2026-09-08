@@ -168,3 +168,22 @@ test('make enemy changes only the specified directed campaign alliance', () => {
     expect(alliances.areAllied(a,b)).toBe(false);
     expect(alliances.areAllied(b,a)).toBe(true);
 });
+
+
+test('classic campaign numeric house references survive YR country insertion without losing YR rules', () => {
+    const mission = scenario();
+    const base = baseRules();
+    base.getSection('Countries')!.entries.clear();
+    ['Americans', 'YuriCountry', 'Russians'].forEach((name, i) => base.getSection('Countries')!.set(String(i), name));
+    base.sections.set('YuriCountry', new IniFile({YuriCountry:{Side:'ThirdSide'}}).getSection('YuriCountry')!);
+    base.getSection('E1')!.set('Strength', '321');
+    const original = base.toString();
+    const merged = base.clone().mergeWith(mission.ini);
+    const classic = prepareCampaignRules(base, merged, mission, 'ra2');
+    expect([...classic.getSection('Countries')!.entries.values()]).toEqual(['Americans', 'Russians', 'Human', 'Enemy', 'YuriCountry']);
+    expect(classic.getSection('E1')!.getString('Strength')).toBe('321');
+    expect(classic.getSection('YuriCountry')!.getString('Side')).toBe('ThirdSide');
+    const yr = prepareCampaignRules(base, merged, mission, 'yr');
+    expect([...yr.getSection('Countries')!.entries.values()]).toEqual(['Americans', 'YuriCountry', 'Russians', 'Human', 'Enemy']);
+    expect(base.toString()).toBe(original);
+});

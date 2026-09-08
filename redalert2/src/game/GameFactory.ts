@@ -35,6 +35,7 @@ import { Ai } from './ai/Ai';
 import { BotFactory } from './bot/BotFactory';
 import { BotManager } from './BotManager';
 import { isHumanPlayerInfo } from './gameopts/GameOpts';
+import { campaignMissionForMap } from '../data/campaign/CampaignMissions';
 import { CampaignScenario } from '../data/campaign/CampaignScenario';
 import { CampaignSetup, prepareCampaignRules } from './campaign/CampaignSetup';
 import { CampaignTeams } from './campaign/CampaignTeams';
@@ -73,7 +74,7 @@ export class GameFactory {
             mergedRules.mergeWith(additionalRule);
         }
         mergedRules.mergeWith(gameOptions as any);
-        if (campaignScenario) mergedRules = prepareCampaignRules(baseRules, mergedRules, campaignScenario);
+        if (campaignScenario) mergedRules = prepareCampaignRules(baseRules, mergedRules, campaignScenario, campaignMissionForMap(gameOpts.mapName ?? '')?.sourceGame);
         const mergedArt: IniFile = baseArt.clone().mergeWith(gameOptions.artOverrides ?? new IniFile());
         const rules: Rules = new Rules(mergedRules, debugFlags);
         const art: Art = new Art(rules, mergedArt, gameOptions, debugFlags);

@@ -28,7 +28,7 @@ export function CampaignPicker({missions, progress, installed, onCampaign, onMis
                     <strong>Red Alert 2 — Allied</strong>
                     <span>{campaignCompletion(progress)}% complete · {progress.started ? 'Choose a mission' : 'Start campaign'}</span>
                 </button>
-                {['Red Alert 2 — Soviet', 'Yuri’s Revenge — Allied', 'Yuri’s Revenge — Soviet'].map(name =>
+                {['Red Alert 2 — Training', 'Red Alert 2 — Soviet', 'Yuri’s Revenge — Allied', 'Yuri’s Revenge — Soviet'].map(name =>
                     <button key={name} className="campaign-choice" disabled>
                         <strong>{name}</strong><span>Coming soon</span>
                     </button>)}

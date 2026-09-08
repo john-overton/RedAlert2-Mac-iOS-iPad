@@ -29,8 +29,9 @@ those imported assets; `--retail-dir` supplies the app icon, not an asset import
 
 | Option | Behavior |
 |---|---|
-| No variant flag | Build Yuri's Revenge in `build/macos/yr/Red Alert 2.app` |
+| No variant flag | Build Yuri's Revenge, including available campaign imports, in `build/macos/yr/Red Alert 2.app` |
 | `--ra2` | Build classic RA2 in `build/macos/ra2/Red Alert 2.app` |
+| `--campaign` / `--no-campaign` | Require imported campaigns / omit them; default includes them when available |
 | `--no-web` | Reuse `redalert2/dist`; omit this after web engine or CSS changes |
 | `--retail-dir DIR` | Convert the matching retail ICO to the app icon |
 | `RA2_RETAIL_DIR=DIR` | Supply the retail icon directory through the environment |
@@ -113,19 +114,20 @@ currently installed in the Mac shell.
 
 ### Campaigns
 
-An experimental build of Allied missions one and two is available on
-`feat/allied-mission-one`:
+The main development target is Yuri’s Revenge, with the original RA2 campaigns
+running on YR rules and assets. Allied missions one and two are implemented:
 
 ```sh
-scripts/build-macos.sh --ra2 --campaign --retail-dir "/path/to/ra2/install"
+scripts/build-macos.sh --campaign --retail-dir "/path/to/ra2/install"
 ```
 
-Choose **Campaign → Red Alert 2 — Allied** from the classic RA2 menu. A new
+Choose **Campaign → Red Alert 2 — Allied** from the Yuri’s Revenge menu. A new
 campaign starts at mission one; a returning campaign opens the mission selector
-with saved completion progress. Both pickers use the Settings screen layout. The
-Soviet and Yuri’s Revenge campaigns are visible as disabled placeholders. The switch bundles
+with saved completion progress. Both pickers use the Settings screen layout. Training, the RA2 Soviet campaign, and the Yuri’s Revenge campaigns are visible
+as disabled placeholders. The switch bundles
 the two imported missions and their referenced movies, and requires `ffmpeg`
-when converting movies for the first time. It is not available in YR mode.
+when converting movies for the first time. Both YR and classic (`--ra2`) builds support these missions. Normal builds
+include existing campaign imports automatically; `--no-campaign` omits them.
 
 See [mission-one setup, verification, and limitations](CAMPAIGN_MISSION_ONE.md).
 The objective/victory/defeat regression passes, but a complete manual combat
@@ -133,3 +135,14 @@ play-through and final-assault balance are still pending. Campaign Save Game,
 Load Game, and Replays are available. Mission-one victory offers **Next Mission**
 with the mission-two briefing video. The campaign selector also launches mission two
 directly and offers **Start from Beginning** without erasing progress or saves. See [mission-two coverage and limitations](CAMPAIGN_MISSION_TWO.md).
+
+
+Classic campaign numeric country references retain their original IDs in YR
+campaign games; YR’s extra country is appended after the scenario countries.
+Unit stats, weapons, artwork and theater resources still use YR definitions plus
+the original mission overrides. This is an adaptation, not certified classic
+balance. Campaign progress/saves remain separate between the two Mac app profiles;
+existing classic saves are not migrated into the YR app.
+
+The YR app uses the purple retail `RA2MD.ico` icon, converted to `AppIcon.icns`.
+Rebuilds preserve the imported icon when no retail directory is supplied.

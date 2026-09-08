@@ -76,8 +76,8 @@ Paths below are relative to the repository root.
    The Vite `/campaign` middleware already serves the export root.
 5. **Make the mission reachable.** Add the appropriate selection/briefing and
    ending behavior. Treat next-mission progression as explicit work; do not
-   assume the current score screen already handles it. Keep optional campaign
-   packaging (`--ra2 --campaign`) and builds without campaign data working.
+   assume the current score screen already handles it. Keep YR-first campaign
+   packaging (`--campaign`), classic (`--ra2`) and `--no-campaign` builds working.
 6. **Validate the objective sequence and real input.** Add mission-specific
    regressions, run mission one's checks after shared changes, then test the
    packaged Mac app. Separate script/trigger checks, simulated orders, actual
@@ -241,3 +241,28 @@ states, scrolling and both Back transitions.
 A further visual polish pass is deferred until the remaining campaign work is
 finished. See [campaign selector UI technical debt](TECH_DEBT.md#campaign-selector-ui-polish)
 for scope, preserved behavior, and acceptance checks.
+
+
+## YR-first campaign development (September 8, 2026)
+
+The primary Mac build now runs the two implemented classic Allied missions in
+YR mode. Continue the original Allied, Soviet and training campaigns on this
+shared YR engine, then implement YR’s campaigns. Training and unimplemented
+campaigns are disabled placeholders; importing them is not implementation.
+Use `scripts/build-macos.sh --campaign` (default variant YR). Existing imports
+are included on ordinary rebuilds; use `--no-campaign` for a skirmish-only bundle.
+The existing retail Yuri icon is retained unless a new retail directory is given.
+
+Mission `sourceGame` identifies the original scenario’s country numbering and
+media paths, independently of the active engine. `prepareCampaignRules` keeps
+classic numeric country IDs by placing YuriCountry after the classic/scenario
+countries for registered RA2 missions. YR rule values remain active. Do not
+remove this compatibility step: mission one otherwise ends in an early defeat
+because country-index trigger parameters point at the wrong participants.
+Skirmish and YR-native campaign country order remain unchanged.
+
+Run every campaign browser regression with `RA2_CAMPAIGN_ENGINE=yr`; omit that
+variable (or use `ra2`) for the original classic regression. Recheck both modes
+when changing shared simulation code. Saves/replays reconstruct using the map
+catalog’s source identity; do not migrate recordings between the separate RA2
+and YR app profiles or claim cross-engine compatibility.

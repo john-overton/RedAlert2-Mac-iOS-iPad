@@ -80,8 +80,8 @@ and a buildable, unoccupied foundation. Player building placement is unchanged.
 
 ## Campaign progress and mission-two interaction fixes
 
-The campaign list shows RA2 Allied plus disabled RA2 Soviet and Yuri’s Revenge
-Allied/Soviet placeholders. Both campaign levels use the Settings page’s framed
+The campaign list shows RA2 Allied plus disabled training, RA2 Soviet and Yuri’s
+Revenge Allied/Soviet placeholders. Both campaign levels use the Settings page’s framed
 content area, fieldsets and right sidebar; they are not modal overlays. Back from
 the mission picker returns to the campaign list, then Home.
 
@@ -171,3 +171,22 @@ their file sizes and SHA-256 hashes. The 54 focused unit/input/performance tests
 passed, as did mission one's runtime, interaction, and save/replay regressions.
 The entry typecheck retains its 42 pre-existing diagnostics; it is not a clean
 TypeScript baseline. Packaged-app manual combat acceptance remains pending.
+
+
+## Yuri’s Revenge integration (September 8, 2026)
+
+The Mac YR build now includes these same original mission maps, running with YR
+rules/art plus scenario overrides. Source-game country numbering is preserved
+for classic trigger parameters. The YR browser regressions pass for both mission
+runtimes, campaign selection, mission-one victory and transition to mission two,
+mouse orders in both modes, garrison unloading/cursors, and both missions’
+save/load/replay reconstruction. The classic mission-one runtime regression also
+passes. These use the existing controlled objective fixtures, not complete manual
+combat play-throughs. Training and all other campaigns remain unimplemented.
+
+The YR ARM64 app was rebuilt with both map/movie packages and its existing purple
+retail Yuri icon. Package hashes and strict code-signature verification pass.
+The 116 unit tests pass; entry typechecking retains 42 baseline diagnostics.
+Generated test reports remain under ignored `build/`. The retail Downloads
+folder could not be read by the importer in this session, so existing campaign
+imports and the already-converted retail icon were reused.

@@ -1,3 +1,4 @@
+import { campaignTestConfig } from './campaign-test-config.mjs';
 // Requires the local Vite dev server and locally imported mission-two assets.
 // Opening/final combat cleanup and the isolated transport case are controlled fixtures.
 import { chromium } from '../redalert2/node_modules/playwright-core/index.mjs';
@@ -10,7 +11,7 @@ try {
  const page = await browser.newPage();
  let errors = 0;
  page.on('pageerror', e => { if (++errors < 5) console.error(e.message); });
- await page.route('**/config.ini*', route => route.fulfill({body:readFileSync(join(root, 'redalert2/public/config.ini'),'utf8').replace('engine = yr','engine = ra2').replace('generalmd.csf','general.csf'), contentType:'text/plain'}));
+ await page.route('**/config.ini*', route => route.fulfill({body:campaignTestConfig(), contentType:'text/plain'}));
  await page.goto(`${process.env.RA2_DEV_URL ?? 'http://127.0.0.1:4000'}/?shell=1`);
  await page.waitForFunction(() => window.__ra2debug?.keyBinds, undefined, {timeout:120000});
  console.log('Engine booted');

@@ -5,7 +5,7 @@ Target: original RA2 Allied mission `all01t.map` (Lone Guardian).
 
 Agents adding missions should start with the [campaign implementation guide](CAMPAIGN_AGENT_GUIDE.md).
 
-Mission one now launches from the classic RA2 main menu. The build includes
+Mission one now launches from both the Yuri’s Revenge and classic RA2 main menus. The build includes
 scenario houses and alliances, scripted teams, reinforcements, objectives,
 base ownership changes, production, bridge repair, tutorial effects, movies,
 and explicit victory/defeat handling. This is an experimental implementation
@@ -57,8 +57,8 @@ campaign assets; loading rejects a changed campaign map.
 saved games can also be watched as replays. Playback reconstructs the campaign
 and its movies without accepting orders from the viewer.
 
-`--campaign` is opt-in and currently requires `--ra2`. A build without the
-switch does not bundle campaign files. The importer also runs separately:
+`--campaign` requires imported campaign data in either variant. Normal Mac
+builds include existing imports automatically; `--no-campaign` omits them. The importer also runs separately:
 
 ```sh
 bun scripts/prepare-campaign.ts "/path/to/ra2/install"

@@ -52,7 +52,7 @@ export class HomeScreen implements Screen {
         // (and their underlying systems remain in the bundle — saves are
         // built on the replay machinery).
         const nativeShell = isNativeShell();
-        const installed = Engine.getActiveEngine() === EngineType.RedAlert2
+        const installed = [EngineType.RedAlert2, EngineType.YurisRevenge].includes(Engine.getActiveEngine())
             ? await Promise.all(campaignMissions.map(async mission => ({mission, manifest:await loadCampaignManifest(mission)})))
             : [];
         const buttons: SidebarButton[] = [

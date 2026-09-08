@@ -1,3 +1,4 @@
+import { campaignTestConfig } from './campaign-test-config.mjs';
 // Requires the local RA2 Vite server and imported campaign assets.
 import {chromium} from '../redalert2/node_modules/playwright-core/index.mjs';
 import {readFileSync,writeFileSync} from 'node:fs';
@@ -5,7 +6,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.PL
 try {
  const page=await browser.newPage({viewport:{width:1280,height:900}});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.route('**/config.ini*',route=>route.fulfill({body:readFileSync('redalert2/public/config.ini','utf8').replace('engine = yr','engine = ra2').replace('generalmd.csf','general.csf'),contentType:'text/plain'}));
+ await page.route('**/config.ini*',route=>route.fulfill({body:campaignTestConfig(),contentType:'text/plain'}));
  await page.addInitScript(()=>localStorage.setItem('ra2.alliedCampaign.progress.v1',JSON.stringify({started:true,completed:['allied-01']})));
  await page.goto('http://127.0.0.1:4000/?shell=1');
  await page.getByText('Options',{exact:true}).waitFor({timeout:120000});
@@ -15,7 +16,7 @@ try {
  await page.getByText('Back',{exact:true}).click();
  await page.getByText('Campaign',{exact:true}).click();
  const list=page.getByRole('region',{name:'Campaign selection'});await list.waitFor();
- if(await list.locator('button:disabled').count()!==3)throw new Error('Placeholder campaigns must be disabled');
+ if(await list.locator('button:disabled').count()!==4)throw new Error('Placeholder campaigns must be disabled');
  const campaignBounds=await list.boundingBox();
  if(JSON.stringify(optionsBounds)!==JSON.stringify(campaignBounds))throw new Error('Campaign picker does not share the settings content area');
  await page.getByText('Back',{exact:true}).waitFor();
@@ -37,6 +38,6 @@ try {
  await page.getByText('Back',{exact:true}).click();
  await page.getByText('Campaign',{exact:true}).waitFor();
  if(errors.length)throw new Error(errors.join('\n'));
- writeFileSync('build/campaign-picker-result.json',JSON.stringify({optionsBounds,campaignBounds,placeholders:3,futureMissions:10,scrolling:true,backNavigation:true,errors},null,2));
+ writeFileSync('build/campaign-picker-result.json',JSON.stringify({optionsBounds,campaignBounds,placeholders:4,futureMissions:10,scrolling:true,backNavigation:true,errors},null,2));
  console.log('Campaign settings layout, scrolling and both navigation layers passed');
 } finally {await browser.close();}

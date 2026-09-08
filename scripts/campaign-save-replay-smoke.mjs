@@ -1,3 +1,4 @@
+import { campaignTestConfig } from './campaign-test-config.mjs';
 import {chromium} from '../redalert2/node_modules/playwright-core/index.mjs';
 import {readFileSync,writeFileSync} from 'node:fs';
 const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE});
@@ -6,7 +7,7 @@ try {
  page.setDefaultTimeout(30000);
  const errors=[];
  page.on('pageerror',e=>{errors.push(e.message);console.error(e.message);});
- await page.route('**/config.ini*',route=>route.fulfill({body:readFileSync('redalert2/public/config.ini','utf8').replace('engine = yr','engine = ra2').replace('generalmd.csf','general.csf'),contentType:'text/plain'}));
+ await page.route('**/config.ini*',route=>route.fulfill({body:campaignTestConfig(),contentType:'text/plain'}));
  await page.route('**/campaign/ra2/allied-01/*',route=>{
   const file=new URL(route.request().url()).pathname.split('/').pop();
   try {return route.fulfill({body:readFileSync(`campaign-export/ra2/allied-01/${file}`),contentType:file.endsWith('json')?'application/json':file.endsWith('mp4')?'video/mp4':'application/octet-stream'});} catch {return route.fulfill({status:404});}

@@ -4,11 +4,18 @@ import type { CampaignTeams } from './CampaignTeams';
 import { campaignScriptTypes } from './CampaignCapabilities';
 
 /** Prepare custom countries without replacing the original numeric country IDs. */
-export function prepareCampaignRules(base: IniFile, merged: IniFile, scenario: CampaignScenario): IniFile {
+export function prepareCampaignRules(base: IniFile, merged: IniFile, scenario: CampaignScenario, sourceGame?: 'ra2' | 'yr'): IniFile {
     const result = merged.clone();
     const baseCountries = base.getSection('Countries');
     if (!baseCountries) throw new Error('Base rules have no Countries list');
-    const names = [...new Set([...baseCountries.entries.values()].map(String))];
+    const baseNames = [...new Set([...baseCountries.entries.values()].map(String))];
+    // Classic maps encode trigger house references against RA2's base country
+    // order plus their custom countries. YR inserts YuriCountry ahead of GDI,
+    // shifting victory, ownership and production targets. Keep the source IDs
+    // for these campaigns and append YR's country after the scenario countries.
+    // All country/unit definitions still come from the active (YR) rules.
+    const deferred: string[] = sourceGame === 'ra2' ? baseNames.filter(name => name === 'YuriCountry') : [];
+    const names = baseNames.filter(name => !deferred.includes(name));
     const ancestors = new Map<string, string[]>();
     const resolving = new Set<string>();
     const resolved = new Map<string, IniSection>();
@@ -36,6 +43,7 @@ export function prepareCampaignRules(base: IniFile, merged: IniFile, scenario: C
         section.set('MultiplayPassive', 'no');
         result.sections.set(definition.id, section);
     }
+    for (const name of deferred) if (!names.includes(name)) names.push(name);
     result.sections.set('Countries', new IniSection('Countries').fromJson(Object.fromEntries(names.map((name, i) => [i, name]))));
     for (const section of result.sections.values()) {
         for (const key of ['Owner', 'RequiredHouses', 'ForbiddenHouses']) {
