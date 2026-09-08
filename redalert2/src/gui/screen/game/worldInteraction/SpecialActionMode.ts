@@ -13,7 +13,7 @@ const pointerTypeBySuperWeapon = new Map<SuperWeaponType, PointerType>()
     .set(SuperWeaponType.GeneticConverter, PointerType.Nuke)
     .set(SuperWeaponType.PsychicReveal, PointerType.Storm)
     .set(SuperWeaponType.ForceShield, PointerType.Iron)
-    .set(SuperWeaponType.SpyPlane, PointerType.Storm);
+    .set(SuperWeaponType.SpyPlane, PointerType.SpyPlane);
 export class SpecialActionMode {
     private readonly _onExecute = new EventDispatcher<SpecialActionMode, {
         tile: any;

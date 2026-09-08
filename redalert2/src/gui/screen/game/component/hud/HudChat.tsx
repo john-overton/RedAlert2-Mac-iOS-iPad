@@ -19,7 +19,7 @@ export const HudChat: React.FC<HudChatProps & {
     if (!isComposing)
         return null;
     const forceColor = localPlayer?.color.asHexString() ?? "white";
-    return (<ChatInput chatHistory={chatHistory} channels={[RECIPIENT_ALL, RECIPIENT_TEAM]} className="game-chat-input" forceColor={forceColor} noCycleHint={true} submitEmpty={true} strings={strings} onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+    return (<div className="game-chat-console"><div className="game-chat-hint">Enter to send · Tab to change audience · Esc to cancel</div><ChatInput chatHistory={chatHistory} channels={[RECIPIENT_ALL, RECIPIENT_TEAM]} className="game-chat-input" forceColor={forceColor} noCycleHint={true} submitEmpty={true} strings={strings} onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
             if (e.key === "Escape")
                 e.preventDefault();
             e.stopPropagation();
@@ -33,5 +33,5 @@ export const HudChat: React.FC<HudChatProps & {
             }).stopImmediatePropagation?.();
         }} onSubmit={(e: any) => {
             e.value.length ? onSubmit(e) : onCancel();
-        }} onCancel={onCancel} onBlur={onCancel}/>);
+        }} onCancel={onCancel} onBlur={onCancel}/></div>);
 };

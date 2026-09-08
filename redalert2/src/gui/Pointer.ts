@@ -157,6 +157,8 @@ export class Pointer {
         return this.sprite;
     }
     setPointerType(type: PointerType, subFrame: number = 0): void {
+        // Classic-only resource sets have no YR spy-plane frames. Use their aircraft cursor.
+        if (type === PointerType.SpyPlane && this.sprite.getFrameCount() < 512) type = PointerType.Unknown7;
         if (this.pointerType !== type || this.pointerSubFrame !== subFrame) {
             this.pointerType = type;
             this.pointerSubFrame = subFrame;
@@ -170,10 +172,12 @@ export class Pointer {
             }
             else {
                 const startFrame = type;
-                const endFrame = (Object.keys(PointerType)
+                const endFrame = Math.min(
+                    type === PointerType.Beacon ? 449 : type === PointerType.SpyPlane ? 511 : this.sprite.getFrameCount() - 1,
+                    (Object.keys(PointerType)
                     .map(Number)
                     .find((value) => !Number.isNaN(value) && type < value) ??
-                    this.sprite.getFrameCount()) - 1;
+                    this.sprite.getFrameCount()) - 1);
                 this.sprite.setFrame(startFrame);
                 if (startFrame < endFrame) {
                     const runner = new SimpleRunner();

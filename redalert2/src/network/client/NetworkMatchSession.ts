@@ -6,6 +6,7 @@ import { WebSocketConnection } from './WebSocketConnection';
 
 /** Server-authoritative frame buffer. Wire frame 1 corresponds to simulation tick 0. */
 export class NetworkMatchSession {
+    readonly onChat = new EventDispatcher<this, Extract<ServerMessage, { type: 'chat' }>>();
     readonly onSnapshotChange = new EventDispatcher<this, LanMatchSnapshotState>();
     readonly onActionsReceived = new EventDispatcher<this, string>();
     readonly onFatalError = new EventDispatcher<this, { message: string; frame?: number }>();
@@ -33,6 +34,9 @@ export class NetworkMatchSession {
     getLaunchDescriptor(): LanLaunchDescriptor { return this.descriptor; }
     getHumanAssignment(peerId: string) { return this.descriptor.humanAssignments.find(item => item.peerId === peerId); }
     areAllPlayersLoaded(): boolean { return this.allLoaded; }
+    sendChat(to: 'all' | 'team' | number, text: string): void {
+        this.send(() => this.connection.sendImmediate({ type: 'chat', to, text }));
+    }
     reportLoadProgress(percent: number): void {
         this.send(() => this.connection.sendImmediate({ type: 'loaded', percent: Math.max(0, Math.min(100, Math.floor(percent))) }));
     }
@@ -148,6 +152,7 @@ export class NetworkMatchSession {
                 packets.set(String(packet.clientId), packet.actions);
             } else {
                 const message: ServerMessage = JSON.parse(data);
+                if (message.type === 'chat') { this.onChat.dispatch(this, message); return; }
                 if (message.type === 'loaded') this.loaded.set(String(message.clientId), message.percent);
                 else if (message.type === 'allLoaded') this.allLoaded = true;
                 else if (message.type === 'disconnect') {

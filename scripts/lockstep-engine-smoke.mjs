@@ -71,6 +71,7 @@ try {
   await pages[0].waitForFunction(() => window.__networkSmoke.client.session.clients.length === 2 && window.__networkSmoke.client.session.clients.every(client => client.mapReady) && window.__networkSmoke.client.session.clients[1].ready);
   await pages[0].evaluate(() => window.__networkSmoke.client.command('startgame'));
   await Promise.all(pages.map(page => page.waitForFunction(() => window.__ra2debug?.game && window.__ra2debug?.gameScreen?.gameTurnMgr, undefined, { timeout: 180000 })));
+  if (process.env.RA2_GAME_UI_SMOKE) await (await import('./game-hud-smoke.mjs')).checkGameHud(pages);
   await Promise.all(pages.map(page => page.evaluate(() => {
     const screen = window.__ra2debug.gameScreen;
     screen.gameAnimationLoop.stop();

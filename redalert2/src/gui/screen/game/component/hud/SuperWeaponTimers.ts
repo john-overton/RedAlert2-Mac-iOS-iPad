@@ -1,3 +1,4 @@
+import { SuperWeaponType } from "@/game/type/SuperWeaponType";
 import * as THREE from "three";
 import { jsx } from "@/gui/jsx/jsx";
 import { UiObject } from "@/gui/UiObject";
@@ -17,6 +18,7 @@ type Player = {
             getTimerSeconds: () => number;
             rules: {
                 showTimer: boolean;
+                type?: SuperWeaponType;
                 uiName: string;
             };
         }>;
@@ -133,7 +135,7 @@ export class SuperWeaponTimers extends UiComponent<SuperWeaponTimersProps> {
                         }[] = [];
                         if (superWeapons) {
                             for (const sw of superWeapons) {
-                                if (sw.rules.showTimer) {
+                                if (sw.rules.showTimer || (player === this.props.localPlayer && sw.rules.type === SuperWeaponType.SpyPlane)) {
                                     timers.push({
                                         seconds: sw.getTimerSeconds(),
                                         label: this.props.strings.get(sw.rules.uiName),

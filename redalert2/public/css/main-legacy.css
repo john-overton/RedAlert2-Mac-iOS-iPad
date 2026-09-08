@@ -3073,15 +3073,18 @@ input[type="range"]:focus {
 }
 
 #ra2web-root .game-chat-input {
-    width: 400px;
+    width: 100%;
+    box-sizing: border-box;
     display: flex;
+    gap: 8px;
     align-items: center;
-    font-size: 13px;
-    padding: 0 4px;
+    font-size: 15px;
+    padding: 6px 10px;
     background: rgba(0, 0, 0, .75)
 }
 
 #ra2web-root .game-chat-input input {
+    min-width: 0;
     flex-grow: 1;
     border: 0;
     height: 20px;
@@ -3329,4 +3332,23 @@ input[type="range"]:focus {
     color: #999;
     border-color: #542323;
     cursor: default;
+}
+
+
+#ra2web-root .game-chat-console {
+    width: 100%;
+    background: rgba(8, 14, 12, .94);
+    border: 1px solid #687c70;
+    box-sizing: border-box;
+    box-shadow: 0 -3px 12px rgba(0, 0, 0, .5);
+    animation: game-chat-open .12s ease-out;
+}
+#ra2web-root .game-chat-hint {
+    padding: 5px 10px;
+    color: #c5d2c8;
+    font-size: 12px;
+}
+@keyframes game-chat-open {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
 }

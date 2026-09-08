@@ -238,3 +238,16 @@ Unexpected send failures enter the match error path; lobby cleanup forwards the
 original server rejection or close reason before disposing the match. Diagnostic
 export failures cannot suppress the error dialog. These changes do not reconnect
 a closed WebSocket or resume an interrupted match.
+
+In-game chat: press Enter to open the composer above the bottom command bar.
+Tab cycles the audience (all players/allies), which is remembered for the next
+message in the match. Enter sends; Escape, an empty submission, or clicking away
+cancels. Incoming messages appear at the top left. Typing pauses command hotkeys
+and arrow scrolling. Direct-server chat uses server-routed recipients; public
+messages are included in replays, while private/team messages are not.
+
+The YR HUD loads the extended `mouse.sha` cursor sheet when available, including
+the spy-plane targeting animation. Classic-only assets retain their normal
+cursor sheet with an aircraft fallback. The local player's spy-plane countdown
+is shown above the bottom command bar at the right, including its ready state;
+opponents' spy-plane timers remain hidden when their rules specify no timer.

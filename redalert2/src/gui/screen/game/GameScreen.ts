@@ -40,6 +40,7 @@ import { CombatantSidebarModel } from '@/gui/screen/game/component/hud/viewmodel
 import { ActionFactoryReg } from '@/game/action/ActionFactoryReg';
 import { MessageList } from '@/gui/screen/game/component/hud/viewmodel/MessageList';
 import { ChannelType } from '@/engine/sound/ChannelType';
+import { NetworkChatHandler } from '@/gui/screen/game/NetworkChatHandler';
 import { ChatNetHandler } from '@/gui/screen/game/ChatNetHandler';
 import { ChatTypingHandler } from '@/gui/screen/game/ChatTypingHandler';
 import { IrcConnection } from '@/network/IrcConnection';
@@ -1226,11 +1227,15 @@ export class GameScreen extends RootScreen {
         }
         this.playerUi.init?.(hud);
         this.disposables.add(this.playerUi, () => this.playerUi = undefined);
-        if (this.usesServerConnection()) {
-            const chatNetHandler = new ChatNetHandler(this.gservCon, this.wolService, messageList, chatHistory, new ChatMessageFormat(this.strings, localPlayer.name), localPlayer, game, this.replayRecorderInstance, this.mutedPlayers ?? new Set<string>());
+        if (this.usesServerConnection() || this.lanMatchSession instanceof NetworkMatchSession) {
+            const chatNetHandler = this.lanMatchSession instanceof NetworkMatchSession
+                ? new NetworkChatHandler(this.lanMatchSession, messageList, chatHistory, new ChatMessageFormat(this.strings, localPlayer.name), game, this.replayRecorderInstance, this.mutedPlayers ?? new Set<string>())
+                : new ChatNetHandler(this.gservCon, this.wolService, messageList, chatHistory, new ChatMessageFormat(this.strings, localPlayer.name), localPlayer, game, this.replayRecorderInstance, this.mutedPlayers ?? new Set<string>());
             chatNetHandler.init();
             const worldInteraction = this.playerUi.worldInteraction;
             const chatTypingHandler = new ChatTypingHandler(worldInteraction.keyboardHandler, worldInteraction.arrowScrollHandler, messageList, chatHistory);
+            worldInteraction.chatTypingHandler = chatTypingHandler;
+            this.disposables.add(chatNetHandler);
             this.chatTypingHandler = chatTypingHandler;
             this.chatNetHandler = chatNetHandler;
             this.disposables.add(() => {

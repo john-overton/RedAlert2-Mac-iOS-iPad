@@ -62,5 +62,6 @@ export enum PointerType {
     Unknown26 = 432,
     Unknown27 = 433,
     Unknown28 = 434,
-    Beacon = 435
+    Beacon = 435,
+    SpyPlane = 504
 }

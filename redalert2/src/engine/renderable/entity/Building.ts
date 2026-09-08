@@ -603,7 +603,12 @@ export class Building {
                         })),
                 this.toggleRangeCircleVisibility((this.gameObject.showWeaponRange ||
                     (this.selectionModel.isSelected() &&
-                        -1 !== this.gameObject.rules.techLevel)) &&
+                        (-1 !== this.gameObject.rules.techLevel ||
+                            // Captured armed tech structures (e.g. the repair outpost)
+                            // have TechLevel=-1 but still need their weapon range shown.
+                            (this.gameObject.rules.needsEngineer &&
+                                this.gameObject.owner.isCombatant() &&
+                                !!this.gameObject.primaryWeapon)))) &&
                     !n);
             var h, u, c = (this.gameObject.wallTrait?.wallType !==
                 this.lastWallType) as any, d = void 0 === this.lastOccupiedState ||

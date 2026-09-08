@@ -188,3 +188,35 @@ Mac/Linux session with the user's friend remains the next manual check.
   bots matched all 150 ticks; injected divergence stopped both at mismatch frame
   151. Production turn-manager shutdown and diagnostic-export regressions passed
   in the browser. The smoke now rejects missing tick instrumentation after HMR.
+
+### In-game chat and spy-plane HUD
+
+- Connected the Enter chat handler to direct-server matches and enabled the HUD
+  composer's previously missing composing-state prop. Moved input above the
+  bottom command bar; messages remain at the top left. Tab remembers audience,
+  Escape/blur cancels, and typing stops held arrow scrolling and command hotkeys.
+- Added a direct-server chat adapter with server echoes, muted-player filtering,
+  and public-only replay recording; chat packets remain outside lockstep orders.
+- Use YR's extended cursor sheet and spy-plane frames 504–511. Bound beacon frames
+  to their original animation and retain an aircraft fallback for classic assets.
+- Show the local spy-plane countdown/ready timer without exposing hidden enemy
+  timers or changing simulation rules.
+- Validation: 131 unit tests passed; entry typecheck retains the 42 baseline
+  errors. Two real engine clients verified chat send/cancel/audience persistence,
+  opponent filtering, cursor selection and local countdown visibility while
+  matching all 150 simulation ticks. Injected mismatch handling also passed.
+- Packaged native WebKit lobby hosting/heartbeat recovery smoke passed. YR and
+  classic Mac apps rebuilt and both code signatures verified. Browser checks also
+  covered the classic aircraft fallback, beacon animation bounds and timer ready
+  state. Screenshot: `build/macos/chat-popout.png`.
+
+### Captured outpost range indicator
+
+- Allow the existing selection range ring for captured armed tech structures,
+  whose `TechLevel=-1` previously suppressed it. Uses the actual weapon range and
+  the same renderer as SAM/flak defenses; no weapon balance changes.
+- Added `scripts/outpost-aa-smoke.mjs`: captures an Amazon Delta outpost using an
+  engineer, checks missile damage against an airborne Kirov, and verifies the
+  range ring appears on selection and hides on deselection.
+- Browser regression passed: six-tile weapon ring and selection/deselection
+  verified. YR and classic Mac apps rebuilt and signatures verified.

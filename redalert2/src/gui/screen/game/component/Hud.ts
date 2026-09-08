@@ -444,6 +444,8 @@ export class Hud extends UiObject {
             x: sidebarBounds.x - rendcapImg.width,
         }))), jsx.jsx(Messages, {
             messages: this.messageList,
+            composerY: Math.max(0, actionBarY - 76),
+            localPlayer: this.localPlayer,
             chatHistory: this.chatHistory,
             width: sidebarBounds.x - 10,
             height: 200,

@@ -184,10 +184,10 @@ export class WorldInteraction {
         }
     };
     private readonly handleKeyDown = (event: KeyboardEvent): void => {
+        if (this.chatTypingHandler?.handleKeyDown?.(event)) return;
         this.handleKeyModifierChange(event);
         this.keyboardHandler.handleKeyDown(event);
         this.arrowScrollHandler.handleKeyDown(event);
-        this.chatTypingHandler?.handleKeyDown?.(event);
     };
     private readonly handleKeyUp = (event: KeyboardEvent): void => {
         this.handleKeyModifierChange(event);
