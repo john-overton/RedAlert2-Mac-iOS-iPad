@@ -3,7 +3,9 @@
 These are planned product directions, not implemented features or committed
 release dates. Continue the remaining campaign work first. Keep maintenance and
 polish follow-ups in [technical debt](TECH_DEBT.md); the campaign selector UI pass
-is tracked there.
+is tracked there. The multiplayer lobby system (server browser, master
+server, direct IP, password rooms) has its own design document:
+[multiplayer plan](MULTIPLAYER_PLAN.md).
 
 ## In-game world editor
 
