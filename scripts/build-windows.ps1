@@ -9,6 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not (Get-Command bun -ErrorAction SilentlyContinue)) { throw 'Install Bun and reopen PowerShell before building. See docs/WINDOWS.md.' }
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Install Git for Windows and reopen PowerShell before building. Multiplayer versions require a Git clone.' }
 $buildArgs = @((Join-Path $PSScriptRoot 'build-windows.ts'), '--arch', $Arch)
 if ($RA2) { $buildArgs += '--ra2' }
 if ($NoWeb) { $buildArgs += '--no-web' }

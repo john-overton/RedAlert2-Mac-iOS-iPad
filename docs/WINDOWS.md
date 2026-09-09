@@ -144,3 +144,35 @@ rejection and unchanged Linux staging. All 178 engine/network tests pass; the
 Node socket smoke matches 100 frames and detects the injected frame-101 mismatch.
 Entry typecheck retains 42 existing errors. Logs are under `build/windows-*.log`
 and the package report is `build/windows-package-check.json`.
+
+## A multiplayer version showing `vdevelopment`
+
+This is an invalid/unresolved engine build identity, not the Windows shell's
+version. Older builds swallowed errors from Git or source hashing and silently
+used `development`. Current builds stop with the underlying error instead.
+
+From the repository root in PowerShell:
+
+```powershell
+Get-Command git,bun
+git -C .\redalert2 describe --tags --always
+git status --short
+Test-Path .\redalert2\bun.lock
+$env:RA2_RESOURCES
+```
+
+Git must be available to the terminal and the source must be a Git checkout, not
+a downloaded source ZIP. Follow the actual Git error if it reports an ownership
+or checkout problem. `RA2_RESOURCES`, if set, overrides the packaged asset folder;
+make sure it does not point to another build's `WebDist`.
+
+Rebuild using `.\scripts\build-windows.ps1` without `-NoWeb`, then launch the
+executable from the resulting folder. Compare the complete version displayed in
+the menu on both machines, not just the Git prefix. Both players need the same
+checkout and source/lockfile contents, and both native apps need rebuilding.
+
+The web build prints its multiplayer version and writes `dist/build-version.json`.
+Windows packaging verifies this against the checkout, including when using
+`-NoWeb`, and records it in `BUILD-INFO.json`. Missing/stale metadata fails with a
+rebuild instruction. Manually assigning another player's version string is not a
+fix: it hides incompatible code rather than making the simulations match.

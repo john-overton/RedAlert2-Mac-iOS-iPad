@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import runtime from '../windows/electron-runtime.json';
+import { verifyBuiltVersion } from '../redalert2/buildVersion';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 let variant = 'yr', arch: keyof typeof runtime.sha256 = 'x64', skipWeb = false, campaign = true;
@@ -66,6 +67,8 @@ for (const file of ['redalert2/public/general.csf', 'gameres-export/ra2.mix']) a
 if (variant === 'yr') for (const file of ['redalert2/public/generalmd.csf', 'gameres-export/ra2md.mix']) await required(file);
 if (!skipWeb) await run([process.execPath, 'run', 'build'], path.join(root, 'redalert2'));
 await required('redalert2/dist/index.html');
+const multiplayerVersion = verifyBuiltVersion(path.join(root, 'redalert2'));
+console.log(`Packaging multiplayer version: ${multiplayerVersion}`);
 await run([process.execPath, 'run', 'build:server'], path.join(root, 'redalert2'));
 const archive = await getRuntime();
 const parent = path.join(root, 'build', 'windows', arch);
@@ -101,7 +104,7 @@ try {
     await writeFile(path.join(resources, 'GameRes/manifest.json'), JSON.stringify({ files: await manifest(path.join(resources, 'GameRes')) }));
     await cp(path.join(root, 'ios/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png'), path.join(resources, 'icon.png'));
     await rename(path.join(stage, 'electron.exe'), path.join(stage, 'Red Alert 2.exe'));
-    await writeFile(path.join(stage, 'BUILD-INFO.json'), JSON.stringify({ variant, arch, electron: runtime.version, electronSha256: runtime.sha256[arch], campaign: hasCampaign }, null, 2));
+    await writeFile(path.join(stage, 'BUILD-INFO.json'), JSON.stringify({ variant, arch, multiplayerVersion, electron: runtime.version, electronSha256: runtime.sha256[arch], campaign: hasCampaign }, null, 2));
     await writeFile(path.join(stage, 'README.txt'), `Launch Red Alert 2.exe. Keep this entire folder together.\r\nVariant: ${title}; Windows ${arch}; Electron ${runtime.version}.\r\nF11 toggles fullscreen. Multiplayer hosting uses the selected TCP port.\r\nThis local build contains imported retail assets; do not publish it.\r\nWindows runtime acceptance is still required; see docs/WINDOWS.md in the source repository.\r\n`);
     // Keep the previous build until staging succeeds; a running app may lock the old folder.
     const previous = `${out}.previous`;
